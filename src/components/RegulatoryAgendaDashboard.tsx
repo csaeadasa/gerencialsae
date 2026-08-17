@@ -119,34 +119,35 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const agendasRes = await fetch("/api/agendas");
-        if (!agendasRes.ok) {
-          throw new Error(`Erro na API agendas: ${agendasRes.status}`);
+        try {
+          const agendasRes = await fetch("/api/agendas");
+          if (agendasRes.ok) {
+            const agendasJson = await agendasRes.json();
+            if (agendasJson.success) {
+              setAgendas(agendasJson.data || []);
+            }
+          }
+        } catch (agErr) {
+          console.warn("Aviso ao carregar agendas:", agErr);
         }
-        const agendasJson = await agendasRes.json();
         
-        const loadDataRes = await fetch("/api/load-data");
-        if (!loadDataRes.ok) {
-          throw new Error(`Erro na API load-data: ${loadDataRes.status}`);
-        }
-        const loadDataJson = await loadDataRes.json();
-
-        if (agendasJson.success) {
-          setAgendas(agendasJson.data || []);
-        } else {
-          showToast(agendasJson.error || "Erro ao carregar agendas.", "error");
-        }
-
-        if (loadDataJson.success && loadDataJson.data) {
-          const cloud = loadDataJson.data;
-          setTasks(cloud.tasks || []);
-          setResponsibles(cloud.responsibles || []);
-          setCategories(cloud.categories || []);
-          setPlans(cloud.plans || []);
+        try {
+          const loadDataRes = await fetch("/api/load-data");
+          if (loadDataRes.ok) {
+            const loadDataJson = await loadDataRes.json();
+            if (loadDataJson.success && loadDataJson.data) {
+              const cloud = loadDataJson.data;
+              setTasks(cloud.tasks || []);
+              setResponsibles(cloud.responsibles || []);
+              setCategories(cloud.categories || []);
+              setPlans(cloud.plans || []);
+            }
+          }
+        } catch (ldErr) {
+          console.warn("Aviso ao carregar load-data:", ldErr);
         }
       } catch (error: any) {
         console.error("Erro no fetchData do RegulatoryAgendaDashboard:", error);
-        showToast(error.message || "Erro ao estabelecer conexão de dados.", "error");
       } finally {
         setIsLoading(false);
       }
@@ -768,26 +769,26 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
       </div>
 
       {/* Middle broad banner - Estoque Regulatório Total */}
-      <div className="bg-gradient-to-r from-adasa-mid to-[#109FEF] rounded-3xl p-6 md:p-8 text-white relative overflow-hidden shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+      <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 hover:translate-y-[-2px] transition-all">
         <div className="relative z-10 flex items-center gap-4">
-          <div className="w-14 h-14 bg-white/15 border border-white/25 rounded-2xl flex items-center justify-center shrink-0">
-            <FileText size={28} className="text-white" />
+          <div className="w-14 h-14 bg-sky-50 border border-sky-100 rounded-2xl flex items-center justify-center shrink-0">
+            <FileText size={28} className="text-adasa-dark" />
           </div>
           <div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-sky-100 block">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">
               TOTAL DE ITENS REGULATÓRIOS
             </span>
-            <h3 className="text-4xl md:text-5xl font-black text-white leading-none mt-2">
+            <h3 className="text-4xl md:text-5xl font-black text-slate-800 leading-none mt-2">
               {stats.totalItems}
             </h3>
-            <p className="text-xs text-sky-100/90 font-medium mt-1">
+            <p className="text-xs text-slate-500 font-bold mt-1">
               Metas e atividades cadastradas e monitoradas pelas superintendências
             </p>
           </div>
         </div>
         <div className="relative z-10 shrink-0 self-start md:self-center">
-          <div className="bg-white/10 border border-white/20 text-white rounded-full px-5 py-2.5 text-xs font-bold leading-none select-none shadow-sm">
+          <div className="flex items-center gap-2 px-5 py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-full text-xs font-extrabold leading-none select-none shadow-sm">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
             Base de Dados Integrada em Tempo Real
           </div>
         </div>

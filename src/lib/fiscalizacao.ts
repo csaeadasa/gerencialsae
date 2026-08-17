@@ -1,12 +1,8 @@
 export const FISCALIZACAO_ETAPAS = [
-  "Ordem de Serviço",
-  "Plano de Ação da Fiscalização",
-  "Agendamento da ação fiscalizatória",
-  "Realização da ação fiscalizatória",
-  "Registro das conformidades e não conformidades",
-  "Solicitação de informações complementares",
-  "Elaboração de Relatório de Fiscalização",
-  "Encaminhamento do Relatório à Superintendência e à prestadora",
+  "Planejamento",
+  "Execução",
+  "Monitoramento",
+  "Finalizada",
 ] as const;
 
 export type FiscalizacaoEtapa = (typeof FISCALIZACAO_ETAPAS)[number];

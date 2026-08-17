@@ -70,7 +70,7 @@ export function UserManagementTab() {
     pub_cadastro: 'Cadastrar Publicações',
     pub_painel: 'Painel de Publicações',
     fisc_operational: 'Painel de Fiscalização',
-    recurso_painel: 'Painel de Recurso de Revisão',
+    recurso_painel: 'Painel de Qualidade do Atendimento',
     dashboard: 'Painel Geral Gerencial (Hub)',
     geo: 'Mapa Interativo Avançado',
     users: 'Gestão de Usuários e Permissões',

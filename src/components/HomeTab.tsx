@@ -178,7 +178,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
               </div>
             </motion.div>
 
-            {/* Painel de Recurso de Revisão Card */}
+            {/* Painel Demanda Ouvidoria Card */}
             <motion.div 
               whileHover={{ y: -2 }}
               onClick={() => setActiveTab("recurso_painel")}
@@ -188,13 +188,13 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
                 <div className="mb-4 p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
                   <Scale size={24} />
                 </div>
-                <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Painel de Recurso de Revisão</h3>
+                <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Painel de Qualidade do Atendimento</h3>
                 <p className="text-slate-600 text-xs font-medium leading-relaxed mb-6">
-                  Painel estratégico de acompanhamento de recursos de revisão, prazos de análise, andamento e penalidades aplicadas.
+                  Painel estratégico de acompanhamento de demandas de ouvidoria, prazos de análise, andamento e penalidades aplicadas.
                 </p>
               </div>
               <div className="mt-8 flex items-center gap-2 text-xs font-bold text-blue-700">
-                Abrir Painel de Recurso de Revisão <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+                Abrir Painel de Qualidade do Atendimento <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
               </div>
             </motion.div>
 
@@ -232,9 +232,9 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
           </div>
         </div>
 
-        {/* Master Row with two major cards: Minhas Tarefas on the left, Painel de Atividades on the right */}
+        {/* Master Row with two major cards: Minhas Atividades on the left, Painel de Atividades on the right */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Minhas Tarefas Card */}
+          {/* Minhas Atividades Card */}
           <motion.div 
             whileHover={{ y: -2 }}
             onClick={onMyTasksSelect}
@@ -244,13 +244,13 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
               <div className="mb-4 p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
                 <CalendarCheck size={24} />
               </div>
-              <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Minhas Tarefas</h3>
+              <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Minhas Atividades</h3>
               <p className="text-slate-600 text-xs font-medium leading-relaxed mb-6">
                 Veja as atividades atribuídas diretamente a você no plano ativo de tarefas. Monitore seus prazos, entregas pendentes e atualize seus progressos de forma simplificada.
               </p>
             </div>
             <div className="mt-auto flex items-center gap-2 text-xs font-bold text-blue-700">
-              Ir para Minhas Tarefas <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+              Ir para Minhas Atividades <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
             </div>
           </motion.div>
 
@@ -566,7 +566,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
           <div className="p-1 px-2.5 bg-slate-100 text-slate-500 rounded-lg text-[10px] font-black uppercase tracking-widest border border-slate-200">
             Sub-Módulo 3.2
           </div>
-          <h3 className="text-xs font-black text-slate-600 uppercase tracking-widest">Fiscalização e Recursos</h3>
+          <h3 className="text-xs font-black text-slate-600 uppercase tracking-widest">Fiscalização e Qualidade do Atendimento</h3>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -590,7 +590,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
             </div>
           </motion.div>
 
-          {/* Sub-Módulo 3.2.2: Painel de Recurso de Revisão */}
+          {/* Sub-Módulo 3.2.2: Painel Demanda Ouvidoria */}
           <motion.div 
             whileHover={{ y: -3 }}
             onClick={() => setActiveTab("recurso_painel")}
@@ -600,9 +600,9 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
               <div className="mb-4 p-3 rounded-xl bg-indigo-50 text-indigo-500 w-max border border-indigo-100 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
                 <Scale size={24} />
               </div>
-              <h3 className="text-base font-bold text-slate-800 mb-1.5 leading-tight">Painel de Recurso de Revisão</h3>
+              <h3 className="text-base font-bold text-slate-800 mb-1.5 leading-tight">Painel de Qualidade do Atendimento</h3>
               <p className="text-slate-500 text-xs font-medium leading-relaxed mb-4">
-                Painel estratégico de acompanhamento de recursos de revisão, prazos, andamento e penalidades aplicadas.
+                Painel estratégico de acompanhamento de demandas de ouvidoria, prazos, andamento e penalidades aplicadas.
               </p>
             </div>
             <div className="flex items-center gap-1 text-xs font-bold text-indigo-600 mt-2">

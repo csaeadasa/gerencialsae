@@ -55,14 +55,16 @@ import {
   Percent,
   Scale,
   ListTree,
-  GripVertical
+  GripVertical,
+  ClipboardList
 } from "lucide-react";
 import { FiscalizacaoEditor } from './FiscalizacaoEditor';
 import { RecursoEditor } from './RecursoEditor';
+import { RecursoRevisaoEditor } from './RecursoRevisaoEditor';
 import { Task, Plan, Area, Category, Responsible } from "../types";
 import { cn } from "../lib/utils";
 import { useAuth } from "../lib/auth";
-import { FISCALIZACAO_ETAPA_INICIAL } from "../lib/fiscalizacao";
+import { FISCALIZACAO_ETAPAS, FISCALIZACAO_ETAPA_INICIAL } from "../lib/fiscalizacao";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, CartesianGrid, LabelList } from "recharts";
 import { PlanningSkeleton } from "../modules/planning/PlanningSkeleton";
 import { TaskModelManager } from "./TaskModelManager";
@@ -756,6 +758,7 @@ export function PlanningTab({
   // Modal/Form State for adding/editing tasks
   const [timelineTaskId, setTimelineTaskId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"tree" | "table" | "status" | "category" | "area" | "responsible" | "board" | "gantt" | "calendar" | "recurso">("board");
+  const [agrupamentoTaskType, setAgrupamentoTaskType] = useState<"demanda_ouvidoria" | "fiscalizacao" | "recurso_revisao" | "recurso">("demanda_ouvidoria");
   const [calendarScale, setCalendarScale] = useState<"mes" | "trimestre" | "ano">("mes");
   const [calendarYear, setCalendarYear] = useState<number>(new Date().getFullYear());
   const [calendarMonth, setCalendarMonth] = useState<number>(new Date().getMonth());
@@ -813,7 +816,7 @@ export function PlanningTab({
     if (editingTask && editingTask.type === 'fiscalizacao') {
       const currentYear = new Date().getFullYear();
       const currentTipo = editingTask.fiscalizacaoData?.tipoFiscalizacao || "Operacional";
-      const targetTypeAbbr = currentTipo === "Qualidade do Atendimento" ? "QA" : "OP";
+      const targetTypeAbbr = currentTipo === "Atendimento" ? "QA" : "OP";
 
       let sigla = "UNKNOWN";
       if (editingTask.areaIds && editingTask.areaIds.length > 0) {
@@ -831,15 +834,13 @@ export function PlanningTab({
       if (!currentCode) {
         needsRegen = true;
       } else {
-        const match = currentCode.match(/FISC\s*(OP|QA)?\s*(\d+)-(\d+)\s*(.*)/i);
+        const match = currentCode.match(/FISC\s*(?:OP|QA)?\s*(\d+)-(\d+)\s*(.*)/i);
         if (match) {
-          const codeTypeAbbr = match[1] ? match[1].toUpperCase() : "OP";
-          const codeYear = parseInt(match[3], 10);
-          const codeSigla = match[4] ? match[4].trim() : "";
+          const codeYear = parseInt(match[2], 10);
+          const codeSigla = match[3] ? match[3].trim() : "";
 
-          if (codeTypeAbbr !== targetTypeAbbr) {
-            needsRegen = true;
-          }
+          // We no longer check codeTypeAbbr from string, 
+          // because it will not be present. But we should check year and sigla.
           if (codeYear !== currentYear) {
             needsRegen = true;
           }
@@ -855,20 +856,23 @@ export function PlanningTab({
         let maxSeq = 0;
         tasks.forEach(t => {
           if (t.id !== editingTask.id && t.type === 'fiscalizacao' && t.fiscalizacaoData?.codigo) {
-             const match = t.fiscalizacaoData.codigo.match(/FISC\s*(OP|QA)?\s*(\d+)-(\d+)/i);
-             if (match) {
-               const typeAbbr = match[1] ? match[1].toUpperCase() : "OP";
-               const seq = parseInt(match[2], 10);
-               const year = parseInt(match[3], 10);
-               if (year === currentYear && typeAbbr === targetTypeAbbr && seq > maxSeq) {
-                 maxSeq = seq;
+             const tType = t.fiscalizacaoData.tipoFiscalizacao || "Operacional";
+             if (tType === currentTipo) {
+               const match = t.fiscalizacaoData.codigo.match(/FISC\s*(?:OP|QA)?\s*(\d+)-(\d+)/i);
+               if (match) {
+                 const seq = parseInt(match[1], 10);
+                 const year = parseInt(match[2], 10);
+                 if (year === currentYear && seq > maxSeq) {
+                   maxSeq = seq;
+                 }
                }
              }
           }
         });
+
         const nextSeq = maxSeq + 1;
         const seqStr = nextSeq.toString().padStart(3, '0');
-        const generatedCode = `FISC ${targetTypeAbbr} ${seqStr}-${currentYear} ${sigla}`;
+        const generatedCode = `FISC ${seqStr}-${currentYear} ${sigla}`;
         
         if (!editingTask.fiscalizacaoData || editingTask.fiscalizacaoData.codigo !== generatedCode) {
           setEditingTask(prev => ({
@@ -1443,7 +1447,17 @@ export function PlanningTab({
     }
   }, [isSyncing, isInitializing]);
 
-  // Apply default filters when user navigates specifically from sideways "Minhas Tarefas" or "Cadastrar Atividades"
+  const getUserResponsibleId = (): number | null => {
+    if (!currentUser || !responsibles || responsibles.length === 0) return null;
+    const userResp = responsibles.find(r => 
+      (r.userId && Number(r.userId) === Number(currentUser.id)) ||
+      (r.email && currentUser.email && r.email.toLowerCase().trim() === currentUser.email.toLowerCase().trim()) ||
+      (r.name && currentUser.name && r.name.toLowerCase().trim() === currentUser.name.toLowerCase().trim())
+    );
+    return userResp ? userResp.id : null;
+  };
+
+  // Apply default filters when user navigates specifically from sideways "Minhas Atividades" or "Cadastrar Atividades"
   React.useEffect(() => {
     if (myTasksFilterTrigger && myTasksFilterTrigger > 0) {
       React.startTransition(() => {
@@ -1461,15 +1475,11 @@ export function PlanningTab({
         }
 
         // 2. Set responsible filter based on 'isMyTasksSelected'
-        if (isMyTasksSelected && currentUser && responsibles && responsibles.length > 0) {
-          const userResp = responsibles.find(r => 
-            (r.userId && Number(r.userId) === Number(currentUser.id)) ||
-            (r.email && currentUser.email && r.email.toLowerCase().trim() === currentUser.email.toLowerCase().trim()) ||
-            (r.name && currentUser.name && r.name.toLowerCase().trim() === currentUser.name.toLowerCase().trim())
-          );
-          if (userResp) {
-            setSelectedResponsibleIds([userResp.id]);
-          } else {
+        if (isMyTasksSelected) {
+          const userRespId = getUserResponsibleId();
+          if (userRespId) {
+            setSelectedResponsibleIds([userRespId]);
+          } else if (currentUser && responsibles && responsibles.length > 0) {
             showToast("Aviso", "Seu usuário não está vinculado a nenhum responsável técnico cadastrado.", "warning");
             setSelectedResponsibleIds([]);
           }
@@ -1478,6 +1488,9 @@ export function PlanningTab({
         }
 
         // 3. Reset all other filters so user starts fresh
+        if (isMyTasksSelected) {
+          setViewMode(prev => ["area", "responsible", "table", "gantt"].includes(prev) ? "board" : prev);
+        }
         setStatusFilter("all");
         setSituationFilter("all");
         setPriorityFilter("all");
@@ -1489,6 +1502,13 @@ export function PlanningTab({
       });
     }
   }, [myTasksFilterTrigger]);
+
+  // Ensure responsible filter resets to "Todos os Responsáveis" when isMyTasksSelected is false
+  React.useEffect(() => {
+    if (!isMyTasksSelected) {
+      setSelectedResponsibleIds([]);
+    }
+  }, [isMyTasksSelected]);
 
   // Reset category filter if it becomes invalid due to area selection change
   React.useEffect(() => {
@@ -1518,9 +1538,13 @@ export function PlanningTab({
     }
 
     // Check task type
-    if (taskTypeFilter !== "all" && viewMode !== "recurso") {
+    if (taskTypeFilter !== "all") {
       const isType = t.type || "default";
-      if (isType !== taskTypeFilter) return false;
+      if (taskTypeFilter === "demanda_ouvidoria" || taskTypeFilter === "recurso") {
+        if (isType !== "demanda_ouvidoria" && isType !== "recurso") return false;
+      } else if (isType !== taskTypeFilter) {
+        return false;
+      }
     }
 
     // Check status
@@ -1806,6 +1830,22 @@ export function PlanningTab({
         ];
         RECURSO_STAGES.forEach(stage => {
           updated[`recurso-${stage}`] = expand;
+          updated[`recurso-recurso-${stage}`] = expand;
+        });
+        FISCALIZACAO_ETAPAS.forEach(stage => {
+          updated[`recurso-${stage}`] = expand;
+          updated[`recurso-fiscalizacao-${stage}`] = expand;
+        });
+        const RECURSO_REVISAO_STAGES = [
+          "Recebido",
+          "Em Análise Técnica",
+          "Encaminhado à Diretoria",
+          "Notificação do Usuário",
+          "Finalizado"
+        ];
+        RECURSO_REVISAO_STAGES.forEach(stage => {
+          updated[`recurso-${stage}`] = expand;
+          updated[`recurso-recurso_revisao-${stage}`] = expand;
         });
       }
       return updated;
@@ -1824,7 +1864,11 @@ export function PlanningTab({
     // Check task type
     if (taskTypeFilter !== "all") {
       const isType = t.type || "default";
-      if (isType !== taskTypeFilter) return false;
+      if (taskTypeFilter === "demanda_ouvidoria" || taskTypeFilter === "recurso") {
+        if (isType !== "demanda_ouvidoria" && isType !== "recurso") return false;
+      } else if (isType !== taskTypeFilter) {
+        return false;
+      }
     }
 
     // Check status
@@ -3156,7 +3200,7 @@ export function PlanningTab({
   };
 
   // Open modal for task creation
-  const handleAddNewTask = (parentId: number | null = null) => {
+  const handleAddNewTask = (parentId: number | null = null, overrideType?: "default" | "fiscalizacao" | "demanda_ouvidoria" | "recurso_revisao" | "recurso") => {
     setFormMode("create");
     
     let defaultPlanId = planFilter !== "all" && planFilter !== "" ? Number(planFilter) : null;
@@ -3173,6 +3217,8 @@ export function PlanningTab({
         defaultResponsibleIds = parentTask.responsibleIds || [];
       }
     }
+
+    const selectedType = overrideType || (viewMode === "recurso" ? agrupamentoTaskType : (taskTypeFilter === "demanda_ouvidoria" || taskTypeFilter === "recurso") ? "demanda_ouvidoria" : taskTypeFilter === "fiscalizacao" ? "fiscalizacao" : taskTypeFilter === "recurso_revisao" ? "recurso_revisao" : "default");
 
     setEditingTask({
       title: "",
@@ -3191,14 +3237,27 @@ export function PlanningTab({
       planId: defaultPlanId,
       areaIds: defaultAreaIds,
       responsibleIds: defaultResponsibleIds,
-      type: (viewMode === "recurso" || taskTypeFilter === "recurso") ? "recurso" : "default",
-      recursoData: (viewMode === "recurso" || taskTypeFilter === "recurso") ? {
+      type: selectedType,
+      ouvidoriaData: (selectedType === "demanda_ouvidoria" || selectedType === "recurso") ? { classificacaoImovel: 'Residencial', tipoManifestacao: 'Demanda Ouvidoria', servico: 'Água', situacao: 'Recebido', resultadoProcesso: 'Em Análise', complexidade: 'Média', categoria: 'Consumo Medido' } : undefined,
+      recursoData: (selectedType === "demanda_ouvidoria" || selectedType === "recurso") ? {
         classificacaoImovel: 'Residencial',
-        tipoManifestacao: 'Reclamação',
+        tipoManifestacao: 'Demanda Ouvidoria',
         servico: 'Água',
         situacao: 'Recebido',
         resultadoProcesso: 'Em Análise',
         complexidade: 'Média'
+      } : undefined,
+      fiscalizacaoData: selectedType === "fiscalizacao" ? {
+        etapa: FISCALIZACAO_ETAPA_INICIAL,
+        programacao: 'Programada',
+        tipoFiscalizacao: 'Operacional',
+        servico: 'Água',
+        regiaoAdministrativa: 'Brasília (RA I)'
+      } : undefined,
+      recursoRevData: selectedType === "recurso_revisao" ? {
+        situacao: 'Recebido',
+        servicoRegulado: 'Água',
+        resultado: 'Em Análise'
       } : undefined
     });
     setTaskFormTab("form");
@@ -4199,7 +4258,8 @@ export function PlanningTab({
                   <option value="all">Todos os Tipos</option>
                   <option value="default">Padrão</option>
                   <option value="fiscalizacao">Fiscalização</option>
-                  <option value="recurso">Recurso de Revisão</option>
+                  <option value="demanda_ouvidoria">Demanda Ouvidoria</option>
+                  <option value="recurso_revisao">Recurso de Revisão</option>
                 </select>
               </div>
             </div>
@@ -7104,10 +7164,12 @@ export function PlanningTab({
               >
                 <div>
                   <h3 className="text-base font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                    <Filter size={18} className="text-indigo-600" /> Filtro de Atividades
+                    <Filter size={18} className="text-indigo-600" /> {isMyTasksSelected ? "Filtro de Minhas Atividades" : "Filtro de Atividades"}
                   </h3>
                   <p className="text-xs font-semibold text-slate-500 mt-1">
-                    Filtre as atividades em tempo real para analisar o status de execução correspondente.
+                    {isMyTasksSelected
+                      ? "Filtre suas atividades por plano, status, situação e tipo de tarefa."
+                      : "Filtre as atividades em tempo real para analisar o status de execução correspondente."}
                   </p>
                 </div>
                 <div className="bg-slate-50 group-hover:bg-slate-100 border border-slate-200 group-hover:border-slate-350 text-slate-400 group-hover:text-slate-600 p-2 rounded-xl transition-colors mr-2">
@@ -7129,274 +7191,409 @@ export function PlanningTab({
 
             {/* Filter Bar */}
             {isTasksFiltersExpanded && (
-              <div className="bg-slate-50/60 rounded-3xl border border-slate-200/60 p-5 space-y-5 animate-in slide-in-from-top-4 fade-in duration-300 mt-4">
-                {/* Row 1: Plan Select (sorted to show most recent first) */}
-                <div className="flex flex-col gap-1.5 max-w-xs">
-              <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📁 Plano</span>
-              <select
-                value={planFilter}
-                onChange={(e) => setPlanFilter(e.target.value)}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
-              >
-                <option value="all">Todos os Planos</option>
-                {[...plans]
-                  .sort(sortByCreatedAt)
-                  .map((p) => (
-                    <option key={p.id} value={p.id.toString()}>
-                      {p.name}
-                    </option>
-                  ))}
-              </select>
-            </div>
+              isMyTasksSelected ? (
+                <div className="bg-slate-50/60 rounded-3xl border border-slate-200/60 p-5 space-y-5 animate-in slide-in-from-top-4 fade-in duration-300 mt-4">
+                  {/* Row 1: Plan, Status, Situation, Task Type */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Plan */}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📁 Plano</span>
+                      <select
+                        value={planFilter}
+                        onChange={(e) => setPlanFilter(e.target.value)}
+                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
+                      >
+                        <option value="all">Todos os Planos</option>
+                        {[...plans]
+                          .sort(sortByCreatedAt)
+                          .map((p) => (
+                            <option key={p.id} value={p.id.toString()}>
+                              {p.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
 
-            {/* Row 2: Area checkbox filter (styled like subsystems) alone on this row */}
-            <div className="flex flex-col gap-1.5 pt-1">
-              <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🏷️ Filtro por Área de Atuação</span>
-              <div className="flex flex-wrap gap-2">
-                <label className={cn(
-                  "flex items-center gap-2 cursor-pointer px-3.5 py-2 rounded-xl border text-xs font-black tracking-wide transition-all select-none",
-                  selectedAreaIds.length === 0 
-                    ? "bg-indigo-600 border-indigo-600 text-white shadow-sm" 
-                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
-                )}>
-                  <input
-                    type="checkbox"
-                    className="hidden"
-                    checked={selectedAreaIds.length === 0}
-                    onChange={() => setSelectedAreaIds([])}
-                  />
-                  <span>TODAS AS ÁREAS</span>
-                </label>
-                {areas.map((area) => {
-                  const isChecked = selectedAreaIds.includes(area.id);
-                  return (
-                    <label key={area.id} className={cn(
-                      "flex items-center gap-2 cursor-pointer px-3.5 py-2 rounded-xl border text-xs font-black tracking-wide transition-all select-none uppercase",
-                      isChecked 
-                        ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-xs ring-2 ring-indigo-50" 
-                        : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
-                    )}>
-                      <input
-                        type="checkbox"
-                        className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-350 focus:ring-indigo-100 cursor-pointer"
-                        checked={isChecked}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedAreaIds((prev) => {
-                              const nextAreas = [...prev, area.id];
-                              setSelectedResponsibleIds(prevResps => 
-                                prevResps.filter(rid => {
-                                  const r = responsibles.find(x => x.id === rid);
-                                  return r && r.areaIds?.some(aid => nextAreas.includes(Number(aid)));
-                                })
-                              );
-                              return nextAreas;
-                            });
-                          } else {
-                            setSelectedAreaIds((prev) => {
-                              const nextAreas = prev.filter((id) => id !== area.id);
-                              if (nextAreas.length > 0) {
+                    {/* Status */}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🚦 Status</span>
+                      <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
+                      >
+                        <option value="all">Todos os Status</option>
+                        <option value="Não iniciada">NÃO INICIADA</option>
+                        <option value="Em andamento">EM ANDAMENTO</option>
+                        <option value="Concluída">CONCLUÍDA</option>
+                      </select>
+                    </div>
+
+                    {/* Situação */}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📅 Situação</span>
+                      <select
+                        value={situationFilter}
+                        onChange={(e) => setSituationFilter(e.target.value)}
+                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
+                      >
+                        <option value="all">Todas as Situações</option>
+                        <option value="No Prazo">NO PRAZO</option>
+                        <option value="Crítica">CRÍTICA</option>
+                        <option value="Atrasada">ATRASADA</option>
+                      </select>
+                    </div>
+
+                    {/* Tipo de Tarefa */}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Tarefa</span>
+                      <select
+                        value={taskTypeFilter}
+                        onChange={(e) => setTaskTypeFilter(e.target.value)}
+                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
+                      >
+                        <option value="all">Todos os Tipos</option>
+                        <option value="default">PADRÃO</option>
+                        <option value="fiscalizacao">FISCALIZAÇÃO</option>
+                        <option value="demanda_ouvidoria">DEMANDA OUVIDORIA</option>
+                        <option value="recurso_revisao">RECURSO DE REVISÃO</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Search bar layout */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🔍 Buscar por tarefa, descrição ou tags</span>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                      <div className="relative flex-1">
+                        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Digite o título, descrição, notas ou tipo para filtrar..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-11 pr-4 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid w-full bg-white text-slate-800 placeholder-slate-400/90 font-medium"
+                        />
+                      </div>
+                      <label className="flex items-center justify-center gap-2 cursor-pointer bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl hover:bg-slate-100 transition-colors sm:w-auto h-full">
+                        <input
+                          type="checkbox"
+                          checked={hasSubtasksFilter}
+                          onChange={(e) => setHasSubtasksFilter(e.target.checked)}
+                          className="w-4 h-4 rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid"
+                        />
+                        <span className="text-xs font-bold text-slate-700 select-none whitespace-nowrap">Tarefas com Subtarefas</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Consultar / Limpar Buttons */}
+                  <div className="flex justify-center items-center gap-4 pt-2">
+                    {(planFilter !== "all" || statusFilter !== "all" || situationFilter !== "all" || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
+                      <button
+                        onClick={() => {
+                          setPlanFilter("all");
+                          setStatusFilter("all");
+                          setSituationFilter("all");
+                          setTaskTypeFilter("all");
+                          setSearchTerm("");
+                          setHasSubtasksFilter(false);
+                          const userRespId = getUserResponsibleId();
+                          if (userRespId) setSelectedResponsibleIds([userRespId]);
+                        }}
+                        className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center gap-2 font-black uppercase tracking-widest px-8 py-3 rounded-xl text-xs transition-all shadow-sm hover:-translate-y-0.5"
+                        title="Limpar filtros ativos"
+                      >
+                        <X size={16} /> Limpar Filtros
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setHasConsulted(true);
+                        if (taskTypeFilter === "demanda_ouvidoria" || taskTypeFilter === "recurso" || taskTypeFilter === "fiscalizacao" || taskTypeFilter === "recurso_revisao") {
+                          setAgrupamentoTaskType(taskTypeFilter as any);
+                        }
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2 font-black uppercase tracking-widest px-8 py-3 rounded-xl text-xs transition-all shadow-md hover:-translate-y-0.5"
+                    >
+                      <Search size={16} /> Consultar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-50/60 rounded-3xl border border-slate-200/60 p-5 space-y-5 animate-in slide-in-from-top-4 fade-in duration-300 mt-4">
+                  {/* Row 1: Plan Select (sorted to show most recent first) */}
+                  <div className="flex flex-col gap-1.5 max-w-xs">
+                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📁 Plano</span>
+                <select
+                  value={planFilter}
+                  onChange={(e) => setPlanFilter(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
+                >
+                  <option value="all">Todos os Planos</option>
+                  {[...plans]
+                    .sort(sortByCreatedAt)
+                    .map((p) => (
+                      <option key={p.id} value={p.id.toString()}>
+                        {p.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Row 2: Area checkbox filter (styled like subsystems) alone on this row */}
+              <div className="flex flex-col gap-1.5 pt-1">
+                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🏷️ Filtro por Área de Atuação</span>
+                <div className="flex flex-wrap gap-2">
+                  <label className={cn(
+                    "flex items-center gap-2 cursor-pointer px-3.5 py-2 rounded-xl border text-xs font-black tracking-wide transition-all select-none",
+                    selectedAreaIds.length === 0 
+                      ? "bg-indigo-600 border-indigo-600 text-white shadow-sm" 
+                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
+                  )}>
+                    <input
+                      type="checkbox"
+                      className="hidden"
+                      checked={selectedAreaIds.length === 0}
+                      onChange={() => setSelectedAreaIds([])}
+                    />
+                    <span>TODAS AS ÁREAS</span>
+                  </label>
+                  {areas.map((area) => {
+                    const isChecked = selectedAreaIds.includes(area.id);
+                    return (
+                      <label key={area.id} className={cn(
+                        "flex items-center gap-2 cursor-pointer px-3.5 py-2 rounded-xl border text-xs font-black tracking-wide transition-all select-none uppercase",
+                        isChecked 
+                          ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-xs ring-2 ring-indigo-50" 
+                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
+                      )}>
+                        <input
+                          type="checkbox"
+                          className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-350 focus:ring-indigo-100 cursor-pointer"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedAreaIds((prev) => {
+                                const nextAreas = [...prev, area.id];
                                 setSelectedResponsibleIds(prevResps => 
                                   prevResps.filter(rid => {
                                     const r = responsibles.find(x => x.id === rid);
                                     return r && r.areaIds?.some(aid => nextAreas.includes(Number(aid)));
                                   })
                                 );
-                              }
-                              return nextAreas;
-                            });
-                          }
-                        }}
-                      />
-                      <span>{area.name}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Row 2.5: Responsible and Category checkbox filter (synchronized with areas) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">👥 Filtro por Responsável</span>
-                <select
-                  value={selectedResponsibleIds.length === 0 ? "all" : selectedResponsibleIds[0]}
-                  onChange={(e) => {
-                    if (e.target.value === "all") {
-                      setSelectedResponsibleIds([]);
-                    } else {
-                      setSelectedResponsibleIds([Number(e.target.value)]);
-                    }
-                  }}
-                  className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-black text-slate-700 bg-white focus:border-indigo-500 outline-none transition-colors uppercase tracking-wide"
-                >
-                  <option value="all">TODOS OS RESPONSÁVEIS</option>
-                  {responsibles
-                    .filter((resp) => {
-                      // if no areas selected, show all
-                      if (selectedAreaIds.length === 0) return true;
-                      // if areas selected, show if responsible has ANY of the selected areas
-                      return resp.areaIds?.some((id: any) => selectedAreaIds.includes(Number(id)));
-                    })
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((resp) => (
-                      <option key={resp.id} value={resp.id}>{resp.name}</option>
-                    ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📂 Categoria</span>
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl text-xs font-black bg-white text-slate-700 focus:border-indigo-500 outline-none transition-colors uppercase tracking-wide"
-                >
-                  <option value="all">TODAS AS CATEGORIAS</option>
-                  {categories
-                    .filter((c) => {
-                      if (selectedAreaIds.length === 0) return true;
-                      return c.areaIds?.some((id: any) => selectedAreaIds.includes(Number(id)));
-                    })
-                    .sort((a,b) => a.name.localeCompare(b.name))
-                    .map((c) => (
-                    <option key={c.id} value={c.id.toString()}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Row 3: Status, Situation, Priority, Classification and Tipo Select filters */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🚦 Status</span>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
-                >
-                  <option value="all">Todos os Status</option>
-                  <option value="Não iniciada">NÃO INICIADA</option>
-                  <option value="Em andamento">EM ANDAMENTO</option>
-                  <option value="Concluída">CONCLUÍDA</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📅 Situação</span>
-                <select
-                  value={situationFilter}
-                  onChange={(e) => setSituationFilter(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
-                >
-                  <option value="all">Todas as Situações</option>
-                  <option value="No Prazo">NO PRAZO</option>
-                  <option value="Crítica">CRÍTICA</option>
-                  <option value="Atrasada">ATRASADA</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">⚡ Prioridade</span>
-                <select
-                  value={priorityFilter}
-                  onChange={(e) => setPriorityFilter(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
-                >
-                  <option value="all">Todas as Prioridades</option>
-                  <option value="Alta">ALTA</option>
-                  <option value="Média">MÉDIA</option>
-                  <option value="Baixa">BAIXA</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🏷️ Classificação</span>
-                <select
-                  value={isProgrammedFilter}
-                  onChange={(e) => setIsProgrammedFilter(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
-                >
-                  <option value="all">Todas as Classificações</option>
-                  <option value="true">PROGRAMADAS</option>
-                  <option value="false">EXTRAORDINÁRIAS</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Tarefa</span>
-                <select
-                  value={taskTypeFilter}
-                  onChange={(e) => setTaskTypeFilter(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
-                >
-                  <option value="all">Todos os Tipos</option>
-                  <option value="default">PADRÃO</option>
-                  <option value="fiscalizacao">FISCALIZAÇÃO</option>
-                  <option value="recurso">RECURSO DE REVISÃO</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Row 3: Search layout */}
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🔍 Buscar por tarefa, descrição ou tags</span>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <div className="relative flex-1">
-                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Digite o título, descrição, notas, tipo ou áreas de atuação para filtrar as atividades..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-11 pr-4 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid w-full bg-white text-slate-800 placeholder-slate-400/90 font-medium"
-                  />
+                                return nextAreas;
+                              });
+                            } else {
+                              setSelectedAreaIds((prev) => {
+                                const nextAreas = prev.filter((id) => id !== area.id);
+                                if (nextAreas.length > 0) {
+                                  setSelectedResponsibleIds(prevResps => 
+                                    prevResps.filter(rid => {
+                                      const r = responsibles.find(x => x.id === rid);
+                                      return r && r.areaIds?.some(aid => nextAreas.includes(Number(aid)));
+                                    })
+                                  );
+                                }
+                                return nextAreas;
+                              });
+                            }
+                          }}
+                        />
+                        <span>{area.name}</span>
+                      </label>
+                    );
+                  })}
                 </div>
-                <label className="flex items-center justify-center gap-2 cursor-pointer bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl hover:bg-slate-100 transition-colors sm:w-auto h-full">
-                  <input
-                    type="checkbox"
-                    checked={hasSubtasksFilter}
-                    onChange={(e) => setHasSubtasksFilter(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid"
-                  />
-                  <span className="text-xs font-bold text-slate-700 select-none whitespace-nowrap">Tarefas com Subtarefas</span>
-                </label>
               </div>
-            </div>
 
-            {/* Consultar / Limpar Buttons */}
-            <div className="flex justify-center items-center gap-4 pt-2">
-                {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || statusFilter !== "all" || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || isProgrammedFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
-                  <button
-                    onClick={() => {
-                      setPlanFilter("all");
-                      setSelectedAreaIds([]);
-                      setSelectedResponsibleIds([]);
-                      setStatusFilter("all");
-                      setSituationFilter("all");
-                      setPriorityFilter("all");
-                      setCategoryFilter("all");
-                      setSearchTerm("");
-                      setIsProgrammedFilter("all");
-                      setHasSubtasksFilter(false);
+              {/* Row 2.5: Responsible and Category checkbox filter (synchronized with areas) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">👥 Filtro por Responsável</span>
+                  <select
+                    value={selectedResponsibleIds.length === 0 ? "all" : selectedResponsibleIds[0]}
+                    onChange={(e) => {
+                      if (e.target.value === "all") {
+                        setSelectedResponsibleIds([]);
+                      } else {
+                        setSelectedResponsibleIds([Number(e.target.value)]);
+                      }
                     }}
-                    className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center gap-2 font-black uppercase tracking-widest px-8 py-3 rounded-xl text-xs transition-all shadow-sm hover:-translate-y-0.5"
-                    title="Limpar todos os filtros ativos"
+                    className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-black text-slate-700 bg-white focus:border-indigo-500 outline-none transition-colors uppercase tracking-wide"
                   >
-                    <X size={16} /> Limpar Filtros
-                  </button>
-                )}
-               <button
-                 onClick={() => {
-                   setHasConsulted(true);
-                 }}
-                 className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2 font-black uppercase tracking-widest px-8 py-3 rounded-xl text-xs transition-all shadow-md hover:-translate-y-0.5"
-               >
-                 <Search size={16} /> Consultar
-               </button>
-            </div>
+                    <option value="all">TODOS OS RESPONSÁVEIS</option>
+                    {responsibles
+                      .filter((resp) => {
+                        // if no areas selected, show all
+                        if (selectedAreaIds.length === 0) return true;
+                        // if areas selected, show if responsible has ANY of the selected areas
+                        return resp.areaIds?.some((id: any) => selectedAreaIds.includes(Number(id)));
+                      })
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((resp) => (
+                        <option key={resp.id} value={resp.id}>{resp.name}</option>
+                      ))}
+                  </select>
+                </div>
 
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📂 Categoria</span>
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl text-xs font-black bg-white text-slate-700 focus:border-indigo-500 outline-none transition-colors uppercase tracking-wide"
+                  >
+                    <option value="all">TODAS AS CATEGORIAS</option>
+                    {categories
+                      .filter((c) => {
+                        if (selectedAreaIds.length === 0) return true;
+                        return c.areaIds?.some((id: any) => selectedAreaIds.includes(Number(id)));
+                      })
+                      .sort((a,b) => a.name.localeCompare(b.name))
+                      .map((c) => (
+                      <option key={c.id} value={c.id.toString()}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
+              {/* Row 3: Status, Situation, Priority, Classification and Tipo Select filters */}
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🚦 Status</span>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
+                  >
+                    <option value="all">Todos os Status</option>
+                    <option value="Não iniciada">NÃO INICIADA</option>
+                    <option value="Em andamento">EM ANDAMENTO</option>
+                    <option value="Concluída">CONCLUÍDA</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📅 Situação</span>
+                  <select
+                    value={situationFilter}
+                    onChange={(e) => setSituationFilter(e.target.value)}
+                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
+                  >
+                    <option value="all">Todas as Situações</option>
+                    <option value="No Prazo">NO PRAZO</option>
+                    <option value="Crítica">CRÍTICA</option>
+                    <option value="Atrasada">ATRASADA</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">⚡ Prioridade</span>
+                  <select
+                    value={priorityFilter}
+                    onChange={(e) => setPriorityFilter(e.target.value)}
+                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
+                  >
+                    <option value="all">Todas as Prioridades</option>
+                    <option value="Alta">ALTA</option>
+                    <option value="Média">MÉDIA</option>
+                    <option value="Baixa">BAIXA</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🏷️ Classificação</span>
+                  <select
+                    value={isProgrammedFilter}
+                    onChange={(e) => setIsProgrammedFilter(e.target.value)}
+                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
+                  >
+                    <option value="all">Todas as Classificações</option>
+                    <option value="true">PROGRAMADAS</option>
+                    <option value="false">EXTRAORDINÁRIAS</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Tarefa</span>
+                  <select
+                    value={taskTypeFilter}
+                    onChange={(e) => setTaskTypeFilter(e.target.value)}
+                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
+                  >
+                    <option value="all">Todos os Tipos</option>
+                    <option value="default">PADRÃO</option>
+                    <option value="fiscalizacao">FISCALIZAÇÃO</option>
+                    <option value="demanda_ouvidoria">DEMANDA OUVIDORIA</option>
+                    <option value="recurso_revisao">RECURSO DE REVISÃO</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Row 3: Search layout */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🔍 Buscar por tarefa, descrição ou tags</span>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                  <div className="relative flex-1">
+                    <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Digite o título, descrição, notas, tipo ou áreas de atuação para filtrar as atividades..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-11 pr-4 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid w-full bg-white text-slate-800 placeholder-slate-400/90 font-medium"
+                    />
+                  </div>
+                  <label className="flex items-center justify-center gap-2 cursor-pointer bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl hover:bg-slate-100 transition-colors sm:w-auto h-full">
+                    <input
+                      type="checkbox"
+                      checked={hasSubtasksFilter}
+                      onChange={(e) => setHasSubtasksFilter(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid"
+                    />
+                    <span className="text-xs font-bold text-slate-700 select-none whitespace-nowrap">Tarefas com Subtarefas</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Consultar / Limpar Buttons */}
+              <div className="flex justify-center items-center gap-4 pt-2">
+                  {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || statusFilter !== "all" || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || isProgrammedFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
+                    <button
+                      onClick={() => {
+                        setPlanFilter("all");
+                        setSelectedAreaIds([]);
+                        setSelectedResponsibleIds([]);
+                        setStatusFilter("all");
+                        setSituationFilter("all");
+                        setPriorityFilter("all");
+                        setCategoryFilter("all");
+                        setSearchTerm("");
+                        setIsProgrammedFilter("all");
+                        setHasSubtasksFilter(false);
+                      }}
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center gap-2 font-black uppercase tracking-widest px-8 py-3 rounded-xl text-xs transition-all shadow-sm hover:-translate-y-0.5"
+                      title="Limpar todos os filtros ativos"
+                    >
+                      <X size={16} /> Limpar Filtros
+                    </button>
+                  )}
+                 <button
+                   onClick={() => {
+                     setHasConsulted(true);
+                     if (taskTypeFilter === "demanda_ouvidoria" || taskTypeFilter === "recurso" || taskTypeFilter === "fiscalizacao" || taskTypeFilter === "recurso_revisao") {
+                       setAgrupamentoTaskType(taskTypeFilter as any);
+                     }
+                   }}
+                   className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2 font-black uppercase tracking-widest px-8 py-3 rounded-xl text-xs transition-all shadow-md hover:-translate-y-0.5"
+                 >
+                   <Search size={16} /> Consultar
+                 </button>
+              </div>
+
+                </div>
+              )
             )}
           </div>
 
@@ -7436,30 +7633,34 @@ export function PlanningTab({
                 >
                   <CheckCircle2 size={16} /> Status
                 </button>
-                <button
-                  onClick={() => { setViewMode("area"); setTimelineTaskId(null); }}
-                  className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "area" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
-                >
-                  <Briefcase size={16} /> Áreas
-                </button>
-                <button
-                  onClick={() => { setViewMode("responsible"); setTimelineTaskId(null); }}
-                  className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "responsible" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
-                >
-                  <Users size={16} /> Responsáveis
-                </button>
-                <button
-                  onClick={() => { setViewMode("table"); setTimelineTaskId(null); }}
-                  className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "table" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
-                >
-                  <Table size={16} /> Tabela
-                </button>
-                <button
-                  onClick={() => { setViewMode("gantt"); setTimelineTaskId(null); }}
-                  className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "gantt" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
-                >
-                  <CalendarRange size={16} /> Gantt
-                </button>
+                {!isMyTasksSelected && (
+                  <>
+                    <button
+                      onClick={() => { setViewMode("area"); setTimelineTaskId(null); }}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "area" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                    >
+                      <Briefcase size={16} /> Áreas
+                    </button>
+                    <button
+                      onClick={() => { setViewMode("responsible"); setTimelineTaskId(null); }}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "responsible" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                    >
+                      <Users size={16} /> Responsáveis
+                    </button>
+                    <button
+                      onClick={() => { setViewMode("table"); setTimelineTaskId(null); }}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "table" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                    >
+                      <Table size={16} /> Tabela
+                    </button>
+                    <button
+                      onClick={() => { setViewMode("gantt"); setTimelineTaskId(null); }}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "gantt" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                    >
+                      <CalendarRange size={16} /> Gantt
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={() => { setViewMode("calendar"); setTimelineTaskId(null); }}
                   className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "calendar" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
@@ -7470,7 +7671,7 @@ export function PlanningTab({
                   onClick={() => { setViewMode("recurso"); setTimelineTaskId(null); }}
                   className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "recurso" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                 >
-                  <Scale size={16} /> Recursos de Revisão
+                  <Layers size={16} /> Tipo de Tarefa
                 </button>
                 {timelineTaskId !== null && (
                   <button
@@ -7623,7 +7824,7 @@ export function PlanningTab({
                 <div className="flex flex-col sm:flex-row items-center gap-3 justify-between bg-slate-50 border border-slate-200/80 rounded-2xl p-3 px-4 shadow-xs mt-2 select-none">
                   <div className="flex items-center gap-2">
                     <Layers size={15} className="text-indigo-500" />
-                    <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">{viewMode === "tree" ? "Painel de Tarefas Mais Recentes (CRIADAS OU EDITADAS)" : `Painel de Agrupamento (${viewMode === "status" ? "Status" : viewMode === "category" ? "Categorias" : viewMode === "area" ? "Áreas" : viewMode === "recurso" ? "Etapas do Recurso" : "Responsáveis"})`}</span>
+                    <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">{viewMode === "tree" ? "Painel de Tarefas Mais Recentes (CRIADAS OU EDITADAS)" : `Painel de Agrupamento (${viewMode === "status" ? "Status" : viewMode === "category" ? "Categorias" : viewMode === "area" ? "Áreas" : viewMode === "recurso" ? "Tipo de Tarefa" : "Responsáveis"})`}</span>
                   </div>
                   <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                     <button
@@ -7882,14 +8083,24 @@ export function PlanningTab({
                                    <td className="px-4 py-3 border-r border-slate-50 min-w-[500px] w-[500px] whitespace-normal">
                                      <span className="font-bold text-slate-800 hover:text-indigo-600 block cursor-pointer transition-colors" onClick={() => handleEditTask(task)}>
                                        {getTaskDisplayName(task)} <span className="text-slate-400 font-normal">({taskChildrenCount})</span>
-                                       {task.type === "recurso" && (
+                                       {(task.type === "demanda_ouvidoria" || task.type === "recurso") && (
                                          <span 
                                            className="inline-flex text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 items-center gap-1 shadow-xs cursor-pointer ml-2"
-                                           title={`Etapa do Processo: ${task.recursoData?.situacao || "Recebido"}`}
+                                           title={`Etapa do Processo: ${(task.ouvidoriaData || task.recursoData)?.situacao || "Recebido"}`}
                                            onClick={() => handleEditTask(task)}
                                          >
                                            <Scale size={10} className="stroke-[2.5]" />
-                                           Etapa: {task.recursoData?.situacao || "Recebido"}
+                                           Etapa: {(task.ouvidoriaData || task.recursoData)?.situacao || "Recebido"}
+                                         </span>
+                                       )}
+                                       {task.type === "recurso_revisao" && (
+                                         <span 
+                                           className="inline-flex text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 items-center gap-1 shadow-xs cursor-pointer ml-2"
+                                           title={`Etapa Recurso: ${task.recursoRevData?.situacao || "Recebido"}`}
+                                           onClick={() => handleEditTask(task)}
+                                         >
+                                           <Scale size={10} className="stroke-[2.5]" />
+                                           Etapa: {task.recursoRevData?.situacao || "Recebido"}
                                          </span>
                                        )}
                                      </span>
@@ -8124,6 +8335,8 @@ export function PlanningTab({
                  );
               })()}
               {viewMode === "recurso" && (() => {
+                  const currentType = agrupamentoTaskType;
+
                   const RECURSO_STAGES = [
                     "Recebido",
                     "Em Análise Técnica",
@@ -8132,61 +8345,171 @@ export function PlanningTab({
                     "Retornado da Diretoria",
                     "Finalizado"
                   ];
-                  const totalRecursos = rootTasks.filter(t => t.type === "recurso").length;
-                  
-                  if (totalRecursos === 0) {
-                    return (
-                      <div className="flex flex-col items-center justify-center py-16 px-4 border border-dashed border-slate-300 rounded-2xl bg-slate-50/50 text-center gap-4 mt-2">
-                        <div className="p-4 bg-indigo-50 text-indigo-600 rounded-full">
-                          <Scale size={28} />
-                        </div>
-                        <div className="space-y-1">
-                          <h4 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Nenhum Recurso de Revisão Cadastrado</h4>
-                          <p className="text-xs text-slate-500 max-w-sm">
-                            Atualmente não há nenhuma tarefa classificada como Recurso de Revisão. Crie uma nova tarefa para gerenciar as etapas do processo.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleAddNewTask(null)}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider px-4 py-2 rounded-xl transition shadow-sm flex items-center gap-2"
-                        >
-                          Criar Recurso de Revisão
-                        </button>
-                      </div>
-                    );
-                  }
 
-                  return (
-                    <div className="space-y-4 mt-2">
-                      {RECURSO_STAGES.map(stage => {
-                        const groupRootTasks = rootTasks.filter(t => t.type === "recurso" && (t.recursoData?.situacao || "Recebido") === stage && childMatchesOrIsPath(t.id));
-                        if (groupRootTasks.length === 0) return null;
-                        
-                        return (
-                          <div key={stage} className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm">
-                             <div 
-                               onClick={() => toggleGroupContainer("recurso", stage)}
-                               className="bg-slate-50 hover:bg-slate-100/70 border-b border-slate-200/60 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
+                  const FISCALIZACAO_STAGES = [...FISCALIZACAO_ETAPAS];
+
+                  const RECURSO_REVISAO_STAGES = [
+                    "Recebido",
+                    "Em Análise Técnica",
+                    "Encaminhado à Diretoria",
+                    "Notificação do Usuário",
+                    "Finalizado"
+                  ];
+
+                  const stages = (currentType === "demanda_ouvidoria" || currentType === "recurso")
+                    ? RECURSO_STAGES
+                    : currentType === "fiscalizacao"
+                    ? FISCALIZACAO_STAGES
+                    : RECURSO_REVISAO_STAGES;
+
+                  const visibleTargetTasks = rootTasks.filter(t => childMatchesOrIsPath(t.id));
+                  const targetTasks = visibleTargetTasks.filter(t => {
+                    if (currentType === "demanda_ouvidoria" || currentType === "recurso") {
+                      return t.type === "demanda_ouvidoria" || t.type === "recurso";
+                    }
+                    return t.type === currentType;
+                  });
+                  const totalTasksCount = targetTasks.length;
+
+                  const countRecurso = visibleTargetTasks.filter(t => t.type === "demanda_ouvidoria" || t.type === "recurso").length;
+                  const countFiscalizacao = visibleTargetTasks.filter(t => t.type === "fiscalizacao").length;
+                  const countRecursoRevisao = visibleTargetTasks.filter(t => t.type === "recurso_revisao").length;
+
+                  const labelType = (currentType === "demanda_ouvidoria" || currentType === "recurso")
+                    ? "Demanda Ouvidoria"
+                    : currentType === "fiscalizacao"
+                    ? "Fiscalização"
+                    : "Recurso de Revisão";
+
+                   return (
+                     <div className="space-y-4 mt-2">
+                       {/* Selector of Task Type for Stage View */}
+                       <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-2 sm:p-2.5 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+                         <div className="flex items-center gap-2 flex-wrap">
+                           <span className="text-xs font-black text-slate-500 uppercase tracking-wider px-2 flex items-center gap-1.5">
+                             <Filter size={14} className="text-indigo-600" />
+                             Etapas por Tipo de Tarefa:
+                           </span>
+                           <div className="flex flex-wrap items-center gap-1.5 bg-slate-200/60 p-1 rounded-xl">
+                             <button
+                               type="button"
+                               onClick={() => setAgrupamentoTaskType("demanda_ouvidoria")}
+                               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-150 ${
+                                 currentType === "demanda_ouvidoria" || currentType === "recurso"
+                                   ? "bg-white text-[#1A3E8A] shadow-sm font-black ring-1 ring-slate-200"
+                                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                               }`}
                              >
-                               <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                  {expandedGroupContainers[`recurso-${stage}`] !== false ? <ChevronDown size={14} className="text-slate-400 stroke-[2.5]" /> : <ChevronRight size={14} className="text-slate-400 stroke-[2.5]" />}
-                                  <Scale size={14} className="text-[#1A3E8A]" />
-                                  {stage}
-                               </h3>
-                               <span className="bg-white border border-slate-200 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{groupRootTasks.length} recursos</span>
-                             </div>
-                             {expandedGroupContainers[`recurso-${stage}`] !== false && (
-                               <div>
-                                 {groupRootTasks.filter(t => childMatchesOrIsPath(t.id)).map(t => renderTaskNode(t, 0, false))}
+                               <Scale size={14} className={currentType === "demanda_ouvidoria" || currentType === "recurso" ? "text-[#1A3E8A]" : "text-slate-400"} />
+                               Demanda Ouvidoria
+                               <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${currentType === "demanda_ouvidoria" || currentType === "recurso" ? "bg-blue-100 text-[#1A3E8A]" : "bg-slate-300/60 text-slate-600"}`}>
+                                 {countRecurso}
+                               </span>
+                             </button>
+
+                             <button
+                               type="button"
+                               onClick={() => setAgrupamentoTaskType("fiscalizacao")}
+                               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-150 ${
+                                 currentType === "fiscalizacao"
+                                   ? "bg-white text-[#1A3E8A] shadow-sm font-black ring-1 ring-slate-200"
+                                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                               }`}
+                             >
+                               <ClipboardList size={14} className={currentType === "fiscalizacao" ? "text-[#1A3E8A]" : "text-slate-400"} />
+                               Fiscalização
+                               <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${currentType === "fiscalizacao" ? "bg-blue-100 text-[#1A3E8A]" : "bg-slate-300/60 text-slate-600"}`}>
+                                 {countFiscalizacao}
+                               </span>
+                             </button>
+
+                             <button
+                               type="button"
+                               onClick={() => setAgrupamentoTaskType("recurso_revisao")}
+                               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-150 ${
+                                 currentType === "recurso_revisao"
+                                   ? "bg-white text-[#1A3E8A] shadow-sm font-black ring-1 ring-slate-200"
+                                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                               }`}
+                             >
+                               <FileText size={14} className={currentType === "recurso_revisao" ? "text-[#1A3E8A]" : "text-slate-400"} />
+                               Recurso de Revisão
+                               <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${currentType === "recurso_revisao" ? "bg-blue-100 text-[#1A3E8A]" : "bg-slate-300/60 text-slate-600"}`}>
+                                 {countRecursoRevisao}
+                               </span>
+                             </button>
+                           </div>
+                         </div>
+
+
+                       </div>
+
+                       {totalTasksCount === 0 ? (
+                         <div className="flex flex-col items-center justify-center py-16 px-4 border border-dashed border-slate-300 rounded-2xl bg-slate-50/50 text-center gap-4 mt-2">
+                           <div className="p-4 bg-indigo-50 text-indigo-600 rounded-full">
+                             {(currentType === "demanda_ouvidoria" || currentType === "recurso") ? <Scale size={28} /> : currentType === "fiscalizacao" ? <ClipboardList size={28} /> : <FileText size={28} />}
+                           </div>
+                           <div className="space-y-1">
+                             <h4 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">
+                               Nenhuma tarefa de {labelType} Cadastrada
+                             </h4>
+                             <p className="text-xs text-slate-500 max-w-sm">
+                               Atualmente não há nenhuma tarefa classificada como {labelType}.
+                             </p>
+                           </div>
+                         </div>
+                       ) : (
+                         <div className="space-y-4">
+                            {stages.map(stage => {
+                              const groupRootTasks = rootTasks.filter(t => {
+                                if (currentType === "demanda_ouvidoria" || currentType === "recurso") {
+                                  if (t.type !== "demanda_ouvidoria" && t.type !== "recurso") return false;
+                                  return ((t.ouvidoriaData || t.recursoData)?.situacao || "Recebido") === stage && childMatchesOrIsPath(t.id);
+                                } else if (currentType === "recurso_revisao") {
+                                  if (t.type !== "recurso_revisao") return false;
+                                  let s = t.recursoRevData?.situacao || "Recebido";
+                                  if (s === "Encaminhado a Diretoria") s = "Encaminhado à Diretoria";
+                                  if (s === "Retornado da Diretoria") s = "Notificação do Usuário";
+                                  if (s === "Em Análise Jurídica") s = "Em Análise Técnica";
+                                  return s === stage && childMatchesOrIsPath(t.id);
+                                } else {
+                                  if (t.type !== "fiscalizacao") return false;
+                                  return (t.fiscalizacaoData?.etapa || FISCALIZACAO_ETAPA_INICIAL) === stage && childMatchesOrIsPath(t.id);
+                                }
+                              });
+
+                             if (groupRootTasks.length === 0) return null;
+
+                             const key = `recurso-${currentType}-${stage}`;
+
+                             return (
+                               <div key={stage} className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm">
+                                 <div 
+                                   onClick={() => toggleGroupContainer(`recurso-${currentType}`, stage)}
+                                   className="bg-slate-50 hover:bg-slate-100/70 border-b border-slate-200/60 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
+                                 >
+                                   <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                      {expandedGroupContainers[key] !== false && expandedGroupContainers[`recurso-${stage}`] !== false ? <ChevronDown size={14} className="text-slate-400 stroke-[2.5]" /> : <ChevronRight size={14} className="text-slate-400 stroke-[2.5]" />}
+                                      {(currentType === "demanda_ouvidoria" || currentType === "recurso") ? <Scale size={14} className="text-[#1A3E8A]" /> : currentType === "fiscalizacao" ? <ClipboardList size={14} className="text-[#1A3E8A]" /> : <FileText size={14} className="text-[#1A3E8A]" />}
+                                      {stage}
+                                   </h3>
+                                   <span className="bg-white border border-slate-200 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                     {groupRootTasks.length} {groupRootTasks.length === 1 ? "tarefa" : "tarefas"}
+                                   </span>
+                                 </div>
+                                 {expandedGroupContainers[key] !== false && expandedGroupContainers[`recurso-${stage}`] !== false && (
+                                   <div>
+                                     {groupRootTasks.filter(t => childMatchesOrIsPath(t.id)).map(t => renderTaskNode(t, 0, false))}
+                                   </div>
+                                 )}
                                </div>
-                             )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  );
-               })()}
+                             );
+                           })}
+                         </div>
+                       )}
+                     </div>
+                   );
+                })()}
               {viewMode === "board" && (() => {
                   const visibleTasks = enhancedTasks.filter(t => matchesFilters(t));
                   const groups: Record<string, Task[]> = {};
@@ -8398,14 +8721,24 @@ export function PlanningTab({
                                             
                                             {/* Status / Priority / Situation Badges */}
                                             <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
-                                              {task.type === "recurso" && (
+                                              {(task.type === "demanda_ouvidoria" || task.type === "recurso") && (
                                                 <span 
                                                   className="text-[8.5px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-sm border shadow-xs flex items-center gap-1 bg-amber-50 text-amber-800 border-amber-200 cursor-pointer"
-                                                  title={`Etapa do Processo: ${task.recursoData?.situacao || "Recebido"}`}
+                                                  title={`Etapa do Processo: ${(task.ouvidoriaData || task.recursoData)?.situacao || "Recebido"}`}
                                                   onClick={() => handleEditTask(task)}
                                                 >
                                                   <Scale size={9} className="stroke-[2.5]" />
-                                                  Etapa: {task.recursoData?.situacao || "Recebido"}
+                                                  Etapa: {(task.ouvidoriaData || task.recursoData)?.situacao || "Recebido"}
+                                                </span>
+                                              )}
+                                              {task.type === "recurso_revisao" && (
+                                                <span 
+                                                  className="text-[8.5px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-sm border shadow-xs flex items-center gap-1 bg-blue-50 text-blue-800 border-blue-200 cursor-pointer"
+                                                  title={`Etapa Recurso: ${task.recursoRevData?.situacao || "Recebido"}`}
+                                                  onClick={() => handleEditTask(task)}
+                                                >
+                                                  <Scale size={9} className="stroke-[2.5]" />
+                                                  Etapa: {task.recursoRevData?.situacao || "Recebido"}
                                                 </span>
                                               )}
                                               {task.priority && (
@@ -9015,14 +9348,14 @@ export function PlanningTab({
                                         <span className={`text-xs font-bold text-slate-850 line-clamp-1 cursor-pointer hover:text-indigo-600 transition-colors ${depth === 0 ? "text-sm" : ""}`} onClick={() => handleEditTask(t)}>
                                           {getTaskDisplayName(t)}
                                         </span>
-                                        {t.type === "recurso" && (
+                                        {(t.type === "demanda_ouvidoria" || t.type === "recurso") && (
                                           <span 
                                             className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shadow-xs cursor-pointer shrink-0"
-                                            title={`Etapa do Processo: ${t.recursoData?.situacao || "Recebido"}`}
+                                            title={`Etapa do Processo: ${(t.ouvidoriaData || t.recursoData)?.situacao || "Recebido"}`}
                                             onClick={() => handleEditTask(t)}
                                           >
                                             <Scale size={10} className="stroke-[2.5]" />
-                                            Etapa: {t.recursoData?.situacao || "Recebido"}
+                                            Etapa: {(t.ouvidoriaData || t.recursoData)?.situacao || "Recebido"}
                                           </span>
                                         )}
                                       </div>
@@ -9331,10 +9664,10 @@ export function PlanningTab({
                                             "px-1.5 py-0.5 rounded text-[9px] font-black uppercase text-white truncate transition-all flex items-center gap-1 border border-black/5 hover:brightness-95",
                                             colorClass
                                           )}
-                                          title={t.type === "recurso" ? `${getTaskDisplayName(t)} (Recurso - Etapa: ${t.recursoData?.situacao || "Recebido"})` : getTaskDisplayName(t)}
+                                          title={(t.type === "demanda_ouvidoria" || t.type === "recurso") ? `${getTaskDisplayName(t)} (Demanda Ouvidoria - Etapa: ${(t.ouvidoriaData || t.recursoData)?.situacao || "Recebido"})` : getTaskDisplayName(t)}
                                         >
                                           <span className="truncate">
-                                            {t.type === "recurso" ? `⚖️ [${t.recursoData?.situacao || "Recebido"}] ${getTaskDisplayName(t).replace(/^\[.*?\]\s*/, '')}` : getTaskDisplayName(t)}
+                                            {(t.type === "demanda_ouvidoria" || t.type === "recurso") ? `⚖️ [${(t.ouvidoriaData || t.recursoData)?.situacao || "Recebido"}] ${getTaskDisplayName(t).replace(/^\[.*?\]\s*/, '')}` : getTaskDisplayName(t)}
                                           </span>
                                         </div>
                                       );
@@ -9512,10 +9845,10 @@ export function PlanningTab({
                                     <span className="text-[8px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wider">
                                       ID: {t.id}
                                     </span>
-                                    {t.type === "recurso" && (
+                                    {(t.type === "demanda_ouvidoria" || t.type === "recurso") && (
                                       <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border bg-amber-50 text-amber-800 border-amber-200 flex items-center gap-1 shadow-xs cursor-pointer" onClick={(e) => { e.stopPropagation(); handleEditTask(t); }}>
                                         <Scale size={8} className="stroke-[2.5]" />
-                                        Etapa: {t.recursoData?.situacao || "Recebido"}
+                                        Etapa: {(t.ouvidoriaData || t.recursoData)?.situacao || "Recebido"}
                                       </span>
                                     )}
                                     <span className="hidden">
@@ -10505,16 +10838,34 @@ export function PlanningTab({
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white rounded-3xl p-6 shadow-2xl max-w-5xl w-full border border-slate-200 text-left max-h-[90vh] overflow-y-auto custom-scrollbar space-y-4"
             >
-              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <div className="flex flex-wrap justify-between items-center gap-3 pb-3 border-b border-slate-100">
                 <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">
                   {formMode === "create" ? "Nova Atividade" : "Editar Atividade"}
                 </h3>
-                <button
-                  onClick={() => setIsFormOpen(false)}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <X size={16} />
-                </button>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsFormOpen(false)}
+                    className="px-4 py-1.5 font-bold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleFormSubmit(e as any)}
+                    className="px-4 py-1.5 font-bold text-xs text-white bg-adasa-mid hover:bg-adasa-dark rounded-xl transition-colors shadow-sm"
+                  >
+                    {formMode === "create" ? "Inserir Atividade" : "Gravar Alterações"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsFormOpen(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors ml-1"
+                    title="Fechar modal"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
 
               {formMode === "edit" && (
@@ -10535,11 +10886,20 @@ export function PlanningTab({
                       Dados da Fiscalização
                     </button>
                   )}
-                  {editingTask.type === 'recurso' && (
+                  {(editingTask.type === 'demanda_ouvidoria' || editingTask.type === 'recurso') && (
                     <button
                       type="button"
                       onClick={() => setTaskFormTab("recurso")}
-                      className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${taskFormTab === "recurso" ? "bg-adasa-mid text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
+                      className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${(taskFormTab === "recurso" || taskFormTab === "demanda_ouvidoria") ? "bg-adasa-mid text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
+                    >
+                      Demanda Ouvidoria
+                    </button>
+                  )}
+                  {editingTask.type === 'recurso_revisao' && (
+                    <button
+                      type="button"
+                      onClick={() => setTaskFormTab("recurso_revisao")}
+                      className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${taskFormTab === "recurso_revisao" ? "bg-adasa-mid text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
                     >
                       Recurso de Revisão
                     </button>
@@ -10608,9 +10968,9 @@ export function PlanningTab({
                     Tipo de Tarefa
                   </label>
                   <select
-                    value={editingTask.type || "default"}
+                    value={editingTask.type === "recurso" ? "demanda_ouvidoria" : (editingTask.type || "default")}
                     onChange={(e) => {
-                      const newType = e.target.value as 'default' | 'fiscalizacao' | 'recurso';
+                      const newType = e.target.value as 'default' | 'fiscalizacao' | 'demanda_ouvidoria' | 'recurso_revisao' | 'recurso';
                       setEditingTask(prev => {
                         const next = { ...prev, type: newType };
                         if (newType === 'fiscalizacao' && !next.fiscalizacaoData) {
@@ -10631,27 +10991,38 @@ export function PlanningTab({
                             termosNotificacao: []
                           };
                         }
-                        if (newType === 'recurso' && !next.recursoData) {
-                          next.recursoData = {
+                        if ((newType === 'demanda_ouvidoria' || newType === 'recurso') && !next.ouvidoriaData && !next.recursoData) {
+                          next.ouvidoriaData = {
                             classificacaoImovel: 'Residencial',
-                            tipoManifestacao: 'Reclamação',
+                            tipoManifestacao: 'Demanda Ouvidoria',
                             servico: 'Água',
                             situacao: 'Recebido',
                             resultadoProcesso: 'Em Análise',
                             complexidade: 'Média'
                           };
+                          next.recursoData = next.ouvidoriaData;
+                        }
+                        if (newType === 'recurso_revisao' && !next.recursoRevData) {
+                          next.recursoRevData = {
+                            servico: 'Água',
+                            tipoRecurso: 'Recurso de Revisão',
+                            situacao: 'Recebido',
+                            resultado: 'Em Análise'
+                          };
                         }
                         return next;
                       });
                       if (e.target.value === 'fiscalizacao') setTaskFormTab('fiscalizacao');
-                      else if (e.target.value === 'recurso') setTaskFormTab('recurso');
+                      else if (e.target.value === 'demanda_ouvidoria' || e.target.value === 'recurso') setTaskFormTab('recurso');
+                      else if (e.target.value === 'recurso_revisao') setTaskFormTab('recurso_revisao');
                       else setTaskFormTab('form');
                     }}
                     className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none transition-all placeholder:text-slate-400 bg-slate-50/10 focus:bg-white"
                   >
                     <option value="default">Padrão</option>
                     <option value="fiscalizacao">Fiscalização</option>
-                    <option value="recurso">Recurso de Revisão</option>
+                    <option value="demanda_ouvidoria">Demanda Ouvidoria</option>
+                    <option value="recurso_revisao">Recurso de Revisão</option>
                   </select>
                 </div>
 
@@ -11425,11 +11796,35 @@ export function PlanningTab({
                   </div>
                 </div>
               )}
-              {taskFormTab === "recurso" && editingTask.type === "recurso" && editingTask.recursoData && (
+              {(taskFormTab === "recurso" || taskFormTab === "demanda_ouvidoria") && (editingTask.type === "demanda_ouvidoria" || editingTask.type === "recurso") && (editingTask.ouvidoriaData || editingTask.recursoData) && (
                 <div className="space-y-4">
                   <RecursoEditor 
-                    data={editingTask.recursoData} 
-                    onChange={(data) => setEditingTask(prev => ({ ...prev, recursoData: data }))}
+                    data={(editingTask.ouvidoriaData || editingTask.recursoData)} 
+                    onChange={(data) => setEditingTask(prev => ({ ...prev, ouvidoriaData: data, recursoData: data }))}
+                  />
+                  <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setIsFormOpen(false)}
+                      className="px-5 py-2 font-bold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                    >
+                      Fechar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleFormSubmit(e as any)}
+                      className="px-5 py-2 font-bold text-xs text-white bg-adasa-mid hover:bg-adasa-dark rounded-xl transition-colors shadow-sm"
+                    >
+                      {formMode === "create" ? "Inserir Atividade" : "Gravar Alterações"}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {taskFormTab === "recurso_revisao" && editingTask.type === "recurso_revisao" && (
+                <div className="space-y-4">
+                  <RecursoRevisaoEditor 
+                    data={editingTask.recursoRevData || {}} 
+                    onChange={(data) => setEditingTask(prev => ({ ...prev, recursoRevData: data }))}
                   />
                   <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
                     <button
@@ -11781,14 +12176,14 @@ export function PlanningTab({
                     {getTaskDisplayName(task)}
                   </span>
 
-                  {task.type === "recurso" && (
+                  {(task.type === "demanda_ouvidoria" || task.type === "recurso") && (
                     <span 
                       className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shadow-xs cursor-pointer"
-                      title={`Etapa do Processo: ${task.recursoData?.situacao || "Recebido"}`}
+                      title={`Etapa do Processo: ${(task.ouvidoriaData || task.recursoData)?.situacao || "Recebido"}`}
                       onClick={() => handleEditTask(task)}
                     >
                       <Scale size={10} className="stroke-[2.5]" />
-                      Etapa: {task.recursoData?.situacao || "Recebido"}
+                      Etapa: {(task.ouvidoriaData || task.recursoData)?.situacao || "Recebido"}
                     </span>
                   )}
 
@@ -11992,6 +12387,10 @@ export function PlanningTab({
                     return !termo.respondidoEm && termo.dataResposta && termo.dataResposta < todayStr;
                   });
 
+                  const hasOverdueAuto = (fData?.autosDeInfracao || []).some(auto => {
+                    return auto.dataLimiteRecurso && auto.dataLimiteRecurso < todayStr;
+                  });
+
                   return (
                     <div className="flex flex-wrap items-center gap-2 mt-1 select-none">
                       {/* Badge Constatacoes */}
@@ -12027,11 +12426,16 @@ export function PlanningTab({
 
                       {/* Badge Autos de Infracao */}
                       <span 
-                        className="text-[9px] font-black uppercase px-2.5 py-1 rounded-md border flex items-center gap-1.5 bg-rose-50 text-rose-800 border-rose-200 transition-all shadow-sm"
-                        title="Autos de Infração cadastrados"
+                        className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-md border flex items-center gap-1.5 transition-all shadow-sm ${
+                          hasOverdueAuto
+                            ? "bg-rose-500 text-white border-rose-600 animate-pulse font-extrabold"
+                            : "bg-rose-50 text-rose-800 border-rose-200"
+                        }`}
+                        title={hasOverdueAuto ? "Autos de Infração com PRAZO DE RECURSO VENCIDO!" : "Autos de Infração cadastrados"}
                       >
                         <AlertTriangle size={10} />
                         Autos: {totalAutos}
+                        {hasOverdueAuto && " (VENCIDO)"}
                       </span>
                     </div>
                   );

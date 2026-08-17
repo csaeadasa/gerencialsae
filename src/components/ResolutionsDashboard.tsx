@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { ResponsiveContainer, ComposedChart, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, CartesianGrid, Line, LabelList } from "recharts";
-import { FileText, CheckCircle2, AlertTriangle, HelpCircle, Activity, BookmarkCheck, Calendar, History, Search, ArrowUpDown, Filter, ExternalLink, Share2 } from "lucide-react";
+import { FileText, CheckCircle2, AlertTriangle, HelpCircle, Activity, BookmarkCheck, Calendar, History, Search, ArrowUpDown, Filter, ExternalLink, Share2, ChevronDown, ChevronUp } from "lucide-react";
 
 interface Resolution {
   id: number;
@@ -26,11 +26,14 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
   const [segmentViewMode, setSegmentViewMode] = useState<"chart" | "bento">("bento");
 
   // Timeline filters and controls
+  const [timelineViewMode, setTimelineViewMode] = useState<"timeline" | "table">("table");
   const [timelineSearchText, setTimelineSearchText] = useState("");
   const [timelineStatusFilter, setTimelineStatusFilter] = useState("");
   const [timelineSegmentFilter, setTimelineSegmentFilter] = useState("");
   const [timelineSortOrder, setTimelineSortOrder] = useState<"asc" | "desc">("desc");
   const [expandedYears, setExpandedYears] = useState<Record<number, boolean>>({});
+  const [expandedEmentas, setExpandedEmentas] = useState<number[]>([]);
+  const [tableSort, setTableSort] = useState<{ field: string, dir: "asc" | "desc" } | null>({ field: "data", dir: "desc" });
 
   // Load resolutions
   useEffect(() => {
@@ -177,6 +180,44 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
     return timelineSortOrder === "desc" ? numB - numA : numA - numB;
   });
 
+  const toggleEmenta = (id: number) => {
+    setExpandedEmentas(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const handleSort = (field: string) => {
+    if (tableSort && tableSort.field === field) {
+      setTableSort({ field, dir: tableSort.dir === "asc" ? "desc" : "asc" });
+    } else {
+      setTableSort({ field, dir: "asc" });
+    }
+  };
+
+  const getSortIcon = (field: string) => {
+    if (!tableSort || tableSort.field !== field) return <ArrowUpDown size={12} className="ml-1 opacity-20" />;
+    return <ArrowUpDown size={12} className={`ml-1 transition-transform ${tableSort.dir === "desc" ? "rotate-180" : ""}`} />;
+  };
+
+  const sortedFilteredResolutions = [...filteredResolutions].sort((a: any, b: any) => {
+    if (!tableSort) return 0;
+    
+    let aVal = a[tableSort.field];
+    let bVal = b[tableSort.field];
+    
+    // Custom sort for data
+    if (tableSort.field === "data") {
+      const dateA = aVal ? new Date(aVal.split('/').reverse().join('-')) : new Date(0);
+      const dateB = bVal ? new Date(bVal.split('/').reverse().join('-')) : new Date(0);
+      return tableSort.dir === "asc" ? dateA.getTime() - dateB.getTime() : dateB.getTime() - dateA.getTime();
+    }
+    
+    if (typeof aVal === "string") aVal = aVal.toLowerCase();
+    if (typeof bVal === "string") bVal = bVal.toLowerCase();
+    
+    if (aVal < bVal) return tableSort.dir === "asc" ? -1 : 1;
+    if (aVal > bVal) return tableSort.dir === "asc" ? 1 : -1;
+    return 0;
+  });
+
   const timelineSegments = Array.from(new Set(resolutions.map(r => r.segmento).filter(Boolean))) as string[];
   timelineSegments.sort();
 
@@ -240,20 +281,20 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
       </div>
 
       {/* Box de Destaque Superior: Total de Atos */}
-      <div className="bg-gradient-to-r from-adasa-dark to-adasa-mid p-6 md:p-8 rounded-2xl border border-adasa-mid/20 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:translate-y-[-2px] transition-all text-white">
+      <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:translate-y-[-2px] transition-all">
         <div className="flex items-center gap-4">
-          <div className="p-4 bg-white/10 rounded-2xl text-white backdrop-blur-md border border-white/25">
+          <div className="p-4 bg-sky-50 rounded-2xl text-adasa-dark border border-sky-100">
             <FileText size={32} />
           </div>
           <div>
-            <span className="block text-xs font-black uppercase tracking-widest text-adasa-light">Estoque Regulatório Total</span>
-            <span className="text-4xl md:text-5xl font-black leading-none mt-1">{totalCount}</span>
-            <span className="block text-xs text-blue-100 font-bold mt-1.5">Resoluções publicadas e cadastradas no acervo</span>
+            <span className="block text-xs font-black uppercase tracking-widest text-slate-500">Estoque Regulatório Total</span>
+            <span className="text-4xl md:text-5xl font-black leading-none mt-1 text-slate-800">{totalCount}</span>
+            <span className="block text-xs text-slate-500 font-bold mt-1.5">Resoluções publicadas e cadastradas no acervo</span>
           </div>
         </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-white/15 rounded-xl border border-white/20 text-xs font-semibold tracking-wide shadow-inner">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-450 animate-pulse"></span>
-          <span className="font-extrabold text-blue-50">Base de Dados Integrada em Tempo Real</span>
+        <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-semibold tracking-wide">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span className="font-extrabold text-slate-700">Base de Dados Integrada em Tempo Real</span>
         </div>
       </div>
 
@@ -577,14 +618,35 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
               </div>
             </div>
 
-            {/* Sorting Toggle button */}
-            <button
-              onClick={() => setTimelineSortOrder(prev => prev === "desc" ? "asc" : "desc")}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-slate-600 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 hover:text-slate-800 transition-colors"
-            >
-              <ArrowUpDown size={13} />
-              {timelineSortOrder === "desc" ? "Mais recentes primeiro" : "Mais antigos primeiro"}
-            </button>
+            <div className="flex items-center gap-2">
+              <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                <button
+                  onClick={() => setTimelineViewMode("timeline")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${
+                    timelineViewMode === "timeline" ? "bg-white text-adasa-dark shadow-sm" : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  Linha do Tempo
+                </button>
+                <button
+                  onClick={() => setTimelineViewMode("table")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${
+                    timelineViewMode === "table" ? "bg-white text-adasa-dark shadow-sm" : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  Tabela
+                </button>
+              </div>
+              {timelineViewMode === "timeline" && (
+                <button
+                  onClick={() => setTimelineSortOrder(prev => prev === "desc" ? "asc" : "desc")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-slate-600 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 hover:text-slate-800 transition-colors"
+                >
+                  <ArrowUpDown size={13} />
+                  {timelineSortOrder === "desc" ? "Mais recentes primeiro" : "Mais antigos primeiro"}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Timeline Controls/Filters */}
@@ -638,8 +700,9 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
             </div>
           </div>
 
-          {/* Timeline Scrollable Content */}
-          <div className="mt-4 relative max-h-[800px] overflow-y-auto pr-2">
+          {timelineViewMode === "timeline" ? (
+            <div className="mt-4 relative max-h-[800px] overflow-y-auto pr-2">
+
             
             {/* Timeline Line (centered on desktop, left on mobile matching App.tsx) */}
             <div className="absolute inset-y-0 left-6 md:left-1/2 -translate-x-px w-0.5 bg-gradient-to-b from-slate-200 via-slate-300 to-slate-200 pointer-events-none"></div>
@@ -776,6 +839,109 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
             )}
 
           </div>
+          ) : (
+          <div className="mt-4 overflow-x-auto min-h-[400px]">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase tracking-widest font-black">
+                  <th className="px-5 py-4 w-44 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("numero")}>
+                    <div className="flex items-center">Resolução / Ato {getSortIcon("numero")}</div>
+                  </th>
+                  <th className="px-5 py-4 w-28 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("data")}>
+                    <div className="flex items-center">Data {getSortIcon("data")}</div>
+                  </th>
+                  <th className="px-5 py-4 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("ementa")}>
+                    <div className="flex items-center">Ementa Reguladora {getSortIcon("ementa")}</div>
+                  </th>
+                  <th className="px-5 py-4 w-36 text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("situacao")}>
+                    <div className="flex items-center justify-center">Situação {getSortIcon("situacao")}</div>
+                  </th>
+                  <th className="px-5 py-4 w-48 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("segmento")}>
+                    <div className="flex items-center">Segmentação {getSortIcon("segmento")}</div>
+                  </th>
+                  <th className="px-5 py-4 w-24 text-right">Acessar</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {sortedFilteredResolutions.map(res => {
+                  const isExpanded = expandedEmentas.includes(res.id);
+                  return (
+                    <tr key={res.id} className="hover:bg-slate-50/40 transition-colors group align-top">
+                      <td className="px-5 py-4 font-semibold text-slate-700">
+                        <div className="flex flex-col">
+                          <span className="text-xs text-indigo-600 font-bold uppercase tracking-widest">{res.especie}</span>
+                          <span className="text-sm font-bold text-slate-800">Nº {res.numero} / {res.ano}</span>
+                          <span className="text-[10px] text-slate-400 font-semibold mt-1 bg-slate-100 px-1.5 py-0.5 rounded w-fit uppercase">{res.tipo}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-xs font-semibold text-slate-500">
+                        {res.data || "--"}
+                      </td>
+                      <td className="px-5 py-4 text-xs text-slate-600 leading-relaxed font-normal">
+                        <div className="relative">
+                          <p className={isExpanded ? "" : "line-clamp-3"}>
+                            {res.ementa}
+                          </p>
+                          {res.ementa?.length > 150 && (
+                            <button
+                              onClick={() => toggleEmenta(res.id)}
+                              className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold mt-1 flex items-center gap-0.5 transition-colors focus:outline-none"
+                            >
+                              {isExpanded ? (
+                                <>Recolher <ChevronUp size={12} /></>
+                              ) : (
+                                <>Mostrar mais <ChevronDown size={12} /></>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-center align-middle">
+                        <span className={`inline-flex px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-full ${
+                          res.situacao === "Vigente" 
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60" 
+                            : res.situacao === "Revogada" 
+                            ? "bg-rose-50 text-rose-700 border border-rose-200/60"
+                            : "bg-amber-50 text-amber-700 border border-amber-200/60"
+                        }`}>
+                          {res.situacao}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex flex-col gap-0.5 max-w-[170px]">
+                          <span className="text-[11px] font-semibold text-slate-700 truncate" title={res.area}>{res.area}</span>
+                          <span className="text-[10px] text-slate-400 font-medium truncate" title={res.segmento}>{res.segmento || "--"}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-right align-middle">
+                        <div className="flex gap-1 justify-end">
+                          {res.link && (
+                            <a
+                              href={res.link}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                              title="Visualizar no Diário Oficial"
+                            >
+                              <ExternalLink size={15} />
+                            </a>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredResolutions.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-12 text-center text-slate-400 text-sm font-semibold">
+                      Nenhuma regulamentação encontrada com os filtros atuais.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          )}
         </div>
 
       </div>

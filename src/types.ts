@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { FiscalizacaoEtapa } from './lib/fiscalizacao';
+
 export type ActionType = 'view' | 'create' | 'edit' | 'delete';
 export type ModuleId = 
   | 'planning_dashboard' | 'planning_tasks' | 'planning_plans' | 'planning_areas' | 'planning_categories' | 'planning_responsibles' | 'planning_models'
@@ -186,12 +188,13 @@ export interface AutoDeInfracao {
 
 export interface FiscalizacaoData {
   codigo: string;
+  etapa?: FiscalizacaoEtapa;
   objetivo: string;
   regiaoAdministrativa: string;
   latitude: string;
   longitude: string;
   tipo: 'Direta' | 'Indireta';
-  tipoFiscalizacao?: 'Operacional' | 'Qualidade do Atendimento' | string;
+  tipoFiscalizacao?: 'Operacional' | 'Atendimento' | string;
   servico?: 'Água' | 'Esgoto' | 'Atendimento' | string;
   programacao: 'Programada' | 'Não Programada';
   imagens: string[];
@@ -199,6 +202,7 @@ export interface FiscalizacaoData {
   constatacoes: ConstatacaoFiscalizacao[];
   termosNotificacao: TermoNotificacao[];
   autosDeInfracao?: AutoDeInfracao[];
+  datasEtapas?: Record<string, string>;
 }
 
 export interface ChecklistItem {
@@ -236,9 +240,11 @@ export interface Task {
   updatedBy?: string | null;
   comments?: TaskComment[];
   links?: TaskLink[];
-  type?: 'default' | 'fiscalizacao' | 'recurso';
+  type?: 'default' | 'fiscalizacao' | 'demanda_ouvidoria' | 'recurso_revisao' | 'recurso';
   fiscalizacaoData?: FiscalizacaoData;
+  ouvidoriaData?: RecursoData;
   recursoData?: RecursoData;
+  recursoRevData?: RecursoRevisaoData;
 }
 
 export interface Plan {
@@ -304,6 +310,40 @@ export interface RecursoData {
   situacao?: 'Recebido' | 'Em Análise Técnica' | 'Tramitado para a Ouvidoria' | 'Encaminhado à Diretoria' | 'Retornado da Diretoria' | 'Finalizado' | string;
   resultadoProcesso?: 'Atendido' | 'Atendido Parcialmente' | 'Não Atendido' | 'Acordo' | 'Desistência do Usuário' | 'Em Análise' | string;
   complexidade?: 'Alta' | 'Média' | 'Baixa' | string;
+  observacao?: string;
+  datasEtapas?: Record<string, string>;
+}
+
+export interface RecursoRevisaoData {
+  numeroProcesso?: string;
+  numeroSei?: string;
+  numeroNotaTecnica?: string;
+  recorrente?: string;
+  cpfCnpj?: string;
+  inscricaoCaesb?: string;
+  autoInfracaoOrigem?: string;
+  regiaoAdministrativa?: string;
+  latitude?: string;
+  longitude?: string;
+  servico?: 'Água' | 'Esgoto' | 'Comercial' | 'Drenagem' | string;
+  tipoRecurso?: string;
+  classificacaoImovel?: 'Público' | 'Residencial' | 'Comercial' | 'Industrial' | string;
+  tipoInfracao?: string;
+  irregularidade?: string;
+  irregularidadeEncontrada?: string;
+  qtdeIrregularidades?: number | string;
+  situacao?: string;
+  resultado?: string;
+  dataProtocolo?: string;
+  dataDistribuicao?: string;
+  relator?: string;
+  valorMultaQuestionada?: number | string;
+  valorMultaMantida?: number | string;
+  resumoRecurso?: string;
+  parecerTecnico?: string;
+  parecerJuridico?: string;
+  decisaoDiretoria?: string;
+  reuniaoPublicaDiretoria?: string;
   observacao?: string;
   datasEtapas?: Record<string, string>;
 }

@@ -1,20 +1,114 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { RecursoData } from '../types';
 
+export const OUVIDORIA_STAGES = [
+  "Recebido",
+  "Em Análise Técnica",
+  "Tramitado para a Ouvidoria",
+  "Encaminhado à Diretoria",
+  "Retornado da Diretoria",
+  "Finalizado"
+];
+
+export const CATEGORIA_OPTIONS = [
+  "Consumo Medido",
+  "Desativação/Ligação de Água",
+  "Falta de Água",
+  "Impedimento de Acesso",
+  "Quitação de Débitos",
+  "Recomposição de Asfalto",
+  "Revisão de Hidrômetros",
+  "Vazamento Imperceptível",
+  "Violação de Corte",
+  "Extravasamento da Rede de Esgoto",
+  "Ligação Clandestina de Esgoto",
+  "Ligação de Esgoto",
+  "Manutenção de Rede de Esgoto",
+  "Solicitação de informações",
+  "Multa",
+  "Refaturamento",
+  "Outros"
+];
+
+export const CLASSIFICACAO_IMOVEL_OUVIDORIA = [
+  "Comercial",
+  "Residencial",
+  "Não se aplica"
+];
+
+export const REGIOES_ADMINISTRATIVAS_DF = [
+  "Água Quente",
+  "Águas Claras",
+  "Arapoanga",
+  "Arniqueira",
+  "Brasília",
+  "Brazlândia",
+  "Candangolândia",
+  "Ceilândia",
+  "Cruzeiro",
+  "Fercal",
+  "Gama",
+  "Guará",
+  "Itapoã",
+  "Jardim Botânico",
+  "Lago Norte",
+  "Lago Sul",
+  "Núcleo Bandeirante",
+  "Paranoá",
+  "Park Way",
+  "Planaltina",
+  "Plano Piloto",
+  "Recanto das Emas",
+  "Riacho Fundo",
+  "Riacho Fundo II",
+  "Samambaia",
+  "Santa Maria",
+  "São Sebastião",
+  "SCIA/Estrutural",
+  "SIA",
+  "Sobradinho",
+  "Sobradinho II",
+  "Sol Nascente/Pôr do Sol",
+  "Sudoeste/Octogonal",
+  "Taguatinga",
+  "Varjão",
+  "Vicente Pires"
+];
+
+export const TIPO_MANIFESTACAO_OPTIONS = [
+  "Denúncia",
+  "Reclamação",
+  "Solicitação"
+];
+
+export const SERVICO_OUVIDORIA_OPTIONS = [
+  "Água",
+  "Esgoto",
+  "Comercial"
+];
+
+export const RESULTADO_PROCESSO_OUVIDORIA_OPTIONS = [
+  "Atendido",
+  "Atendido Parcialmente",
+  "Não Atendido",
+  "Acordo",
+  "Desistência do Usuário",
+  "Em Análise"
+];
+
+export const COMPLEXIDADE_OPTIONS = [
+  "Alta",
+  "Média",
+  "Baixa"
+];
+
 interface Props {
   data: RecursoData;
   onChange: (data: RecursoData) => void;
 }
 
 export const RecursoEditor: React.FC<Props> = ({ data, onChange }) => {
-  const STAGES = [
-    "Recebido",
-    "Em Análise Técnica",
-    "Tramitado para a Ouvidoria",
-    "Encaminhado à Diretoria",
-    "Retornado da Diretoria",
-    "Finalizado"
-  ];
+  const STAGES = OUVIDORIA_STAGES;
 
   const debounceTimer = useRef<NodeJS.Timeout>();
   const [localData, setLocalData] = useState<RecursoData>(data);
@@ -27,6 +121,7 @@ export const RecursoEditor: React.FC<Props> = ({ data, onChange }) => {
     if (!newData.classificacaoImovel) { newData.classificacaoImovel = 'Residencial'; needsUpdate = true; }
     if (!newData.tipoManifestacao) { newData.tipoManifestacao = 'Reclamação'; needsUpdate = true; }
     if (!newData.servico) { newData.servico = 'Água'; needsUpdate = true; }
+    if (!newData.categoria) { newData.categoria = 'Consumo Medido'; needsUpdate = true; }
     if (!newData.situacao) { newData.situacao = 'Recebido'; needsUpdate = true; }
     if (!newData.resultadoProcesso) { newData.resultadoProcesso = 'Em Análise'; needsUpdate = true; }
     if (!newData.complexidade) { newData.complexidade = 'Média'; needsUpdate = true; }
@@ -104,6 +199,7 @@ export const RecursoEditor: React.FC<Props> = ({ data, onChange }) => {
   const getStageDuration = (index: number) => {
     const dates = localData.datasEtapas || {};
     const stage = STAGES[index];
+    if (stage === "Finalizado" || stage === "Finalizada") return 0;
     const nextStage = STAGES[index + 1];
     
     if (!dates[stage]) return 0;
@@ -150,11 +246,18 @@ export const RecursoEditor: React.FC<Props> = ({ data, onChange }) => {
                     }`}>
                       {isCompleted && !isActive ? '✓' : index + 1}
                     </div>
-                    <span className={`text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-center mt-1.5 w-14 sm:w-20 md:w-24 leading-tight transition-colors line-clamp-2 ${
-                      isActive ? 'text-[#1A3E8A]' : isCompleted ? 'text-emerald-600' : 'text-slate-400 group-hover:text-slate-600'
-                    }`}>
-                      {stage}
-                    </span>
+                    <div className="flex flex-col items-center mt-1.5 w-16 sm:w-22 text-center">
+                      <span className={`text-[8px] sm:text-[9px] font-black uppercase tracking-wider leading-tight transition-colors line-clamp-2 ${
+                        isActive ? 'text-[#1A3E8A]' : isCompleted ? 'text-emerald-600' : 'text-slate-400 group-hover:text-slate-600'
+                      }`}>
+                        {stage}
+                      </span>
+                      {(stage === "Recebido" || stage === "Em Análise Técnica" || stage === "Retornado da Diretoria") && (
+                        <span className="text-[7.5px] sm:text-[8px] font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-1 py-0.2 rounded mt-0.5 uppercase tracking-tight">
+                          (SAE)
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Connecting Line with exact days duration badge */}
@@ -183,25 +286,25 @@ export const RecursoEditor: React.FC<Props> = ({ data, onChange }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <label className="text-xs font-bold text-slate-600">Nome do Usuário</label>
-          <input
-            type="text"
-            value={localData.nomeUsuario || ''}
-            onChange={e => updateField('nomeUsuario', e.target.value)}
-            className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-adasa-mid outline-none"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-bold text-slate-600">Nº SEI</label>
-          <input
-            type="text"
-            value={localData.numeroSei || ''}
-            onChange={e => updateField('numeroSei', e.target.value)}
-            className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-adasa-mid outline-none"
-          />
-        </div>
+      <div className="space-y-1">
+        <label className="text-xs font-bold text-slate-600">Nº do Processo SEI</label>
+        <input
+          type="text"
+          placeholder="Ex: 00107-00001234/2026-00"
+          value={localData.numeroSei || ''}
+          onChange={e => updateField('numeroSei', e.target.value)}
+          className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-adasa-mid outline-none font-medium"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs font-bold text-slate-600">Nome do Usuário</label>
+        <input
+          type="text"
+          value={localData.nomeUsuario || ''}
+          onChange={e => updateField('nomeUsuario', e.target.value)}
+          className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-adasa-mid outline-none"
+        />
       </div>
       
       <div className="space-y-1">
@@ -219,10 +322,17 @@ export const RecursoEditor: React.FC<Props> = ({ data, onChange }) => {
           <label className="text-xs font-bold text-slate-600">Região Administrativa</label>
           <input
             type="text"
+            list="regioes-ouvidoria-list"
+            placeholder="Selecione ou digite a RA..."
             value={localData.regiaoAdministrativa || ''}
             onChange={e => updateField('regiaoAdministrativa', e.target.value)}
             className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-adasa-mid outline-none"
           />
+          <datalist id="regioes-ouvidoria-list">
+            {REGIOES_ADMINISTRATIVAS_DF.map(ra => (
+              <option key={ra} value={ra} />
+            ))}
+          </datalist>
         </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-slate-600">Classificação do Imóvel</label>
@@ -265,12 +375,18 @@ export const RecursoEditor: React.FC<Props> = ({ data, onChange }) => {
         </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-slate-600">Categoria</label>
-          <input
-            type="text"
-            value={localData.categoria || ''}
+          <select
+            value={localData.categoria || 'Consumo Medido'}
             onChange={e => updateField('categoria', e.target.value)}
-            className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-adasa-mid outline-none"
-          />
+            className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-adasa-mid outline-none font-semibold text-slate-700 bg-white"
+          >
+            {localData.categoria && !CATEGORIA_OPTIONS.includes(localData.categoria) && (
+              <option value={localData.categoria}>{localData.categoria}</option>
+            )}
+            {CATEGORIA_OPTIONS.map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -421,6 +537,11 @@ export const RecursoEditor: React.FC<Props> = ({ data, onChange }) => {
                       <span className={isActive ? 'text-[#1A3E8A] font-bold' : isCompleted ? 'text-slate-700' : 'text-slate-400'}>
                         {stage}
                       </span>
+                      {(stage === "Recebido" || stage === "Em Análise Técnica" || stage === "Retornado da Diretoria") && (
+                        <span className="text-[9px] font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded uppercase">
+                          (SAE)
+                        </span>
+                      )}
                       {isActive && (
                         <span className="inline-block text-[9px] bg-blue-100 text-[#1A3E8A] font-bold px-1.5 py-0.5 rounded ml-1 uppercase">
                           Atual
@@ -431,7 +552,7 @@ export const RecursoEditor: React.FC<Props> = ({ data, onChange }) => {
                       {formattedDate}
                     </td>
                     <td className="px-4 py-3 text-right font-extrabold text-slate-800">
-                      {!entryDate ? (
+                      {!entryDate || stage === "Finalizado" || stage === "Finalizada" ? (
                         <span className="text-slate-300 font-normal">-</span>
                       ) : (
                         <div className="flex items-center justify-end gap-1">

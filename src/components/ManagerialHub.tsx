@@ -208,7 +208,7 @@ export function ManagerialHub({
             </RequirePermission>
           )}
 
-          {/* Painel de Recurso de Revisão Card - PRIVATE */}
+          {/* Painel Demanda Ouvidoria Card - PRIVATE */}
           {!showOnlyPublic && (
             <RequirePermission moduleId="recurso_painel" action="view">
             <motion.div 
@@ -220,13 +220,13 @@ export function ManagerialHub({
                 <div className="mb-4 p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
                   <Scale size={24} className="text-blue-600" />
                 </div>
-                <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Painel de Recurso de Revisão</h3>
+                <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Painel de Qualidade do Atendimento</h3>
                 <p className="text-slate-600 text-xs font-medium leading-relaxed mb-6">
-                  Painel estratégico de acompanhamento de recursos de revisão, prazos, andamento e penalidades aplicadas.
+                  Painel estratégico de acompanhamento de demandas de ouvidoria, prazos, andamento e penalidades aplicadas.
                 </p>
               </div>
               <div className="mt-8 flex items-center gap-2 text-xs font-bold text-blue-700">
-                Abrir Painel de Recurso de Revisão <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+                Abrir Painel de Qualidade do Atendimento <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
               </div>
             </motion.div>
             </RequirePermission>

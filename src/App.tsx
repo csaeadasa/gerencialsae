@@ -109,6 +109,8 @@ import { FiscalizacaoPainel } from "./components/FiscalizacaoPainel";
 import { RecursoPainel } from "./components/RecursoPainel";
 
 
+import { enrichTasksWithStageDates } from "./utils/stageDatesGenerator";
+
 const formatSaldoValue = (val: number, type: 'percent' | 'hab' | 'ls', showSuffix = true) => {
   if (val == null || Number.isNaN(val)) return <span style={{ color: '#94a3b8' }}>-</span>;
   const prefix = val >= 0 ? '+' : '-';
@@ -813,20 +815,24 @@ export default function App() {
   const { data: cloudData, isLoading: isCloudDataLoading, isFetching: isCloudDataFetching } = useQuery({
     queryKey: ['cloudData'],
     queryFn: async () => {
-      const res = await fetch("/api/load-data");
-      if (!res.ok) {
-        const text = await res.text();
-        console.error("[LOAD DATA] Erro HTTP:", res.status, text);
-        throw new Error(`Erro do servidor: ${res.status}`);
-      }
-      const contentType = res.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        const data = await res.json();
-        if (data.success && data.data) {
-          return data.data;
+      try {
+        const res = await fetch("/api/load-data");
+        if (!res.ok) {
+          console.warn("[LOAD DATA] Resposta do servidor não-ok:", res.status);
+          return null;
         }
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const data = await res.json();
+          if (data && data.success && data.data) {
+            return data.data;
+          }
+        }
+        return null;
+      } catch (err) {
+        console.warn("[LOAD DATA] Aviso de conexão temporária:", err);
+        return null;
       }
-      throw new Error("Failed to load data");
     },
     enabled: !!currentUser,
     staleTime: 5 * 60 * 1000, 
@@ -842,7 +848,10 @@ export default function App() {
       if (cloudData.operationalAdjustments) setOperationalAdjustments(cloudData.operationalAdjustments);
       if (cloudData.templateFiles) setTemplateFiles(cloudData.templateFiles);
       if (cloudData.riskReferences) setRiskReferences(cloudData.riskReferences);
-      if (cloudData.tasks) setTasks(cloudData.tasks);
+      if (cloudData.tasks) {
+        const enriched = enrichTasksWithStageDates(cloudData.tasks);
+        setTasks(enriched);
+      }
       if (cloudData.plans) setPlans(cloudData.plans);
       if (cloudData.areas) setAreas(cloudData.areas);
       if (cloudData.categories) setCategories(cloudData.categories);
@@ -3656,7 +3665,7 @@ const renderSupplyTable = () => {
                           className={cn("w-full text-left justify-start px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "planning" && activePlanningSubTab === "tasks" && isMyTasksSelected ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                         >
                           <CalendarCheck size={18} className={activeTab === "planning" && activePlanningSubTab === "tasks" && isMyTasksSelected ? "text-adasa-mid" : "text-white/50"} />
-                          Minhas Tarefas
+                          Minhas Atividades
                         </button>
                       )}
                       {checkPermission('planning_tasks', 'view') && (
@@ -3957,7 +3966,7 @@ const renderSupplyTable = () => {
                       {/* Subsection: Fiscalização Operacional */}
                       <div className="space-y-1">
                         <h5 className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-1 flex items-center gap-1 px-1">
-                          <Shield size={12} /> Fiscalização e Recursos
+                          <Shield size={12} /> Fiscalização e Qualidade do Atendimento
                         </h5>
                         <button
                           onClick={() => {
@@ -3977,7 +3986,7 @@ const renderSupplyTable = () => {
                           className={cn("w-full text-left justify-start px-4 py-2 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "recurso_painel" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                         >
                           <ClipboardList size={18} className={activeTab === "recurso_painel" ? "text-adasa-mid" : "text-white/50"} />
-                          Painel de Recurso de Revisão
+                          Painel de Qualidade do Atendimento
                         </button>
                       </div>
                     </motion.div>
@@ -4258,7 +4267,7 @@ const renderSupplyTable = () => {
                 >
                   {checkPermission('planning_dashboard', 'view') && (
                     <button
-                      title={isSidebarCollapsed ? "Minhas Tarefas" : undefined}
+                      title={isSidebarCollapsed ? "Minhas Atividades" : undefined}
                       onClick={() => {
                         setIsMyTasksSelected(true);
                         setMyTasksFilterTrigger(prev => prev + 1);
@@ -4279,7 +4288,7 @@ const renderSupplyTable = () => {
                           activeTab === "planning" && activePlanningSubTab === "tasks" && isMyTasksSelected ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                         )}
                       />
-                      {!isSidebarCollapsed && <span className="hidden md:inline">Minhas Tarefas</span>}
+                      {!isSidebarCollapsed && <span className="hidden md:inline">Minhas Atividades</span>}
                     </button>
                   )}
 
@@ -4288,6 +4297,7 @@ const renderSupplyTable = () => {
                       title={isSidebarCollapsed ? "Cadastrar Atividades" : undefined}
                       onClick={() => {
                         setIsMyTasksSelected(false);
+                        setMyTasksFilterTrigger(prev => prev + 1);
                         setActivePlanningSubTab("tasks");
                         handleTabChange("planning");
                       }}
@@ -4770,7 +4780,7 @@ const renderSupplyTable = () => {
                   <div className="space-y-1 pt-1">
                     {!isSidebarCollapsed && (
                       <h5 className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-1 flex items-center gap-1 px-1.5">
-                        <Shield size={10} /> Fiscalização e Recursos
+                        <Shield size={10} /> Fiscalização e Qualidade do Atendimento
                       </h5>
                     )}
                     <button
@@ -4793,7 +4803,7 @@ const renderSupplyTable = () => {
                       {!isSidebarCollapsed && <span className="hidden md:inline">Painel de Fiscalização</span>}
                     </button>
                     <button
-                      title={isSidebarCollapsed ? "Painel de Recurso de Revisão" : undefined}
+                      title={isSidebarCollapsed ? "Painel de Qualidade do Atendimento" : undefined}
                       onClick={() => handleTabChange("recurso_painel")}
                       className={cn(
                         "w-full text-left justify-start px-4 py-2 rounded-xl flex items-center gap-3 transition-all duration-200 group text-xs font-semibold cursor-pointer",
@@ -4809,7 +4819,7 @@ const renderSupplyTable = () => {
                           activeTab === "recurso_painel" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                         )}
                       />
-                      {!isSidebarCollapsed && <span className="hidden md:inline">Painel de Recurso de Revisão</span>}
+                      {!isSidebarCollapsed && <span className="hidden md:inline">Painel de Qualidade do Atendimento</span>}
                     </button>
                   </div>
                 </motion.div>
@@ -4991,22 +5001,22 @@ const renderSupplyTable = () => {
                 : activeTab === "compare"
                 ? "Comparar Balanços"
                 : activeTab === "analyze"
-                  ? "Painel de Análise do Balanço Hídrico"
-                  : activeTab === "templates"
-                    ? "Arquivos Modelo"
-                    : activeTab === "users"
-                      ? "Gestão de Usuários"
-                    : activeTab === "backup"
-                      ? "Rotinas de Backup"
-                    : activeTab === "planning"
-                      ? (activePlanningSubTab === "dashboard" ? "Painel de Atividades" :
-                         activePlanningSubTab === "tasks" ? "Cadastrar Atividades" : 
-                         activePlanningSubTab === "plans" ? "Cadastrar Planos" : 
-                         activePlanningSubTab === "areas" ? "Cadastrar Áreas Temáticas" : 
-                         activePlanningSubTab === "categories" ? "Cadastrar Categorias" :
-                         activePlanningSubTab === "responsibles" ? "Cadastrar Responsáveis" :
-                         activePlanningSubTab === "models" ? "Cadastrar Modelo de Tarefas" : "Importar Tarefas")
-                       : activeTab === "reg_cadastro" ? "Cadastrar Resoluções" : activeTab === "reg_agenda" ? "Agenda Regulatória" : activeTab === "reg_painel" ? "Painel Estratégico de Resoluções" : activeTab === "reg_agenda_painel" ? "Painel da Agenda Regulatória" : activeTab === "pub_cadastro" ? "Cadastrar Publicações" : activeTab === "pub_painel" ? "Painel de Publicações" : activeTab === "fisc_operational" ? "Painel de Fiscalização" : activeTab === "recurso_painel" ? "Painel de Recurso de Revisão" : "Cadastrar Balanço"}
+                ? "Painel de Análise do Balanço Hídrico"
+                : activeTab === "templates"
+                ? "Arquivos Modelo"
+                : activeTab === "users"
+                ? "Gestão de Usuários"
+                : activeTab === "backup"
+                ? "Rotinas de Backup"
+                : activeTab === "planning"
+                ? (activePlanningSubTab === "dashboard" ? "Painel de Atividades" :
+                   activePlanningSubTab === "tasks" ? (isMyTasksSelected ? "Minhas Atividades" : "Cadastrar Atividades") : 
+                   activePlanningSubTab === "plans" ? "Cadastrar Planos" : 
+                   activePlanningSubTab === "areas" ? "Cadastrar Áreas Temáticas" : 
+                   activePlanningSubTab === "categories" ? "Cadastrar Categorias" :
+                   activePlanningSubTab === "responsibles" ? "Cadastrar Responsáveis" :
+                   activePlanningSubTab === "models" ? "Cadastrar Modelo de Tarefas" : "Importar Tarefas")
+                : activeTab === "reg_cadastro" ? "Cadastrar Resoluções" : activeTab === "reg_agenda" ? "Agenda Regulatória" : activeTab === "reg_painel" ? "Painel Estratégico de Resoluções" : activeTab === "reg_agenda_painel" ? "Painel da Agenda Regulatória" : activeTab === "pub_cadastro" ? "Cadastrar Publicações" : activeTab === "pub_painel" ? "Painel de Publicações" : activeTab === "fisc_operational" ? "Painel de Fiscalização" : activeTab === "recurso_painel" ? "Painel de Qualidade do Atendimento" : "Cadastrar Balanço"}
             </h1>
             <p className="text-slate-500 text-sm font-medium">
               {activeTab === "home"
@@ -5024,8 +5034,8 @@ const renderSupplyTable = () => {
                         : activeTab === "users"
                           ? "Gerencie as contas de usuários, papéis e níveis de acesso (RBAC)."
                         : activeTab === "planning"
-                          ? "Gerencie o cronograma consolidado, planos, áreas e status de execução."
-                          : activeTab === "reg_cadastro" ? "Gestão do acervo de normas, atos legais e resoluções aplicados à regulação do saneamento básico e recursos hídricos." : activeTab === "reg_agenda" ? "Cadastro e acompanhamento de metas, temas e ações da agenda regulatória." : activeTab === "reg_painel" ? "Estoque Regulatório da Superintendência de Abastecimento de Água e Esgoto" : activeTab === "reg_agenda_painel" ? "Acompanhamento estratégico, metas, indicadores gráficos e percentual de entregas dos itens da Agenda Regulatória." : activeTab === "pub_cadastro" ? "Gestão do acervo bibliográfico, relatórios anuais de atividades, boletins informativos e artigos de pesquisa científica." : activeTab === "pub_painel" ? "Painel analítico gráfico de publicações, volumes históricos, distribuição de documentos e filtro do acervo próximo." : activeTab === "fisc_operational" ? "Painel estratégico de monitoramento das ações de fiscalização, constatações, não conformidades e termos emitidos." : activeTab === "recurso_painel" ? "Painel estratégico de acompanhamento de recursos de revisão, prazos, andamento e penalidades aplicadas." : "Gerencie os balanços hídricos e cadastre novas informações."}
+                          ? (isMyTasksSelected ? "Gerencie e acompanhe as atividades atribuídas diretamente ao seu usuário." : "Gerencie o cronograma consolidado, planos, áreas e status de execução.")
+                          : activeTab === "reg_cadastro" ? "Gestão do acervo de normas, atos legais e resoluções aplicados à regulação do saneamento básico e recursos hídricos." : activeTab === "reg_agenda" ? "Cadastro e acompanhamento de metas, temas e ações da agenda regulatória." : activeTab === "reg_painel" ? "Estoque Regulatório da Superintendência de Abastecimento de Água e Esgoto" : activeTab === "reg_agenda_painel" ? "Acompanhamento estratégico, metas, indicadores gráficos e percentual de entregas dos itens da Agenda Regulatória." : activeTab === "pub_cadastro" ? "Gestão do acervo bibliográfico, relatórios anuais de atividades, boletins informativos e artigos de pesquisa científica." : activeTab === "pub_painel" ? "Painel analítico gráfico de publicações, volumes históricos, distribuição de documentos e filtro do acervo próximo." : activeTab === "fisc_operational" ? "Painel estratégico de monitoramento das ações de fiscalização, constatações, não conformidades e termos emitidos." : activeTab === "recurso_painel" ? "Painel estratégico de acompanhamento de demandas de ouvidoria, prazos, andamento e penalidades aplicadas." : "Gerencie os balanços hídricos e cadastre novas informações."}
             </p>
           </div>
           <div className="flex flex-col md:flex-row items-center gap-3">
@@ -5289,6 +5299,12 @@ const renderSupplyTable = () => {
                 setActivePlanningSubTab={setActivePlanningSubTab as any}
                 tasks={tasks} 
                 areas={areas} 
+                onMyTasksSelect={() => {
+                  setIsMyTasksSelected(true);
+                  setMyTasksFilterTrigger(prev => prev + 1);
+                  setActivePlanningSubTab("tasks");
+                  handleTabChange("planning");
+                }}
               />
             </motion.div>
           ) : activeTab === "analyze" ? (
