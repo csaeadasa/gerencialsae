@@ -293,7 +293,7 @@ export const TaskModelManager: React.FC<TaskModelManagerProps> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100 flex-shrink-0">
         <div>
           <h3 className="text-2xl font-black text-slate-800 tracking-tight">
-            Cadastro de Modelos de Tarefas
+            Cadastro de Modelos de Atividades
           </h3>
           <p className="text-sm text-slate-500 font-medium mt-1">
             Gerencie os modelos de processos e etapas para automatizar a criação estruturada de atividades.

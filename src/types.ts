@@ -7,12 +7,35 @@ import type { FiscalizacaoEtapa } from './lib/fiscalizacao';
 
 export type ActionType = 'view' | 'create' | 'edit' | 'delete';
 export type ModuleId = 
-  | 'planning_dashboard' | 'planning_tasks' | 'planning_plans' | 'planning_areas' | 'planning_categories' | 'planning_responsibles' | 'planning_models'
+  | 'planning_dashboard' | 'planning_tasks' | 'planning_plans' | 'planning_areas' | 'planning_categories' | 'planning_responsibles' | 'planning_models' | 'planning_radar'
   | 'water_balances' | 'systems' | 'supply_sources' | 'demands' | 'explore' | 'analyze' | 'templates'
   | 'reg_cadastro' | 'reg_painel' | 'reg_agenda' | 'reg_agenda_painel'
   | 'pub_cadastro' | 'pub_painel'
   | 'fisc_operational' | 'recurso_painel'
   | 'dashboard' | 'geo' | 'users' | 'backup';
+
+export interface RadarComment {
+  id: string;
+  autor: string;
+  autorEmail?: string;
+  dataHora: string;
+  texto: string;
+}
+
+export interface RadarActivity {
+  id: number;
+  titulo: string;
+  descricao: string;
+  area_tematica: string;
+  assunto: string;
+  resultado_esperado: string;
+  prioridade: string;
+  justificativa: string;
+  status: string;
+  observacoes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
 
 export interface AppPermission {
   moduleId: ModuleId;

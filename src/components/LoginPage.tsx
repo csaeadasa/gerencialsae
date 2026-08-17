@@ -86,9 +86,9 @@ export function LoginPage() {
           <div className="flex items-end gap-6">
             <img
               src="/brand/sae-symbol-clean.png"
-              alt=""
-              aria-hidden="true"
-              className="h-36 w-36 shrink-0 object-contain drop-shadow-[0_24px_45px_rgba(0,145,218,0.18)] xl:h-44 xl:w-44"
+              alt="Símbolo SAE"
+              referrerPolicy="no-referrer"
+              className="h-36 w-36 shrink-0 object-contain xl:h-44 xl:w-44 drop-shadow-[0_15px_30px_rgba(0,145,218,0.25)]"
             />
             <span className="pb-5 text-[5.25rem] font-black leading-none tracking-[-0.075em] text-white xl:text-[6.5rem]">
               SAE
@@ -133,9 +133,9 @@ export function LoginPage() {
           <div className="mb-6 flex items-center justify-center gap-3 lg:hidden">
             <img
               src="/brand/sae-symbol-clean.png"
-              alt=""
-              aria-hidden="true"
-              className="h-14 w-14 object-contain"
+              alt="Símbolo SAE"
+              referrerPolicy="no-referrer"
+              className="h-14 w-14 shrink-0 object-contain"
             />
             <div>
               <p className="text-2xl font-black tracking-[-0.04em] text-white">SAE</p>
@@ -151,7 +151,8 @@ export function LoginPage() {
                 <img
                   src="/brand/sae-symbol-clean.png"
                   alt="Símbolo SAE"
-                  className="h-14 w-14 shrink-0 object-contain drop-shadow-[0_12px_22px_rgba(0,0,0,0.22)]"
+                  referrerPolicy="no-referrer"
+                  className="h-14 w-14 shrink-0 object-contain"
                 />
                 <div className="min-w-0">
                   <div className="mb-1 flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.26em] text-sky-300">

@@ -7,7 +7,7 @@ interface PlanningModuleProps {
   tasks: Task[];
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
   showToast: (title: string, message: string, type: "success" | "error" | "warning" | "info") => void;
-  activeSubTab?: "tasks" | "dashboard" | "plans" | "areas" | "categories" | "responsibles" | "import" | "models";
+  activeSubTab?: "tasks" | "dashboard" | "plans" | "areas" | "categories" | "responsibles" | "import" | "models" | "radar";
   setConfirmState: React.Dispatch<React.SetStateAction<any>>;
   myTasksFilterTrigger: number;
   isMyTasksSelected: boolean;

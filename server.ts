@@ -946,6 +946,193 @@ async function runStartupMigration() {
         console.log("Seeding pu_publications completed successfully!");
       }
 
+      // Ensure pl_radar_activities table exists (prefix pl_)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS pl_radar_activities (
+          id SERIAL PRIMARY KEY,
+          titulo TEXT NOT NULL,
+          descricao TEXT,
+          area_tematica VARCHAR(255),
+          assunto VARCHAR(255),
+          resultado_esperado TEXT,
+          prioridade VARCHAR(100),
+          justificativa TEXT,
+          status VARCHAR(100),
+          observacoes TEXT,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+
+      const radarCheck = await client.query("SELECT COUNT(*) FROM pl_radar_activities");
+      if (parseInt(radarCheck.rows[0].count) === 0) {
+        console.log("Seeding pl_radar_activities table with initial 14 items...");
+        const radarSeedRows = [
+          [
+            "Revisão da Resolução n. 14/2011 - Critérios adicionais a norma de referência da ANA",
+            "Revisão da norma de condições gerais do serviço levantadas pela prestadora, que não estão relacionadas a norma de referência da ANA e que necessitam de estudos adicionais aos já realizados no momento.",
+            "Regulação (CORA)",
+            "Normas regulatórias de água e de esgoto",
+            "Melhoria da prestação dos serviços de água e de esgoto aos usuários",
+            "Alta (1 a 2 anos)",
+            "",
+            "Selecionado",
+            "OK"
+          ],
+          [
+            "Revisão dos Decretos de Instalações Prediais de Água e de Esgoto",
+            "Modernização das Normas de Instalações Prediais de Água e Esgoto (Substituição dos Decretos nº 5.555/1980 e 5.631/1980)",
+            "Regulação (CORA)",
+            "Normas regulatórias de água e de esgoto",
+            "Modernização do arcabouço regulatório",
+            "Alta (1 a 2 anos)",
+            "",
+            "Selecionado",
+            "Ok"
+          ],
+          [
+            "Estudo de Projeção Populacional e Consumo de Água Tratada por Região Administrativa",
+            "Estudo de projeção da população do DF por região administrativa e estudo do consumo de água per capita por RA, visando atualizar as projeções do balanço hídrico dos sistemas de abastecimento de água e de esgoto.",
+            "Regulação (CORA)",
+            "Balanço Hídrico dos Sistemas de Abastecimento de Água e de Esgoto",
+            "Atualização das projeções do balanço hídrico dos sistemas",
+            "Alta (1 a 2 anos)",
+            "Atualmente as projeções populacionais e de consumo de água do balanço hídrico estão desatualizadas o que reflete diretamente na demanda dos sistemas e nas necessidades de investimentos, afetando diretamente a segurança hídrica",
+            "Elegível",
+            ""
+          ],
+          [
+            "Projeto de Resolução em Adequação a Norma de Referência de Reúso de Efluente de Esgoto Tratado e Reúso Agrícola (junto com SRH)",
+            "Normativo para estabelecer diretrizes regulatórias para impulsionar e padronizar a utilização não potável de água proveniente de Estações de Tratamento de Esgoto (ETEs) no DF",
+            "Regulação (CORA)",
+            "Norma de referência da ANA",
+            "Adoção da norma de referência",
+            "Alta (1 a 2 anos)",
+            "NR Prevista para 2º/2026",
+            "Elegível",
+            "OK"
+          ],
+          [
+            "Projeto de Resolução em Adequação a Norma de Referência para Redução Progressiva e Controle de Perdas de Água",
+            "A Norma de Referência nº 15/2025 estabelece as diretrizes para a gestão, o controle e a redução das perdas de água físicas e não físicas nos sistemas de distribuição de água potável. A norma padroniza a realização de diagnósticos com base no balanço hídrico e obriga os prestadores a elaborarem e executarem Planos de Gestão de Redução e Controle de Perdas.",
+            "Regulação (CORA)",
+            "Norma de referência da ANA",
+            "Adoção da norma de referência",
+            "Alta (1 a 2 anos)",
+            "NR publicada: Resolução ANA nº 275, de 18 de dezembro de 2025 (Aprova a NR 015/2025)",
+            "Elegível",
+            "Ok"
+          ],
+          [
+            "Projeto de Resolução para Adoção de Norma de Referência sobre Avaliação de Desempenho dos Serviços de Saneamento Básico",
+            "Norma com conjunto harmonizado de indicadores de desempenho operacionais e de cobertura, estabelecendo critérios uniformes para que as ERIs e os titulares monitorem o cumprimento das metas contratuais e do Novo Marco Legal do Saneamento.",
+            "Regulação (CORA)",
+            "Norma de referência da ANA",
+            "Adoção da norma de referência",
+            "Média (3 a 4 anos)",
+            "NR Prevista para 2º/2028",
+            "Elegível",
+            "Ok"
+          ],
+          [
+            "Revisão da Resolução n. 13/2021 - Manual do PDI",
+            "Revisão do resolução que Institui o Manual de Elaboração e Avaliação dos Projetos do Programa de Pesquisa, Desenvolvimento e Inovação – Programa PDI visando melhorias nos procedimentos e atividades do programa com foco em dar mais participação à Adasa na seleção dos projetos",
+            "Regulação (CORA)",
+            "Normas regulatórias de água e de esgoto",
+            "Melhoria na gestão dos projetos do programa de PDI Adasa/Caesb",
+            "Média (3 a 4 anos)",
+            "",
+            "Elegível",
+            "Ok"
+          ],
+          [
+            "Conjuntura do Abastecimento de Água e do Esgotamento Sanitário no DF",
+            "Documento informativo destinado à população do Distrito Federal, elaborado para explicar de forma clara e transparente o percurso da água até as residências e o destino do esgoto tratado. A publicação apresenta as etapas de captação, tratamento e distribuição da água, bem como a coleta e o tratamento do esgoto, incluindo informações sobre a infraestrutura existente, cobertura dos serviços, expansão das redes, redução de perdas e investimentos voltados à segurança hídrica e sanitária do DF.",
+            "Regulação (CORA)",
+            "Informações sobre os Sistemas de Abastecimento de Água e Esgoto",
+            "Informar a população sobre o caminho que a água percorre até as torneiras e o destino final do esgoto tratado",
+            "Média (3 a 4 anos)",
+            "",
+            "Arquivado",
+            ""
+          ],
+          [
+            "Estudos de Caso de Sistemas Prediais Não Potáveis com Monitoramento e Balanço Hídrico",
+            "Estudo técnico de edificações premiadas pelo Prêmio Guardião da Água para avaliar a eficiência, a viabilidade econômica e os benefícios socioambientais do reuso de água no Distrito Federal. O trabalho inclui o monitoramento do consumo de água potável e não potável, a elaboração de balanços hídricos prediais e a mensuração da redução da demanda por água da rede pública e da economia financeira gerada, produzindo indicadores que apoiarão o aprimoramento da regulação e o incentivo a soluções sustentáveis pela ADASA.",
+            "Regulação (CORA)",
+            "Sistemas prediais não potáveis",
+            "Mensuração da economia de água e a eficiência técnica de sistemas não potáveis premiados no DF para subsidiar o aprimoramento do arcabouço regulatório da ADASA estimular a adoção dessas práticas por outras entidades.",
+            "Média (3 a 4 anos)",
+            "",
+            "Elegível",
+            ""
+          ],
+          [
+            "Guia Informativo das Normas Técnicas do Serviço de Abastecimento de Água e de Esgoto",
+            "Diagramação e impressão dos informativos elaborados pela CORA e COQA sobre as normas regulatórias dos serviços de água e de esgoto: Informativo sobre a Resolução n. 14/2011 - Condições gerais; Informativo Resolução 15/2011-Hidrometração Individualizada; Informativo sobre Sistemas prediais de água não potável; Informativo sobre o Prêmio Guardião da Água 2026; Informativo sobre a Resolução n. 13/2021 - PDI; Informativo sobre Resolução de Soluções Alternativas; Informativo sobre a Resolução de Indicadores de Desempenho; Informativo sobre a Resolução n. 003/2012 - Recursos de Revisão.",
+            "Regulação (CORA)",
+            "Normas regulatórias de água e de esgoto",
+            "Informa a população de forma clara e didática sobre o conteúdo das principais normas técnicas elaboradas para os serviços de água e de esgoto.",
+            "Baixa (mais de 5 anos)",
+            "",
+            "Elegível",
+            ""
+          ],
+          [
+            "Projeto de Resolução que trata de Grandes Usuários no Distrito Federal, sua definição, a celebração e a fiscalização de Programas Comerciais e de contratos específicos de abastecimento de água e esgotamento sanitário para Grandes Usuários.",
+            "O projeto normativo do Distrito Federal visa regulamentar a prestação dos serviços de água e esgotamento sanitário prestados pela Caesb aos clientes de elevado consumo, definindo critérios técnicos para seu enquadramento, diretrizes para a celebração de contratos com condições e tarifas diferenciadas (como garantias de demanda), e mecanismos de fiscalização sobre a qualidade da medição e do efluente lançado na rede pública. Essa categoria de Grandes Usuários abrange empreendimentos de grande porte do DF, como indústrias e polos fabris, shopping centers e grandes centros comerciais, redes hoteleiras, condomínios empresariais e residenciais de grande porte, hospitais e órgãos públicos de alta demanda hídrica.",
+            "Regulação (CORA)",
+            "Normas regulatórias de água e de esgoto",
+            "Regulamentação das diretrizes e contratos específicos para clientes de grande porte no DF",
+            "Baixa (mais de 5 anos)",
+            "",
+            "Elegível",
+            ""
+          ],
+          [
+            "Metodologia de Fiscalização de Riscos em Segurança de Barragens para Abastecimento Humano",
+            "Elaborar um estudo técnico regulatório para o estabelecimento de diretrizes de monitoramento preventivo de segurança de barragens de saneamento, com critérios de amostragem de auscultação e protocolos de atuação regulatória conjunta com a Defesa Civil e o prestador de serviço em cenários de secas extremas ou eventos de cheia.",
+            "Regulação (CORA)",
+            "Normas regulatórias de água e de esgoto",
+            "Diretrizes e protocolos de monitoramento preventivo de segurança de barragens",
+            "Baixa (mais de 5 anos)",
+            "A fiscalização da segurança de barragens pelo ente regulador é tema recorrente e crítico no setor elétrico e hídrico (como discutido nos anais de 2015, 2019 e 2023). As Agências Reguladoras têm evoluído de uma fiscalização meramente visual/documental para a exigência de delimitação de faixas de atenção/alerta com base na leitura de equipamentos de auscultação (piezômetros, medidores de vazão) e análises de estabilidade hídrica em episódios de extremos climáticos.",
+            "Elegível",
+            ""
+          ],
+          [
+            "Padrões de Fiscalização com Uso de Tecnologias de Inspeção Não Destrutiva e Mapeamento Georreferenciado para Redução de Perdas Reais",
+            "Estudo técnico para estruturação de diretrizes de fiscalização indireta e direta de perdas reais de água utilizando geotecnologias e instrumentação contínua de rede, definindo metas regulatórias auditáveis por Distrito de Medição e Controle (DMC).",
+            "Regulação (CORA)",
+            "Normas regulatórias de água e de esgoto",
+            "Estruturação de diretrizes e metas de fiscalização de perdas reais com geotecnologia",
+            "Baixa (mais de 5 anos)",
+            "Contexto dos Anais da ABAR: Nos congressos de 2019, 2021 e 2023, diversos trabalhos (Ares-PCJ, Arsae-MG, Agems) abordaram o uso de inteligência artificial, Business Intelligence (BI), drones e geotecnologias aplicadas ao controle de vazamentos ocultos e fiscalização de redes e extravasamentos de esgoto. Lacuna na Adasa: A fiscalização de perdas físicas/reais da Adasa apoia-se fortemente em indicadores do SNIS/SINISA e vistorias amostraria locais. Falta a padronização regulatória sobre como o prestador deve comprovar o uso sistemático de varredura acústica, hastes de escuta, pitometria contínua e geofones em Zonas de Medição e Controle (ZMC).",
+            "Selecionado",
+            ""
+          ],
+          [
+            "Padrões de Reúso de Água e Gestão Regulatória dos Lodos de Estações de Tratamento de Esgoto (ETEs) do DF",
+            "Proposta de Estudo: Estudo regulatório sobre a caracterização, rotas tecnológicas de higienização e aproveitamento energético/agrícola dos resíduos do tratamento de esgoto (lodo e biogás) no DF, estabelecendo indicadores operacionais de conformidade e rastreabilidade para o prestador do serviço.",
+            "Regulação (CORA)",
+            "Normas regulatórias de água e de esgoto",
+            "Estudo regulatório de higienização e aproveitamento de lodos e subprodutos de ETEs",
+            "Baixa (mais de 5 anos)",
+            "Contexto dos Anais da ABAR: O aproveitamento de subprodutos do saneamento (biogás, biometano e aplicação agrícola/energética do lodo de ETEs) foi um dos tópicos de destaque nos anais de 2019, 2021 e 2023. Lacuna na Adasa: A regulamentação técnica e a fiscalização sobre a qualidade, estabilização, transporte, disposição final e higienização do lodo produzido nas grandes ETEs do Distrito Federal (como ETE Brasília Sul e ETE Brasília Norte) necessitam de acompanhamento sistemático sob o aspecto regulatório-operacional.",
+            "Selecionado",
+            ""
+          ]
+        ];
+
+        for (const row of radarSeedRows) {
+          await client.query(
+            "INSERT INTO pl_radar_activities (titulo, descricao, area_tematica, assunto, resultado_esperado, prioridade, justificativa, status, observacoes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            row
+          );
+        }
+        console.log("Seeding pl_radar_activities completed successfully!");
+      }
+
       await client.query("COMMIT");
       console.log("Database tables verified successfully on server start!");
     } catch (err) {
@@ -981,6 +1168,13 @@ export async function startServer(isVercel = false) {
     }
   }
 
+  // Serve static assets from public folder directly (including /brand and /uploads)
+  app.use(express.static(publicPath));
+  const brandDir = path.join(publicPath, "brand");
+  if (fs.existsSync(brandDir)) {
+    app.use("/brand", express.static(brandDir));
+  }
+
   // Setup multer for image uploads
   const uploadsDir = path.join(publicPath, "uploads");
   if (!fs.existsSync(uploadsDir)) {
@@ -990,6 +1184,7 @@ export async function startServer(isVercel = false) {
       console.error(e);
     }
   }
+  app.use("/uploads", express.static(uploadsDir));
   const storage = multer.diskStorage({
     destination: function (req, file, cb) {
       cb(null, uploadsDir)
@@ -3230,6 +3425,164 @@ export async function startServer(isVercel = false) {
       res.json({ success: true, count });
     } catch (error: any) {
       console.error("Erro ao importar CSV de publicações:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // REST endpoints for Radar de Atividades (prefix pl_)
+  app.get("/api/radar-activities", async (req, res) => {
+    try {
+      const pool = getDbPool();
+      const result = await pool.query("SELECT * FROM pl_radar_activities ORDER BY id ASC");
+      res.json({ success: true, data: result.rows });
+    } catch (error: any) {
+      console.error("Erro ao obter atividades do radar:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/radar-activities", async (req, res) => {
+    try {
+      const {
+        titulo,
+        descricao,
+        area_tematica,
+        assunto,
+        resultado_esperado,
+        prioridade,
+        justificativa,
+        status,
+        observacoes
+      } = req.body;
+      const pool = getDbPool();
+      const result = await pool.query(
+        `INSERT INTO pl_radar_activities 
+          (titulo, descricao, area_tematica, assunto, resultado_esperado, prioridade, justificativa, status, observacoes, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()) 
+         RETURNING *`,
+        [
+          titulo || "",
+          descricao || "",
+          area_tematica || "Regulação (CORA)",
+          assunto || "",
+          resultado_esperado || "",
+          prioridade || "Alta (1 a 2 anos)",
+          justificativa || "",
+          status || "Elegível",
+          observacoes || ""
+        ]
+      );
+      res.json({ success: true, data: result.rows[0] });
+    } catch (error: any) {
+      console.error("Erro ao criar atividade no radar:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.put("/api/radar-activities/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const {
+        titulo,
+        descricao,
+        area_tematica,
+        assunto,
+        resultado_esperado,
+        prioridade,
+        justificativa,
+        status,
+        observacoes
+      } = req.body;
+      const pool = getDbPool();
+      const result = await pool.query(
+        `UPDATE pl_radar_activities 
+         SET titulo = $1, descricao = $2, area_tematica = $3, assunto = $4, resultado_esperado = $5, 
+             prioridade = $6, justificativa = $7, status = $8, observacoes = $9, updated_at = NOW() 
+         WHERE id = $10 
+         RETURNING *`,
+        [
+          titulo || "",
+          descricao || "",
+          area_tematica || "Regulação (CORA)",
+          assunto || "",
+          resultado_esperado || "",
+          prioridade || "Alta (1 a 2 anos)",
+          justificativa || "",
+          status || "Elegível",
+          observacoes || "",
+          id
+        ]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, error: "Atividade não encontrada no radar" });
+      }
+      res.json({ success: true, data: result.rows[0] });
+    } catch (error: any) {
+      console.error("Erro ao atualizar atividade do radar:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/radar-activities/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const pool = getDbPool();
+      const result = await pool.query("DELETE FROM pl_radar_activities WHERE id = $1 RETURNING id", [id]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, error: "Atividade não encontrada" });
+      }
+      res.json({ success: true, deletedId: id });
+    } catch (error: any) {
+      console.error("Erro ao deletar atividade do radar:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/radar-activities/import", async (req, res) => {
+    try {
+      const { csvData } = req.body;
+      if (!csvData) {
+        return res.status(400).json({ success: false, error: "Nenhum dado CSV fornecido." });
+      }
+
+      const pool = getDbPool();
+      const delimiter = csvData.includes(";") ? ";" : ",";
+      const records = parse(csvData, {
+        delimiter,
+        columns: true,
+        skip_empty_lines: true,
+        relax_column_count: true,
+        trim: true
+      });
+
+      console.log(`Importing ${records.length} radar activities...`);
+      let count = 0;
+      for (const r of records) {
+        const row = r as any;
+        const titulo = (row.titulo || row.Titulo || row.atividade || row.Atividade || row["Título"] || "").trim();
+        const descricao = (row.descricao || row.Descricao || row["Descrição"] || "").trim();
+        const area_tematica = (row.area_tematica || row["Área Temática"] || row.area || row["Área"] || "Regulação (CORA)").trim();
+        const assunto = (row.assunto || row.Assunto || "").trim();
+        const resultado_esperado = (row.resultado_esperado || row["Resultado Esperado"] || "").trim();
+        const prioridade = (row.prioridade || row.Prioridade || "Alta (1 a 2 anos)").trim();
+        const justificativa = (row.justificativa || row.Justificativa || "").trim();
+        const status = (row.status || row.Status || "Elegível").trim();
+        const observacoes = (row.observacoes || row["Observações"] || row.obs || "").trim();
+
+        if (titulo) {
+          await pool.query(
+            `INSERT INTO pl_radar_activities 
+              (titulo, descricao, area_tematica, assunto, resultado_esperado, prioridade, justificativa, status, observacoes) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [titulo, descricao, area_tematica, assunto, resultado_esperado, prioridade, justificativa, status, observacoes]
+          );
+          count++;
+        }
+      }
+
+      res.json({ success: true, count });
+    } catch (error: any) {
+      console.error("Erro ao importar CSV de radar de atividades:", error);
       res.status(500).json({ success: false, error: error.message });
     }
   });

@@ -55,7 +55,8 @@ import {
   Send,
   CornerDownRight,
   CheckCheck,
-  ClipboardList
+  ClipboardList,
+  Compass
 } from "lucide-react";
 import {
   LineChart,
@@ -602,7 +603,7 @@ export default function App() {
     "home",
   );
   const [editingTaskIdFromPainel, setEditingTaskIdFromPainel] = useState<number | null>(null);
-  const [activePlanningSubTab, setActivePlanningSubTab] = useState<"tasks" | "dashboard" | "plans" | "areas" | "categories" | "responsibles" | "import" | "models">("dashboard");
+  const [activePlanningSubTab, setActivePlanningSubTab] = useState<"tasks" | "dashboard" | "plans" | "areas" | "categories" | "responsibles" | "import" | "models" | "radar">("dashboard");
   const [isMyTasksSelected, setIsMyTasksSelected] = useState(false);
   const [myTasksFilterTrigger, setMyTasksFilterTrigger] = useState(0);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -3764,7 +3765,7 @@ const renderSupplyTable = () => {
                           className={cn("w-full text-left justify-start px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "planning" && activePlanningSubTab === "import" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                         >
                           <Upload size={18} className={activeTab === "planning" && activePlanningSubTab === "import" ? "text-adasa-mid" : "text-white/50"} />
-                          Importar Tarefas
+                          Importar Atividades
                         </button>
                       )}
                       {checkPermission('planning_models', 'view') && (
@@ -3778,7 +3779,21 @@ const renderSupplyTable = () => {
                           className={cn("w-full text-left justify-start px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "planning" && activePlanningSubTab === "models" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                         >
                           <Copy size={18} className={activeTab === "planning" && activePlanningSubTab === "models" ? "text-adasa-mid" : "text-white/50"} />
-                          Cadastrar Modelo de Tarefas
+                          Cadastrar Modelo de Atividades
+                        </button>
+                      )}
+                      {checkPermission('planning_radar', 'view') && (
+                        <button
+                          onClick={() => {
+                            setIsMyTasksSelected(false);
+                            setActivePlanningSubTab("radar");
+                            handleTabChange("planning");
+                            setIsMobileMenuOpen(false);
+                          }}
+                          className={cn("w-full text-left justify-start px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "planning" && activePlanningSubTab === "radar" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
+                        >
+                          <Compass size={18} className={activeTab === "planning" && activePlanningSubTab === "radar" ? "text-adasa-mid" : "text-white/50"} />
+                          Radar de Atividades
                         </button>
                       )}
                     </motion.div>
@@ -4451,7 +4466,7 @@ const renderSupplyTable = () => {
 
                   {checkPermission('planning_tasks', 'view') && (
                     <button
-                      title={isSidebarCollapsed ? "Importar Tarefas" : undefined}
+                      title={isSidebarCollapsed ? "Importar Atividades" : undefined}
                       onClick={() => {
                         setIsMyTasksSelected(false);
                         setActivePlanningSubTab("import");
@@ -4471,13 +4486,13 @@ const renderSupplyTable = () => {
                           activeTab === "planning" && activePlanningSubTab === "import" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                         )}
                       />
-                      {!isSidebarCollapsed && <span className="hidden md:inline">Importar Tarefas</span>}
+                      {!isSidebarCollapsed && <span className="hidden md:inline">Importar Atividades</span>}
                     </button>
                   )}
 
                   {checkPermission('planning_models', 'view') && (
                     <button
-                      title={isSidebarCollapsed ? "Cadastrar Modelo de Tarefas" : undefined}
+                      title={isSidebarCollapsed ? "Cadastrar Modelo de Atividades" : undefined}
                       onClick={() => {
                         setIsMyTasksSelected(false);
                         setActivePlanningSubTab("models");
@@ -4497,7 +4512,33 @@ const renderSupplyTable = () => {
                           activeTab === "planning" && activePlanningSubTab === "models" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                         )}
                       />
-                      {!isSidebarCollapsed && <span className="hidden md:inline">Cadastrar Modelo de Tarefas</span>}
+                      {!isSidebarCollapsed && <span className="hidden md:inline">Cadastrar Modelo de Atividades</span>}
+                    </button>
+                  )}
+
+                  {checkPermission('planning_radar', 'view') && (
+                    <button
+                      title={isSidebarCollapsed ? "Radar de Atividades" : undefined}
+                      onClick={() => {
+                        setIsMyTasksSelected(false);
+                        setActivePlanningSubTab("radar");
+                        handleTabChange("planning");
+                      }}
+                      className={cn(
+                        "w-full text-left justify-start px-4 py-2 rounded-xl flex items-center gap-3 transition-all duration-200 group text-xs font-semibold cursor-pointer",
+                        activeTab === "planning" && activePlanningSubTab === "radar"
+                          ? "bg-white/15 text-white shadow-lg border border-white/10 border-l-4 border-l-adasa-light pl-3"
+                          : "text-white/60 hover:text-white hover:bg-white/5 hover:translate-x-0.5",
+                      )}
+                    >
+                      <Compass
+                        size={16}
+                        className={cn(
+                          "flex-shrink-0 transition-colors",
+                          activeTab === "planning" && activePlanningSubTab === "radar" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
+                        )}
+                      />
+                      {!isSidebarCollapsed && <span className="hidden md:inline">Radar de Atividades</span>}
                     </button>
                   )}
                 </motion.div>
@@ -5015,7 +5056,8 @@ const renderSupplyTable = () => {
                    activePlanningSubTab === "areas" ? "Cadastrar Áreas Temáticas" : 
                    activePlanningSubTab === "categories" ? "Cadastrar Categorias" :
                    activePlanningSubTab === "responsibles" ? "Cadastrar Responsáveis" :
-                   activePlanningSubTab === "models" ? "Cadastrar Modelo de Tarefas" : "Importar Tarefas")
+                   activePlanningSubTab === "models" ? "Cadastrar Modelo de Atividades" :
+                   activePlanningSubTab === "radar" ? "Radar de Atividades" : "Importar Atividades")
                 : activeTab === "reg_cadastro" ? "Cadastrar Resoluções" : activeTab === "reg_agenda" ? "Agenda Regulatória" : activeTab === "reg_painel" ? "Painel Estratégico de Resoluções" : activeTab === "reg_agenda_painel" ? "Painel da Agenda Regulatória" : activeTab === "pub_cadastro" ? "Cadastrar Publicações" : activeTab === "pub_painel" ? "Painel de Publicações" : activeTab === "fisc_operational" ? "Painel de Fiscalização" : activeTab === "recurso_painel" ? "Painel de Qualidade do Atendimento" : "Cadastrar Balanço"}
             </h1>
             <p className="text-slate-500 text-sm font-medium">

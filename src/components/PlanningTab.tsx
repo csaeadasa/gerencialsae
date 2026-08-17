@@ -68,12 +68,13 @@ import { FISCALIZACAO_ETAPAS, FISCALIZACAO_ETAPA_INICIAL } from "../lib/fiscaliz
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, CartesianGrid, LabelList } from "recharts";
 import { PlanningSkeleton } from "../modules/planning/PlanningSkeleton";
 import { TaskModelManager } from "./TaskModelManager";
+import { RadarAtividadesTab } from "./RadarAtividadesTab";
  
 interface PlanningTabProps {
   tasks: Task[];
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
   showToast: (title: string, message: string, type: "success" | "error" | "warning" | "info") => void;
-  activeSubTab?: "tasks" | "dashboard" | "plans" | "areas" | "categories" | "responsibles" | "import" | "models";
+  activeSubTab?: "tasks" | "dashboard" | "plans" | "areas" | "categories" | "responsibles" | "import" | "models" | "radar";
   setConfirmState?: React.Dispatch<React.SetStateAction<{ title?: string; message: string; type?: "confirm" | "alert"; onConfirm?: () => void } | null>>;
   myTasksFilterTrigger?: number;
   isMyTasksSelected?: boolean;
@@ -351,7 +352,7 @@ const ImportPanel = ({ areas, showToast, onSuccess }: { areas: any[], showToast:
           <Upload size={24} className="text-indigo-600" />
         </div>
         <div>
-          <h3 className="text-lg font-black text-slate-800 tracking-tight">Importação de Tarefas</h3>
+          <h3 className="text-lg font-black text-slate-800 tracking-tight">Importação de Atividades</h3>
           <p className="text-sm text-slate-500 font-medium mt-1">
             Faça a carga inicial ou importação em lote a partir de uma planilha CSV.
           </p>
@@ -3475,6 +3476,10 @@ export function PlanningTab({
 
   if (activeSubTab === "models") {
     return <TaskModelManager tasks={tasks} plans={plans} showToast={showToast} reloadTasks={reloadTasks} />;
+  }
+
+  if (activeSubTab === "radar") {
+    return <RadarAtividadesTab showToast={showToast} currentUser={currentUser} />;
   }
 
   if (activeSubTab !== "tasks" && activeSubTab !== "dashboard") {

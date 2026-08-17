@@ -16,7 +16,7 @@ export function UserManagementTab() {
   const moduleCategories: { category: string, modules: ModuleId[] }[] = [
     {
       category: 'Planejamento Estratégico',
-      modules: ['planning_dashboard', 'planning_tasks', 'planning_plans', 'planning_areas', 'planning_categories', 'planning_responsibles', 'planning_models']
+      modules: ['planning_dashboard', 'planning_tasks', 'planning_plans', 'planning_areas', 'planning_categories', 'planning_responsibles', 'planning_models', 'planning_radar']
     },
     {
       category: 'Balanço Hídrico',
@@ -55,7 +55,8 @@ export function UserManagementTab() {
     planning_areas: 'Cadastrar Áreas Temáticas',
     planning_categories: 'Cadastrar Categorias',
     planning_responsibles: 'Cadastrar Responsáveis',
-    planning_models: 'Cadastrar Modelo de Tarefas',
+    planning_models: 'Cadastrar Modelo de Atividades',
+    planning_radar: 'Radar de Atividades',
     water_balances: 'Balanço Hídrico (Raiz)',
     systems: 'Configurar Sistemas',
     supply_sources: 'Configurar Fontes de Suprimento',
