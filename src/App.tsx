@@ -104,7 +104,6 @@ import { ResolutionsModule } from "./modules/resolutions";
 import { RegulatoryAgendaModule } from "./modules/regulatory-agenda";
 import { PublicationsModule } from "./modules/publications";
 import { UserManagementModule } from "./modules/user-management";
-import { BackupTab } from "./components/BackupTab";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { FiscalizacaoPainel } from "./components/FiscalizacaoPainel";
 import { RecursoPainel } from "./components/RecursoPainel";
@@ -4103,16 +4102,6 @@ const renderSupplyTable = () => {
                           <Users size={20} className={activeTab === "users" ? "text-adasa-mid" : "text-white/60"} />
                           Usuários e Permissões
                         </button>
-                        <button
-                          onClick={() => {
-                            handleTabChange("backup");
-                            setIsMobileMenuOpen(false);
-                          }}
-                          className={cn("w-full px-5 py-3 rounded-2xl flex items-center gap-4 transition-all text-sm font-semibold", activeTab === "backup" ? "bg-white text-adasa-dark shadow-lg" : "text-white/80 border border-transparent")}
-                        >
-                          <Database size={20} className={activeTab === "backup" ? "text-adasa-mid" : "text-white/60"} />
-                          Backup
-                        </button>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -5001,25 +4990,6 @@ const renderSupplyTable = () => {
                       />
                       {!isSidebarCollapsed && <span className="hidden md:inline">Usuários e Permissões</span>}
                     </button>
-                    <button
-                      title={isSidebarCollapsed ? "Backup" : undefined}
-                      onClick={() => handleTabChange("backup")}
-                      className={cn(
-                        "w-full px-4 py-2 rounded-xl flex items-center gap-3 transition-all duration-200 group text-xs font-semibold cursor-pointer",
-                        activeTab === "backup"
-                          ? "bg-white/15 text-white shadow-lg border border-white/10 border-l-4 border-l-adasa-light pl-3"
-                          : "text-white/60 hover:text-white hover:bg-white/5 hover:translate-x-0.5",
-                      )}
-                    >
-                      <Database
-                        size={16}
-                        className={cn(
-                          "flex-shrink-0 transition-colors",
-                          activeTab === "backup" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
-                        )}
-                      />
-                      {!isSidebarCollapsed && <span className="hidden md:inline">Backup</span>}
-                    </button>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -5047,8 +5017,6 @@ const renderSupplyTable = () => {
                 ? "Arquivos Modelo"
                 : activeTab === "users"
                 ? "Gestão de Usuários"
-                : activeTab === "backup"
-                ? "Rotinas de Backup"
                 : activeTab === "planning"
                 ? (activePlanningSubTab === "dashboard" ? "Painel de Atividades" :
                    activePlanningSubTab === "tasks" ? (isMyTasksSelected ? "Minhas Atividades" : "Cadastrar Atividades") : 
@@ -8644,17 +8612,6 @@ const renderSupplyTable = () => {
               className="w-full"
             >
               <UserManagementModule />
-            </motion.div>
-          ) : activeTab === "backup" ? (
-            <motion.div
-              key="backup"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className="w-full"
-            >
-              <BackupTab showToast={showToast} />
             </motion.div>
           ) : activeTab === "planning" ? (
             <motion.div

@@ -1977,7 +1977,20 @@ export function PlanningTab({
 
   const filteredTasks = useMemo(() => {
     return enhancedTasks.filter(t => matchesFiltersDashboard(t));
-  }, [enhancedTasks, statusFilter, situationFilter, priorityFilter, categoryFilter, planFilter, selectedAreaIds, selectedResponsibleIds, periodTypeFilter, periodValueFilter]);
+  }, [
+    enhancedTasks, 
+    statusFilter, 
+    situationFilter, 
+    priorityFilter, 
+    categoryFilter, 
+    isProgrammedFilter,
+    taskTypeFilter,
+    planFilter, 
+    selectedAreaIds, 
+    selectedResponsibleIds, 
+    periodTypeFilter, 
+    periodValueFilter
+  ]);
 
   const dashboardStats = useMemo(() => {
     const total = filteredTasks.length;
@@ -3690,7 +3703,21 @@ export function PlanningTab({
                   </div>
                   <div className="space-y-1.5">
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Cargo/Função (Opcional)</label>
-                    <input type="text" value={regRole} onChange={(e) => setRegRole(e.target.value)} placeholder="Ex: REGULADOR" className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold text-slate-700 focus:border-adasa-mid outline-none transition-all placeholder:text-slate-400" />
+                    <select
+                      value={regRole}
+                      onChange={(e) => setRegRole(e.target.value)}
+                      className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold text-slate-700 focus:border-adasa-mid outline-none transition-all bg-white"
+                    >
+                      <option value="">Selecione um cargo/função (Opcional)</option>
+                      <option value="Superintendente (a)">Superintendente (a)</option>
+                      <option value="Coordenador(a)">Coordenador(a)</option>
+                      <option value="Regulador (a)">Regulador (a)</option>
+                      <option value="Colaborador (a)">Colaborador (a)</option>
+                      <option value="Estagiário (a)">Estagiário (a)</option>
+                      {regRole && !["Superintendente (a)", "Coordenador(a)", "Regulador (a)", "Colaborador (a)", "Estagiário (a)"].includes(regRole) && (
+                        <option value={regRole}>{regRole}</option>
+                      )}
+                    </select>
                   </div>
                   <div className="space-y-1.5">
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Áreas de Atuação Vinculadas</label>
@@ -4349,7 +4376,7 @@ export function PlanningTab({
             </div>
 
             {/* Clear Filters Button if any is changed */}
-            {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || statusFilter !== "all" || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || periodTypeFilter !== "all" || isProgrammedFilter !== "all") && (
+            {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || statusFilter !== "all" || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || periodTypeFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all") && (
               <div className="pt-2 flex justify-end">
                 <button
                   onClick={() => {
@@ -4363,6 +4390,7 @@ export function PlanningTab({
                     setPeriodTypeFilter("all");
                     setPeriodValueFilter("all");
                     setIsProgrammedFilter("all");
+                    setTaskTypeFilter("all");
                   }}
                   className="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 font-black uppercase tracking-wider px-4 py-2 rounded-xl transition-all flex items-center gap-1.5"
                 >
@@ -7564,7 +7592,7 @@ export function PlanningTab({
 
               {/* Consultar / Limpar Buttons */}
               <div className="flex justify-center items-center gap-4 pt-2">
-                  {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || statusFilter !== "all" || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || isProgrammedFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
+                  {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || statusFilter !== "all" || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
                     <button
                       onClick={() => {
                         setPlanFilter("all");
@@ -7576,6 +7604,7 @@ export function PlanningTab({
                         setCategoryFilter("all");
                         setSearchTerm("");
                         setIsProgrammedFilter("all");
+                        setTaskTypeFilter("all");
                         setHasSubtasksFilter(false);
                       }}
                       className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center gap-2 font-black uppercase tracking-widest px-8 py-3 rounded-xl text-xs transition-all shadow-sm hover:-translate-y-0.5"

@@ -96,7 +96,15 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
     "FORTALECIMENTO DA CAPACIDADE REGULATÓRIA"
   ];
 
-  const statuses = ["TODOS", "Concluída", "Não Concluída"];
+  const normalizeStatus = (status: string | undefined): "Não iniciada" | "Em andamento" | "Concluída" => {
+    if (!status) return "Não iniciada";
+    const s = status.toLowerCase().trim();
+    if (s === "concluída" || s === "concluído" || s === "completed") return "Concluída";
+    if (s === "em andamento" || s === "in_progress" || s === "in progress") return "Em andamento";
+    return "Não iniciada";
+  };
+
+  const statuses = ["TODOS", "Não iniciada", "Em andamento", "Concluída"];
 
   const toggleAgendaExpand = (id: number) => {
     if (collapsedAgendas.includes(id)) {
@@ -122,13 +130,17 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
     setFormTema(agenda.tema);
     setSelectedTaskIds(agenda.task_ids || []);
     
-    // Set customized task entries
-    const paired = (agenda.agenda_tasks || []).map(t => ({
-      task_id: Number(t.task_id),
-      status: t.status || "Não Concluída",
-      entrega: t.entrega || "",
-      entrega_link: t.entrega_link || ""
-    }));
+    // Set customized task entries with status inherited from task
+    const paired = (agenda.agenda_tasks || []).map(t => {
+      const tId = Number(t.task_id);
+      const matchingTask = tasks.find(x => x.id === tId);
+      return {
+        task_id: tId,
+        status: normalizeStatus(matchingTask?.status || t.status),
+        entrega: t.entrega || "",
+        entrega_link: t.entrega_link || ""
+      };
+    });
     setFormAgendaTasks(paired);
     setTaskSearchQuery("");
     setIsModalOpen(true);
@@ -139,17 +151,18 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
       setSelectedTaskIds(selectedTaskIds.filter(id => id !== taskId));
       setFormAgendaTasks(formAgendaTasks.filter(item => item.task_id !== taskId));
     } else {
+      const matchingTask = tasks.find(x => x.id === taskId);
       setSelectedTaskIds([...selectedTaskIds, taskId]);
       setFormAgendaTasks([...formAgendaTasks, {
         task_id: taskId,
-        status: "Não Concluída",
+        status: normalizeStatus(matchingTask?.status),
         entrega: "",
         entrega_link: ""
       }]);
     }
   };
 
-  const handleUpdateTaskConfig = (taskId: number, field: "status" | "entrega" | "entrega_link", value: string) => {
+  const handleUpdateTaskConfig = (taskId: number, field: "entrega" | "entrega_link", value: string) => {
     setFormAgendaTasks(prev => prev.map(item => {
       if (item.task_id === taskId) {
         return { ...item, [field]: value };
@@ -188,7 +201,13 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
       nome: formNome,
       tema: formTema,
       task_ids: selectedTaskIds,
-      agenda_tasks: formAgendaTasks
+      agenda_tasks: formAgendaTasks.map(item => {
+        const matchingTask = tasks.find(t => t.id === item.task_id);
+        return {
+          ...item,
+          status: normalizeStatus(matchingTask?.status || item.status)
+        };
+      })
     };
 
     try {
@@ -361,70 +380,109 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
 
                         {/* Expandable row for associated Task Details */}
                         {isExpanded && associatedTasks.length > 0 && (
-                          <tr className="bg-slate-50/50">
-                            <td colSpan={3} className="px-8 py-4 border-t border-slate-100">
+                          <tr className="bg-slate-50/60">
+                            <td colSpan={3} className="px-6 py-4 border-t border-slate-200/80">
                               <div className="space-y-2 text-left">
-                                <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5 mb-2">
-                                  <Layers size={12} className="text-slate-500" />
+                                <h5 className="text-[10px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5 mb-2.5">
+                                  <Layers size={13} className="text-indigo-600" />
                                   Ações Regulatórias Vinculadas (Métricas Específicas)
                                 </h5>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                  {associatedTasks.map(tk => {
-                                    const customTaskConfig = (agenda.agenda_tasks || []).find(it => Number(it.task_id) === tk.id);
-                                    const taskStatus = customTaskConfig?.status || "Não Concluída";
-                                    const taskEntrega = customTaskConfig?.entrega || "";
-                                    const taskLink = customTaskConfig?.entrega_link || "";
 
-                                    return (
-                                      <div
-                                        key={tk.id}
-                                        className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex flex-col justify-between space-y-3"
-                                      >
-                                        <div>
-                                          <div className="flex items-start justify-between gap-2 text-left">
-                                            <p className="text-xs font-bold text-slate-800 leading-tight">{tk.title}</p>
-                                            <span
-                                              className={`inline-block px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider whitespace-nowrap ${
-                                                taskStatus === "Concluída"
-                                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                                                  : taskStatus === "Prevista"
-                                                  ? "bg-sky-50 text-sky-700 border border-sky-100"
-                                                  : "bg-amber-50 text-amber-700 border border-amber-100"
-                                              }`}
-                                            >
-                                              {taskStatus}
-                                            </span>
-                                          </div>
-                                          {tk.description && (
-                                            <p className="text-[10px] text-slate-400 mt-1 line-clamp-1 leading-relaxed text-left">
-                                              {tk.description}
-                                            </p>
-                                          )}
-                                        </div>
+                                <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                      <thead>
+                                        <tr className="bg-slate-100/70 border-b border-slate-200 text-[10px] text-slate-500 uppercase tracking-wider font-extrabold">
+                                          <th className="px-4 py-3 w-5/12">Ação Regulatória / Atividade</th>
+                                          <th className="px-4 py-3 w-3/12">Entrega / Detalhes</th>
+                                          <th className="px-4 py-3 w-32 text-center">Progresso</th>
+                                          <th className="px-4 py-3 w-28 text-center">Status</th>
+                                          <th className="px-4 py-3 w-24 text-center">Link</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100 text-xs">
+                                        {associatedTasks.map(tk => {
+                                          const customTaskConfig = (agenda.agenda_tasks || []).find(it => Number(it.task_id) === tk.id);
+                                          const taskStatus = normalizeStatus(tk.status || customTaskConfig?.status);
+                                          const taskProgress = typeof tk.progress === "number" ? tk.progress : (taskStatus === "Concluída" ? 100 : 0);
+                                          const taskEntrega = customTaskConfig?.entrega || "";
+                                          const taskLink = customTaskConfig?.entrega_link || "";
 
-                                        <div className="pt-2 border-t border-slate-100 space-y-1.5 text-left">
-                                          <div className="flex flex-col">
-                                            <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Entrega / Detalhes:</span>
-                                            <span className="text-xs font-semibold text-slate-600">
-                                              {taskEntrega || "(Nenhuma entrega cadastrada)"}
-                                            </span>
-                                          </div>
-
-                                          {taskLink && (
-                                            <a
-                                              href={taskLink.startsWith("http") ? taskLink : `https://${taskLink}`}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors mt-1"
-                                            >
-                                              <ExternalLink size={12} />
-                                              Acessar link externo
-                                            </a>
-                                          )}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
+                                          return (
+                                            <tr key={tk.id} className="hover:bg-slate-50/50 transition-colors">
+                                              <td className="px-4 py-3 align-middle">
+                                                <span className="font-bold text-slate-800 block">{tk.title}</span>
+                                                {tk.description && (
+                                                  <span className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 block">
+                                                    {tk.description}
+                                                  </span>
+                                                )}
+                                              </td>
+                                              <td className="px-4 py-3 align-middle font-medium text-slate-600">
+                                                {taskEntrega ? (
+                                                  <span className="text-slate-700 font-semibold">{taskEntrega}</span>
+                                                ) : (
+                                                  <span className="text-slate-400 italic text-[11px]">Não informada</span>
+                                                )}
+                                              </td>
+                                              <td className="px-4 py-3 text-center align-middle whitespace-nowrap">
+                                                <div className="flex flex-col items-center gap-1 min-w-[100px] max-w-[120px] mx-auto">
+                                                  <div className="flex items-center justify-between w-full text-[10px] font-extrabold">
+                                                    <span className={taskProgress === 100 ? "text-emerald-600" : taskProgress >= 50 ? "text-blue-600" : taskProgress > 0 ? "text-indigo-600" : "text-slate-400"}>
+                                                      {taskProgress}%
+                                                    </span>
+                                                  </div>
+                                                  <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden border border-slate-200/60">
+                                                    <div 
+                                                      className={`h-full rounded-full transition-all duration-500 ${
+                                                        taskProgress === 100 
+                                                          ? "bg-emerald-500" 
+                                                          : taskProgress >= 50 
+                                                          ? "bg-blue-500" 
+                                                          : taskProgress > 0 
+                                                          ? "bg-indigo-500" 
+                                                          : "bg-slate-300"
+                                                      }`}
+                                                      style={{ width: `${taskProgress}%` }}
+                                                    />
+                                                  </div>
+                                                </div>
+                                              </td>
+                                              <td className="px-4 py-3 text-center align-middle whitespace-nowrap">
+                                                <span
+                                                  className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider ${
+                                                    taskStatus === "Concluída"
+                                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                                      : taskStatus === "Em andamento"
+                                                      ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                                      : "bg-slate-100 text-slate-700 border border-slate-200"
+                                                  }`}
+                                                >
+                                                  {taskStatus}
+                                                </span>
+                                              </td>
+                                              <td className="px-4 py-3 text-center align-middle whitespace-nowrap">
+                                                {taskLink ? (
+                                                  <a
+                                                    href={taskLink.startsWith("http") ? taskLink : `https://${taskLink}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                                                    title="Acessar link externo"
+                                                  >
+                                                    <ExternalLink size={12} />
+                                                    <span>Acessar</span>
+                                                  </a>
+                                                ) : (
+                                                  <span className="text-slate-300 text-xs font-semibold">-</span>
+                                                )}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
                                 </div>
                               </div>
                             </td>
@@ -551,64 +609,64 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
                           const matchingTask = tasks.find(t => t.id === taskId);
                           if (!matchingTask) return null;
 
+                          const inheritedStatus = normalizeStatus(matchingTask.status);
                           const config = formAgendaTasks.find(it => Number(it.task_id) === taskId) || {
                             task_id: taskId,
-                            status: "Não Concluída",
+                            status: inheritedStatus,
                             entrega: "",
                             entrega_link: ""
                           };
 
                           return (
                             <div key={taskId} className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3 text-left">
-                              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
-                                <span className="text-xs font-bold text-slate-800 line-clamp-1">{matchingTask.title}</span>
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-bold text-slate-800 line-clamp-1">{matchingTask.title}</span>
+                                  <span
+                                    className={`inline-block px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider whitespace-nowrap ${
+                                      inheritedStatus === "Concluída"
+                                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                        : inheritedStatus === "Em andamento"
+                                        ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                        : "bg-slate-100 text-slate-700 border border-slate-200"
+                                    }`}
+                                  >
+                                    Status: {inheritedStatus} (Herdado da Atividade)
+                                  </span>
+                                </div>
                                 <button
                                   type="button"
                                   onClick={() => handleToggleTaskSelection(taskId)}
-                                  className="text-[9px] uppercase font-black text-red-500 hover:text-red-700 transition-colors"
+                                  className="text-[9px] uppercase font-black text-red-500 hover:text-red-700 transition-colors cursor-pointer"
                                 >
                                   Remover
                                 </button>
                               </div>
 
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                {/* Task Status selection */}
-                                <div>
-                                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</label>
-                                  <select
-                                    value={config.status}
-                                    onChange={(e) => handleUpdateTaskConfig(taskId, "status", e.target.value)}
-                                    className="w-full bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg px-2 py-1.5 outline-none focus:border-indigo-500 transition-all cursor-pointer"
-                                  >
-                                    <option value="Não Concluída">Não Concluída</option>
-                                    <option value="Prevista">Prevista</option>
-                                    <option value="Concluída">Concluída</option>
-                                  </select>
-                                </div>
-
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {/* Task Delivery details */}
-                                <div className="sm:col-span-2">
+                                <div>
                                   <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 text-left">Entrega / Meta do Item</label>
                                   <input
                                     type="text"
                                     value={config.entrega}
                                     onChange={(e) => handleUpdateTaskConfig(taskId, "entrega", e.target.value)}
                                     placeholder="Ex: Ofício de conclusão, relatório técnico..."
-                                    className="w-full bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg px-3 py-1.5 outline-none focus:border-indigo-500 transition-all"
+                                    className="w-full bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg px-3 py-2 outline-none focus:border-indigo-500 transition-all"
                                   />
                                 </div>
-                              </div>
 
-                              {/* Task External Link / Hiperlink */}
-                              <div>
-                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 text-left">Hiperlink do Arquivo da Entrega (Opcional)</label>
-                                <input
-                                  type="text"
-                                  value={config.entrega_link}
-                                  onChange={(e) => handleUpdateTaskConfig(taskId, "entrega_link", e.target.value)}
-                                  placeholder="Ex: https://drive.google.com/file/d/..."
-                                  className="w-full bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg px-3 py-1.5 outline-none focus:border-indigo-500 transition-all"
-                                />
+                                {/* Task External Link / Hiperlink */}
+                                <div>
+                                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 text-left">Hiperlink do Arquivo da Entrega (Opcional)</label>
+                                  <input
+                                    type="text"
+                                    value={config.entrega_link}
+                                    onChange={(e) => handleUpdateTaskConfig(taskId, "entrega_link", e.target.value)}
+                                    placeholder="Ex: https://drive.google.com/file/d/..."
+                                    className="w-full bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg px-3 py-2 outline-none focus:border-indigo-500 transition-all"
+                                  />
+                                </div>
                               </div>
                             </div>
                           );

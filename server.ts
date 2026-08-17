@@ -1332,157 +1332,6 @@ export async function startServer(isVercel = false) {
     }
   });
 
-  // Backup Endpoints and Cron Job setup
-  let driveBackupConfig = { folderId: "", accessToken: "" };
-
-  app.post("/api/backup/setup-drive", (req, res) => {
-    const { folderId, accessToken } = req.body;
-    driveBackupConfig.folderId = folderId;
-    driveBackupConfig.accessToken = accessToken;
-    res.json({ success: true, message: "Configuração do Google Drive atualizada para o backup diário." });
-  });
-
-  app.get("/api/backup/export", async (req, res) => {
-    try {
-      const pool = getDbPool();
-      const client = await pool.connect();
-      try {
-        const tablesRes = await client.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`);
-        const backup: any = { timestamp: new Date().toISOString(), tables: {} };
-        for (const row of tablesRes.rows) {
-          const table = row.table_name;
-          const dataRes = await client.query(`SELECT * FROM ${table}`);
-          backup.tables[table] = dataRes.rows;
-        }
-        res.json({ success: true, backup });
-      } finally {
-        client.release();
-      }
-    } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  app.post("/api/backup/import", async (req, res) => {
-    try {
-      const { backup } = req.body;
-      if (!backup || !backup.tables) {
-        return res.status(400).json({ error: "Formato de backup inválido" });
-      }
-      const pool = getDbPool();
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        await client.query("SET session_replica_role = 'replica'");
-        
-        const tables = Object.keys(backup.tables);
-        for (const table of tables) {
-          await client.query(`TRUNCATE TABLE ${table} CASCADE`);
-        }
-        
-        for (const table of tables) {
-          const rows = backup.tables[table];
-          if (rows.length === 0) continue;
-          
-          const cols = Object.keys(rows[0]);
-          for (const row of rows) {
-            const vals = cols.map(c => row[c]);
-            const placeholders = cols.map((_, i) => `$${i + 1}`).join(",");
-            await client.query(`INSERT INTO ${table} (${cols.join(',')}) VALUES (${placeholders})`, vals);
-          }
-        }
-        
-        await client.query("SET session_replica_role = 'origin'");
-        await client.query("COMMIT");
-        res.json({ success: true, message: "Backup restaurado com sucesso!" });
-      } catch (error: any) {
-        await client.query("ROLLBACK");
-        await client.query("SET session_replica_role = 'origin'");
-        throw error;
-      } finally {
-        client.release();
-      }
-    } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  async function performDriveBackup() {
-    console.log("Iniciando rotina de backup para o Google Drive...");
-    if (!driveBackupConfig.folderId || !driveBackupConfig.accessToken) {
-      console.error("Backup cancelado: Configuração do Google Drive não definida ou token expirado.");
-      return { success: false, error: "Configuração do Google Drive não definida ou token expirado." };
-    }
-    try {
-      const pool = getDbPool();
-      const client = await pool.connect();
-      let backup: any = { timestamp: new Date().toISOString(), tables: {} };
-      try {
-        const tablesRes = await client.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`);
-        for (const row of tablesRes.rows) {
-          const table = row.table_name;
-          const dataRes = await client.query(`SELECT * FROM ${table}`);
-          backup.tables[table] = dataRes.rows;
-        }
-      } finally {
-        client.release();
-      }
-      
-      const fileContent = JSON.stringify(backup, null, 2);
-      const fileName = `backup_adasa_${new Date().toISOString().split('T')[0]}.json`;
-      
-      const metadata = {
-        name: fileName,
-        parents: [driveBackupConfig.folderId],
-      };
-      
-      const boundary = 'foo_bar_baz';
-      let body = `--${boundary}\r\n`;
-      body += 'Content-Type: application/json; charset=UTF-8\r\n\r\n';
-      body += JSON.stringify(metadata) + '\r\n';
-      body += `--${boundary}\r\n`;
-      body += 'Content-Type: application/json\r\n\r\n';
-      body += fileContent + '\r\n';
-      body += `--${boundary}--`;
-
-      const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
-        method: "POST",
-        headers: {
-           Authorization: `Bearer ${driveBackupConfig.accessToken}`,
-           "Content-Type": `multipart/related; boundary=${boundary}`,
-           "Content-Length": Buffer.byteLength(body, 'utf8').toString()
-        },
-        body: body
-      });
-      
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("Erro no upload do backup ao drive:", errorText);
-        return { success: false, error: errorText };
-      } else {
-        const successData = await res.json();
-        console.log("Backup enviado com sucesso ao Google Drive:", successData);
-        return { success: true, data: successData };
-      }
-    } catch(err: any) {
-      console.error("Erro na rotina de backup diário:", err);
-      return { success: false, error: err.message };
-    }
-  }
-
-  cron.schedule('0 0 * * *', async () => {
-    await performDriveBackup();
-  });
-
-  app.post("/api/backup/trigger-drive", async (req, res) => {
-    const result = await performDriveBackup();
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(500).json(result);
-    }
-  });
-
   // API to test Database connection
   app.get("/api/db-status", async (req, res) => {
     try {
@@ -2641,6 +2490,48 @@ export async function startServer(isVercel = false) {
   });
 
   // REST endpoints for responsibles
+  app.get("/api/responsibles", async (req, res) => {
+    try {
+      const pool = getDbPool();
+      const dbResponsibles = await pool.query("SELECT * FROM pl_responsibles ORDER BY id ASC");
+      const dbRespAreas = await pool.query("SELECT * FROM pl_responsible_areas");
+      const responsibleAreasMap: Record<number, number[]> = {};
+      dbRespAreas.rows.forEach(r => {
+        const rid = Number(r.responsible_id);
+        const aid = Number(r.area_id);
+        if (!responsibleAreasMap[rid]) responsibleAreasMap[rid] = [];
+        responsibleAreasMap[rid].push(aid);
+      });
+      const data = dbResponsibles.rows.map(r => ({
+        id: Number(r.id),
+        name: r.name,
+        email: r.email,
+        role: r.role,
+        userId: r.user_id,
+        areaIds: responsibleAreasMap[Number(r.id)] || [],
+        createdAt: r.created_at,
+        createdBy: r.created_by,
+        updatedAt: r.updated_at,
+        updatedBy: r.updated_by
+      }));
+      res.json({ success: true, data });
+    } catch (error: any) {
+      console.error("Erro ao buscar responsáveis:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/areas", async (req, res) => {
+    try {
+      const pool = getDbPool();
+      const dbAreas = await pool.query("SELECT * FROM pl_areas ORDER BY id ASC");
+      res.json({ success: true, data: dbAreas.rows.map(a => ({ id: Number(a.id), name: a.name, description: a.description })) });
+    } catch (error: any) {
+      console.error("Erro ao buscar áreas:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   app.post("/api/responsibles", async (req, res) => {
     try {
       const { name, email, role, areaIds, updatedBy, createdBy } = req.body;
@@ -3106,11 +2997,12 @@ export async function startServer(isVercel = false) {
                COALESCE(
                  (SELECT json_agg(json_build_object(
                     'task_id', at.task_id,
-                    'status', at.status,
+                    'status', COALESCE(pt.status, at.status, 'Não iniciada'),
                     'entrega', at.entrega,
                     'entrega_link', at.entrega_link
                   )) 
                   FROM re_agenda_tasks at 
+                  LEFT JOIN pl_tasks pt ON pt.id = at.task_id
                   WHERE at.agenda_id = a.id AND at.task_id IS NOT NULL), 
                  '[]'::json
                ) as agenda_tasks,

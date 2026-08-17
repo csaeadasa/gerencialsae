@@ -12,7 +12,7 @@ export type ModuleId =
   | 'reg_cadastro' | 'reg_painel' | 'reg_agenda' | 'reg_agenda_painel'
   | 'pub_cadastro' | 'pub_painel'
   | 'fisc_operational' | 'recurso_painel'
-  | 'dashboard' | 'geo' | 'users' | 'backup';
+  | 'dashboard' | 'geo' | 'users';
 
 export interface RadarComment {
   id: string;

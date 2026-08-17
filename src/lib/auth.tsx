@@ -31,7 +31,6 @@ export const DEFAULT_ROLES: UserRole[] = [
       { moduleId: 'dashboard', actions: ['view'] },
       { moduleId: 'geo', actions: ['view'] },
       { moduleId: 'users', actions: ['view', 'create', 'edit', 'delete'] },
-      { moduleId: 'backup', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'fisc_operational', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'recurso_painel', actions: ['view', 'create', 'edit', 'delete'] },
     ]
@@ -99,7 +98,7 @@ interface AuthContextType {
   logout: () => void;
   checkPermission: (moduleId: ModuleId, action: ActionType) => boolean;
   hasRole: (roleId: string) => boolean;
-  addUser: (user: Omit<AppUser, 'id'>) => void;
+  addUser: (user: Omit<AppUser, 'id'>) => Promise<{ success: boolean; data?: AppUser; error?: string }>;
   updateUser: (id: string, updates: Partial<AppUser>) => void;
   deleteUser: (id: string) => void;
   addRole: (role: Omit<UserRole, 'id'>) => void;
@@ -181,7 +180,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return currentUser?.roleId === roleId;
   };
 
-  const addUser = async (userData: Omit<AppUser, 'id'>) => {
+  const addUser = async (userData: Omit<AppUser, 'id'>): Promise<{ success: boolean; data?: AppUser; error?: string }> => {
     try {
       const response = await fetch("/api/users", {
         method: "POST",
@@ -191,15 +190,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const data = await response.json();
       if (data.success && data.data) {
         await fetchUsers();
+        return { success: true, data: data.data };
       } else {
         // Fallback local
         const newUser = { ...userData, id: Date.now().toString() };
         setUsers(prev => [...prev, newUser]);
+        return { success: true, data: newUser };
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error creating database user, falling back:", err);
       const newUser = { ...userData, id: Date.now().toString() };
       setUsers(prev => [...prev, newUser]);
+      return { success: true, data: newUser };
     }
   };
 

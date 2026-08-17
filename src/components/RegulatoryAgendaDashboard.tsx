@@ -40,7 +40,8 @@ import {
   CalendarDays,
   Layers,
   Activity,
-  FolderKanban
+  FolderKanban,
+  Info
 } from "lucide-react";
 
 interface Task {
@@ -163,8 +164,8 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
 
   const statusList = [
     "TODOS",
-    "Não Concluída",
-    "Prevista",
+    "Não iniciada",
+    "Em andamento",
     "Concluída"
   ];
 
@@ -462,8 +463,9 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
   const stats = useMemo(() => {
     let totalItems = 0;
     let completedItems = 0;
-    let previstaItems = 0;
+    let inProgressItems = 0;
     let pendingItems = 0;
+    let totalProgressSum = 0;
 
     agendas.forEach(agenda => {
       if (filterAgenda !== "TODOS" && agenda.nome !== filterAgenda) return;
@@ -471,16 +473,22 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
 
       const items = agenda.agenda_tasks || [];
       items.forEach(it => {
+        const taskObj = taskMap[it.task_id];
+        const effectiveStatus = normalizeStatus(taskObj?.status || it.status);
+        const prog = typeof taskObj?.progress === "number" ? taskObj.progress : (effectiveStatus === "Concluída" ? 100 : 0);
         totalItems++;
-        if (it.status === "Concluída") {
+        totalProgressSum += prog;
+        if (effectiveStatus === "Concluída") {
           completedItems++;
-        } else if (it.status === "Prevista") {
-          previstaItems++;
+        } else if (effectiveStatus === "Em andamento") {
+          inProgressItems++;
         } else {
           pendingItems++;
         }
       });
     });
+
+    const averageProgressPct = totalItems > 0 ? Math.round(totalProgressSum / totalItems) : 0;
 
     return {
       totalAgendas: agendas.filter(agenda => {
@@ -490,31 +498,32 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
       }).length,
       totalItems,
       completedItems,
-      previstaItems,
+      inProgressItems,
       pendingItems,
+      averageProgressPct,
       completedPct: totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0,
-      previstaPct: totalItems > 0 ? Math.round((previstaItems / totalItems) * 100) : 0,
+      inProgressPct: totalItems > 0 ? Math.round((inProgressItems / totalItems) * 100) : 0,
       pendingPct: totalItems > 0 ? Math.round((pendingItems / totalItems) * 100) : 0
     };
-  }, [agendas, filterAgenda, filterTema]);
+  }, [agendas, taskMap, filterAgenda, filterTema]);
 
   // Chart data: Distribution of items status
   const pieChartData = useMemo(() => {
     return [
       { name: "Concluída", value: stats.completedItems, color: "#10b981" },
-      { name: "Prevista", value: stats.previstaItems, color: "#0ea5e9" },
-      { name: "Não Concluída", value: stats.pendingItems, color: "#f43f5e" }
+      { name: "Em andamento", value: stats.inProgressItems, color: "#3b82f6" },
+      { name: "Não iniciada", value: stats.pendingItems, color: "#94a3b8" }
     ].filter(i => i.value > 0);
   }, [stats]);
 
   // Chart data: Themes performance (stacked bars)
   const themeChartData = useMemo(() => {
-    const dataMap: Record<string, { concluida: number; prevista: number; naoConcluida: number }> = {};
+    const dataMap: Record<string, { concluida: number; emAndamento: number; naoIniciada: number }> = {};
     
     // Initialize
     themeList.forEach(theme => {
       if (theme !== "TODOS") {
-        dataMap[theme] = { concluida: 0, prevista: 0, naoConcluida: 0 };
+        dataMap[theme] = { concluida: 0, emAndamento: 0, naoIniciada: 0 };
       }
     });
 
@@ -523,16 +532,18 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
 
       const theme = agenda.tema;
       if (!dataMap[theme]) {
-        dataMap[theme] = { concluida: 0, prevista: 0, naoConcluida: 0 };
+        dataMap[theme] = { concluida: 0, emAndamento: 0, naoIniciada: 0 };
       }
       const items = agenda.agenda_tasks || [];
       items.forEach(it => {
-        if (it.status === "Concluída") {
+        const taskObj = taskMap[it.task_id];
+        const effectiveStatus = normalizeStatus(taskObj?.status || it.status);
+        if (effectiveStatus === "Concluída") {
           dataMap[theme].concluida++;
-        } else if (it.status === "Prevista") {
-          dataMap[theme].prevista++;
+        } else if (effectiveStatus === "Em andamento") {
+          dataMap[theme].emAndamento++;
         } else {
-          dataMap[theme].naoConcluida++;
+          dataMap[theme].naoIniciada++;
         }
       });
     });
@@ -549,14 +560,14 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
         tema: displayName,
         fullTemaName: key,
         "Concluída": dataMap[key].concluida,
-        "Prevista": dataMap[key].prevista,
-        "Não Concluída": dataMap[key].naoConcluida
+        "Em andamento": dataMap[key].emAndamento,
+        "Não iniciada": dataMap[key].naoIniciada
       };
     }).filter(item => {
       if (filterTema !== "TODOS" && item.fullTemaName !== filterTema) return false;
       return true;
     });
-  }, [agendas, themeList, filterAgenda, filterTema]);
+  }, [agendas, themeList, taskMap, filterAgenda, filterTema]);
 
   // Distinct agenda names
   const agendaNames = useMemo(() => {
@@ -580,6 +591,7 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
       taskId: number;
       taskTitle: string;
       status: string;
+      progress: number;
       entrega: string;
       entregaLink?: string;
       startDate?: string;
@@ -591,6 +603,8 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
       agendaTasks.forEach(it => {
         const taskObj = taskMap[it.task_id];
         const taskTitle = taskObj ? taskObj.title : `Atividade ID: ${it.task_id}`;
+        const effectiveStatus = normalizeStatus(taskObj?.status || it.status);
+        const prog = typeof taskObj?.progress === "number" ? taskObj.progress : (effectiveStatus === "Concluída" ? 100 : 0);
         
         // Apply filters
         const matchesSearch = searchText === "" || 
@@ -599,7 +613,7 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
           (it.entrega || "").toLowerCase().includes(searchText.toLowerCase());
 
         const matchesTema = filterTema === "TODOS" || agenda.tema === filterTema;
-        const matchesStatus = filterStatus === "TODOS" || it.status === filterStatus;
+        const matchesStatus = filterStatus === "TODOS" || effectiveStatus === filterStatus;
         const matchesAgenda = filterAgenda === "TODOS" || agenda.nome === filterAgenda;
 
         if (matchesSearch && matchesTema && matchesStatus && matchesAgenda) {
@@ -609,7 +623,8 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
             agendaTema: agenda.tema,
             taskId: it.task_id,
             taskTitle: taskTitle,
-            status: it.status,
+            status: effectiveStatus,
+            progress: prog,
             entrega: it.entrega,
             entregaLink: it.entrega_link,
             startDate: taskObj?.startDate,
@@ -768,28 +783,64 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
         </div>
       </div>
 
-      {/* Middle broad banner - Estoque Regulatório Total */}
-      <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 hover:translate-y-[-2px] transition-all">
-        <div className="relative z-10 flex items-center gap-4">
-          <div className="w-14 h-14 bg-sky-50 border border-sky-100 rounded-2xl flex items-center justify-center shrink-0">
-            <FileText size={28} className="text-adasa-dark" />
+      {/* Middle broad banner - Estoque Regulatório Total & Progresso Geral */}
+      <div className="bg-white p-6 md:p-7 rounded-3xl border border-slate-200 shadow-sm flex flex-col gap-5 hover:translate-y-[-2px] transition-all">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-sky-50 border border-sky-100 rounded-2xl flex items-center justify-center shrink-0">
+              <FileText size={28} className="text-adasa-dark" />
+            </div>
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">
+                TOTAL DE ITENS REGULATÓRIOS
+              </span>
+              <div className="flex items-baseline gap-3 mt-1">
+                <h3 className="text-3xl md:text-4xl font-black text-slate-800 leading-none">
+                  {stats.totalItems}
+                </h3>
+                <span className="text-xs text-slate-400 font-bold">atividades monitoradas</span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium mt-1">
+                Metas e atividades cadastradas e monitoradas pelas superintendências
+              </p>
+            </div>
           </div>
-          <div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">
-              TOTAL DE ITENS REGULATÓRIOS
-            </span>
-            <h3 className="text-4xl md:text-5xl font-black text-slate-800 leading-none mt-2">
-              {stats.totalItems}
-            </h3>
-            <p className="text-xs text-slate-500 font-bold mt-1">
-              Metas e atividades cadastradas e monitoradas pelas superintendências
-            </p>
+          <div className="shrink-0 self-start md:self-center">
+            <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 text-slate-700 rounded-full text-xs font-extrabold leading-none select-none shadow-3xs">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+              Base de Dados Integrada em Tempo Real
+            </div>
           </div>
         </div>
-        <div className="relative z-10 shrink-0 self-start md:self-center">
-          <div className="flex items-center gap-2 px-5 py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-full text-xs font-extrabold leading-none select-none shadow-sm">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-            Base de Dados Integrada em Tempo Real
+
+        {/* Highlighted Progress Bar Card matching user design */}
+        <div className="w-full bg-slate-50/60 border border-slate-200/80 rounded-2xl p-4 md:p-5 flex flex-col gap-3 shadow-3xs">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                <span>PERCENTUAL DE CONCLUSÃO</span>
+                <Info size={13} className="text-slate-400 hover:text-slate-600 transition-colors cursor-help" title="Média ponderada do progresso de todas as atividades e metas cadastradas" />
+              </div>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+                  {stats.averageProgressPct}%
+                </span>
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                  MÉDIA
+                </span>
+              </div>
+            </div>
+            <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200/70 flex items-center justify-center text-emerald-600 shadow-3xs">
+              <TrendingUp size={20} className="stroke-[2.5px]" />
+            </div>
+          </div>
+
+          {/* Horizontal Progress Bar */}
+          <div className="w-full bg-slate-200/70 h-2.5 rounded-full overflow-hidden">
+            <div 
+              className="h-full rounded-full transition-all duration-700 bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500"
+              style={{ width: `${stats.averageProgressPct}%` }}
+            />
           </div>
         </div>
       </div>
@@ -804,35 +855,35 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
           <div className="flex flex-col">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider leading-none">CONCLUÍDAS</span>
             <span className="text-3xl font-black text-slate-800 tracking-tight mt-1">{stats.completedItems}</span>
-            <p className="text-[10px] text-emerald-600 font-bold mt-0.5">{stats.completedPct}% das metas concluídas</p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-0.5">{stats.averageProgressPct}% de progresso médio geral</p>
           </div>
         </div>
 
-        {/* KPI 2: Previstas (Orange) */}
+        {/* KPI 2: Em andamento (Blue) */}
         <div className="bg-white border border-slate-200 p-5 rounded-3xl flex items-center gap-4 shadow-sm hover:translate-y-[-2px] transition-all">
-          <div className="w-12 h-12 bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/15 rounded-2xl flex items-center justify-center shrink-0">
+          <div className="w-12 h-12 bg-blue-500/10 text-blue-600 border border-blue-500/15 rounded-2xl flex items-center justify-center shrink-0">
             <AlertTriangle size={22} className="stroke-[2.5px]" />
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider leading-none">PREVISTAS</span>
-            <span className="text-3xl font-black text-slate-800 tracking-tight mt-1">{stats.previstaItems}</span>
-            <p className="text-[10px] text-amber-600 font-bold mt-0.5">Fases normativas agendadas</p>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider leading-none">EM ANDAMENTO</span>
+            <span className="text-3xl font-black text-slate-800 tracking-tight mt-1">{stats.inProgressItems}</span>
+            <p className="text-[10px] text-blue-600 font-bold mt-0.5">{stats.inProgressPct}% das metas em execução</p>
           </div>
         </div>
 
-        {/* KPI 3: Não Concluídas (Pink/Red) */}
+        {/* KPI 3: Não Iniciadas (Slate) */}
         <div className="bg-white border border-slate-200 p-5 rounded-3xl flex items-center gap-4 shadow-sm hover:translate-y-[-2px] transition-all">
-          <div className="w-12 h-12 bg-rose-500/10 text-rose-600 border border-rose-550/15 rounded-2xl flex items-center justify-center shrink-0">
+          <div className="w-12 h-12 bg-slate-500/10 text-slate-600 border border-slate-500/15 rounded-2xl flex items-center justify-center shrink-0">
             <Clock size={22} />
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider leading-none">NÃO CONCLUÍDAS</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider leading-none">NÃO INICIADAS</span>
             <span className="text-3xl font-black text-slate-800 tracking-tight mt-1">{stats.pendingItems}</span>
-            <p className="text-[10px] text-rose-500 font-bold mt-0.5">Demandas remanescentes</p>
+            <p className="text-[10px] text-slate-500 font-bold mt-0.5">{stats.pendingPct}% aguardando início</p>
           </div>
         </div>
 
-        {/* KPI 4: Agendas Ativas (Blue) */}
+        {/* KPI 4: Agendas Ativas (Sky) */}
         <div className="bg-white border border-slate-200 p-5 rounded-3xl flex items-center gap-4 shadow-sm hover:translate-y-[-2px] transition-all">
           <div className="w-12 h-12 bg-sky-500/10 text-sky-600 border border-sky-550/15 rounded-2xl flex items-center justify-center shrink-0">
             <BookOpen size={20} />
@@ -919,7 +970,7 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
           </div>
 
           <div className="flex-1 flex flex-col justify-end">
-            {/* Custom Legend to match screenshot */}
+            {/* Custom Legend to match categories */}
             <div className="flex flex-wrap items-center justify-center gap-4 text-[10px] font-black uppercase text-slate-505 mb-4 select-none">
               <span className="text-slate-400">Situação:</span>
               <div className="flex items-center gap-1.5">
@@ -927,12 +978,12 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
                 <span>Concluída</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#0ea5e9]" />
-                <span>Prevista</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-[#3b82f6]" />
+                <span>Em andamento</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#f43f5e]" />
-                <span>Não Concluída</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-[#94a3b8]" />
+                <span>Não iniciada</span>
               </div>
             </div>
 
@@ -948,8 +999,8 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
                   <Tooltip 
                     contentStyle={{ border: 'none', borderRadius: '16px', background: '#0f172a', color: '#fff', fontSize: '11px' }}
                   />
-                  <Bar dataKey="Não Concluída" stackId="a" fill="#f43f5e" />
-                  <Bar dataKey="Prevista" stackId="a" fill="#0ea5e9" />
+                  <Bar dataKey="Não iniciada" stackId="a" fill="#94a3b8" />
+                  <Bar dataKey="Em andamento" stackId="a" fill="#3b82f6" />
                   <Bar dataKey="Concluída" stackId="a" fill="#10b981" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -986,9 +1037,15 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
                 filteredAgendasForTable.map(agenda => {
                   const items = agenda.agenda_tasks || [];
                   const total = items.length;
-                  const completed = items.filter(it => it.status === "Concluída").length;
-                  const previstas = items.filter(it => it.status === "Prevista").length;
-                  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                  const completed = items.filter(it => normalizeStatus(taskMap[it.task_id]?.status || it.status) === "Concluída").length;
+                  const inProgress = items.filter(it => normalizeStatus(taskMap[it.task_id]?.status || it.status) === "Em andamento").length;
+                  const totalProgress = items.reduce((sum, it) => {
+                    const taskObj = taskMap[it.task_id];
+                    const effectiveStatus = normalizeStatus(taskObj?.status || it.status);
+                    const prog = typeof taskObj?.progress === "number" ? taskObj.progress : (effectiveStatus === "Concluída" ? 100 : 0);
+                    return sum + prog;
+                  }, 0);
+                  const pct = total > 0 ? Math.round(totalProgress / total) : 0;
 
                   return (
                     <tr key={agenda.id} className="hover:bg-slate-50/50 transition-colors">
@@ -997,8 +1054,8 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
                       <td className="px-5 py-4 text-center font-black text-slate-600">{total}</td>
                       <td className="px-5 py-4 text-center font-bold text-adasa-dark">
                         {completed} de {total}
-                        {previstas > 0 && (
-                          <span className="text-[9px] text-adasa-mid block">({previstas} prevista{previstas > 1 ? 's' : ''})</span>
+                        {inProgress > 0 && (
+                          <span className="text-[9px] text-blue-600 block">({inProgress} em andamento)</span>
                         )}
                       </td>
                       <td className="px-5 py-4 w-44">
@@ -1043,16 +1100,18 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-150 text-slate-500 uppercase tracking-widest font-black text-[10px]">
                 <th className="px-5 py-3.5 pl-8">Item / Atividade Regulatória</th>
-                <th className="px-5 py-3.5">Meta / Tipo de Entrega</th>
-                <th className="px-5 py-3.5 text-center">Timeline</th>
+                <th className="px-5 py-3.5 text-center">Prazo</th>
                 <th className="px-5 py-3.5 text-center">Status</th>
+                <th className="px-5 py-3.5 text-center w-36">Progresso</th>
+                <th className="px-5 py-3.5 text-center">Linha do Tempo</th>
+                <th className="px-5 py-3.5">Entrega</th>
                 <th className="px-5 py-3.5 text-right">Documento</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {flattenedAndFilteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-10 text-slate-400 font-medium">
+                  <td colSpan={7} className="text-center py-10 text-slate-400 font-medium">
                     Nenhum item encontrado para as chaves de busca e filtros ativos.
                   </td>
                 </tr>
@@ -1065,7 +1124,7 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
                         onClick={() => toggleAgendaCollapse(agendaNome)}
                         className="bg-blue-50/20 border-y border-blue-100/30 cursor-pointer hover:bg-slate-100/60 select-none transition-all"
                       >
-                        <td colSpan={5} className="px-5 py-3 font-black text-adasa-dark text-[11px] uppercase tracking-wider bg-slate-50/30">
+                        <td colSpan={7} className="px-5 py-3 font-black text-adasa-dark text-[11px] uppercase tracking-wider bg-slate-50/30">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <BookOpen size={13} className="text-adasa-mid" />
@@ -1087,8 +1146,50 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
                             <td className="px-5 py-4 font-bold text-slate-800 text-[13px] max-w-xs whitespace-normal pl-8">
                               {item.taskTitle}
                             </td>
-                            <td className="px-5 py-4 text-slate-600 font-medium whitespace-pre-wrap max-w-xs text-left">
-                              {item.entrega || <span className="text-slate-350 italic">Sem detalhamento de meta</span>}
+                            <td className="px-5 py-4 text-center whitespace-nowrap">
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-700 text-xs font-semibold">
+                                <CalendarRange size={13} className="text-slate-400 shrink-0" />
+                                <span>
+                                  {item.startDate ? new Date(item.startDate + (item.startDate.includes('T') ? '' : 'T12:00:00')).toLocaleDateString('pt-BR') : '-'}
+                                  <span className="mx-1 text-slate-300 font-normal">até</span>
+                                  {item.endDate ? new Date(item.endDate + (item.endDate.includes('T') ? '' : 'T12:00:00')).toLocaleDateString('pt-BR') : '-'}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 text-center whitespace-nowrap">
+                              <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                                item.status === "Concluída" 
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
+                                  : item.status === "Em andamento"
+                                  ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                  : "bg-slate-100 text-slate-700 border border-slate-200"
+                              }`}>
+                                {item.status}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4 text-center whitespace-nowrap w-36">
+                              <div className="flex flex-col items-center gap-1.5 min-w-[120px]">
+                                <div className="flex items-center justify-between w-full text-[10px] font-extrabold">
+                                  <span className="text-slate-400 uppercase tracking-widest text-[9px]">Evolução</span>
+                                  <span className={item.progress === 100 ? "text-emerald-600 font-black" : item.progress >= 50 ? "text-blue-600 font-black" : item.progress > 0 ? "text-indigo-600 font-black" : "text-slate-400 font-bold"}>
+                                    {item.progress}%
+                                  </span>
+                                </div>
+                                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200/60">
+                                  <div 
+                                    className={`h-full rounded-full transition-all duration-500 ${
+                                      item.progress === 100 
+                                        ? "bg-emerald-500" 
+                                        : item.progress >= 50 
+                                        ? "bg-blue-500" 
+                                        : item.progress > 0 
+                                        ? "bg-indigo-500" 
+                                        : "bg-slate-300"
+                                    }`}
+                                    style={{ width: `${item.progress}%` }}
+                                  />
+                                </div>
+                              </div>
                             </td>
                             <td className="px-5 py-4 text-center whitespace-nowrap">
                               <button
@@ -1097,32 +1198,15 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
                                   setTimelineTaskId(item.taskId);
                                   setTimelineModalTab("timeline");
                                 }}
-                                className="group/btn inline-flex flex-col items-center gap-1.5 px-3.5 py-2.5 rounded-2xl border border-slate-200 hover:border-[#415bcb]/30 bg-white hover:bg-indigo-50/10 shadow-3xs hover:shadow-2xs transition-all duration-200 cursor-pointer min-w-[170px]"
-                                title="Clique para ver a Linha do Tempo e Evolução detalhada"
+                                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-700 shadow-xs transition-all cursor-pointer font-bold text-xs group"
+                                title="Clique para visualizar a Linha do Tempo e Evolução"
                               >
-                                <div className="flex items-center gap-1.5">
-                                  <CalendarRange size={13} className="text-[#415bcb] group-hover/btn:text-indigo-600 transition-colors shrink-0" />
-                                  <span className="text-slate-650 text-[11px] font-bold group-hover/btn:text-indigo-600 transition-colors">
-                                    {item.startDate ? new Date(item.startDate + (item.startDate.includes('T') ? '' : 'T12:00:00')).toLocaleDateString('pt-BR') : '-'}
-                                    <span className="mx-1.5 font-normal text-slate-300">até</span>
-                                    {item.endDate ? new Date(item.endDate + (item.endDate.includes('T') ? '' : 'T12:00:00')).toLocaleDateString('pt-BR') : '-'}
-                                  </span>
-                                </div>
-                                <span className="text-[9px] font-black tracking-widest text-[#415bcb] uppercase opacity-0 group-hover/btn:opacity-100 transition-all duration-200 leading-none h-0 group-hover/btn:h-auto overflow-hidden">
-                                  Ver Linha do Tempo
-                                </span>
+                                <Activity size={14} className="text-slate-600 group-hover:text-indigo-600 transition-colors" />
+                                <span className="group-hover:text-indigo-600 transition-colors">Timeline</span>
                               </button>
                             </td>
-                            <td className="px-5 py-4 text-center whitespace-nowrap">
-                              <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-                                item.status === "Concluída" 
-                                  ? "bg-emerald-50 text-adasa-green border border-emerald-200" 
-                                  : item.status === "Prevista"
-                                  ? "bg-blue-50 text-adasa-mid border border-blue-200"
-                                  : "bg-rose-50 text-rose-700 border border-rose-200"
-                              }`}>
-                                {item.status}
-                              </span>
+                            <td className="px-5 py-4 text-slate-600 font-medium whitespace-pre-wrap max-w-xs text-left">
+                              {item.entrega || <span className="text-slate-350 italic">Sem detalhamento de entrega</span>}
                             </td>
                             <td className="px-5 py-4 text-right">
                               {item.entregaLink ? (
