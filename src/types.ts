@@ -126,14 +126,29 @@ export interface OperationalAdjustment {
   linkedAdjustmentId?: number;
 }
 
+export const WATER_BALANCE_ETAPAS = [
+  "Criado",
+  "Entregue",
+  "Recebido",
+  "Validado",
+  "Finalizado"
+] as const;
+
+export type WaterBalanceEtapa = typeof WATER_BALANCE_ETAPAS[number];
+
 export interface WaterBalance {
   id: number;
   description: string;
-  responsible: string;
-  deliveryDate: string;
-  receivedBy: string;
-  receiptDate: string;
-  status: 'Validado' | 'Pendente';
+  responsible?: string;
+  deliveryDate?: string;
+  receivedBy?: string;
+  receiptDate?: string;
+  status?: 'Validado' | 'Pendente' | string;
+  etapa?: WaterBalanceEtapa | string;
+  datasEtapas?: Record<string, string>;
+  responsaveisEtapas?: Record<string, string>;
+  createdAt?: string;
+  createdBy?: string;
 }
 
 export interface CalculationResult extends DemandEntry {

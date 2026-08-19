@@ -4223,8 +4223,23 @@ export function PlanningTab({
               </div>
             </div>
 
-            {/* Row 3: Status, Situation, Priority, Programmed and Tipo */}
+            {/* Row 3: Tipo, Status, Situation, Priority and Programmed */}
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Tarefa</span>
+                <select
+                  value={taskTypeFilter}
+                  onChange={(e) => setTaskTypeFilter(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-600 bg-white text-slate-700 font-bold"
+                >
+                  <option value="all">Todos os Tipos</option>
+                  <option value="default">Padrão</option>
+                  <option value="fiscalizacao">Fiscalização</option>
+                  <option value="demanda_ouvidoria">Demanda Ouvidoria</option>
+                  <option value="recurso_revisao">Recurso de Revisão</option>
+                </select>
+              </div>
+
               <div className="flex flex-col gap-1.5">
                 <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🚦 Status</span>
                 <select
@@ -4277,21 +4292,6 @@ export function PlanningTab({
                   <option value="all">Todas</option>
                   <option value="true">Programadas</option>
                   <option value="false">Não programadas</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5 border-l border-slate-100 pl-4">
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Tarefa</span>
-                <select
-                  value={taskTypeFilter}
-                  onChange={(e) => setTaskTypeFilter(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-600 bg-white text-slate-700 font-bold"
-                >
-                  <option value="all">Todos os Tipos</option>
-                  <option value="default">Padrão</option>
-                  <option value="fiscalizacao">Fiscalização</option>
-                  <option value="demanda_ouvidoria">Demanda Ouvidoria</option>
-                  <option value="recurso_revisao">Recurso de Revisão</option>
                 </select>
               </div>
             </div>
@@ -7226,7 +7226,7 @@ export function PlanningTab({
             {isTasksFiltersExpanded && (
               isMyTasksSelected ? (
                 <div className="bg-slate-50/60 rounded-3xl border border-slate-200/60 p-5 space-y-5 animate-in slide-in-from-top-4 fade-in duration-300 mt-4">
-                  {/* Row 1: Plan, Status, Situation, Task Type */}
+                  {/* Row 1: Plan, Task Type, Status, Situation */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {/* Plan */}
                     <div className="flex flex-col gap-1.5">
@@ -7244,6 +7244,22 @@ export function PlanningTab({
                               {p.name}
                             </option>
                           ))}
+                      </select>
+                    </div>
+
+                    {/* Tipo de Tarefa */}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Tarefa</span>
+                      <select
+                        value={taskTypeFilter}
+                        onChange={(e) => setTaskTypeFilter(e.target.value)}
+                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
+                      >
+                        <option value="all">Todos os Tipos</option>
+                        <option value="default">PADRÃO</option>
+                        <option value="fiscalizacao">FISCALIZAÇÃO</option>
+                        <option value="demanda_ouvidoria">DEMANDA OUVIDORIA</option>
+                        <option value="recurso_revisao">RECURSO DE REVISÃO</option>
                       </select>
                     </div>
 
@@ -7274,22 +7290,6 @@ export function PlanningTab({
                         <option value="No Prazo">NO PRAZO</option>
                         <option value="Crítica">CRÍTICA</option>
                         <option value="Atrasada">ATRASADA</option>
-                      </select>
-                    </div>
-
-                    {/* Tipo de Tarefa */}
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Tarefa</span>
-                      <select
-                        value={taskTypeFilter}
-                        onChange={(e) => setTaskTypeFilter(e.target.value)}
-                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
-                      >
-                        <option value="all">Todos os Tipos</option>
-                        <option value="default">PADRÃO</option>
-                        <option value="fiscalizacao">FISCALIZAÇÃO</option>
-                        <option value="demanda_ouvidoria">DEMANDA OUVIDORIA</option>
-                        <option value="recurso_revisao">RECURSO DE REVISÃO</option>
                       </select>
                     </div>
                   </div>
@@ -7491,8 +7491,23 @@ export function PlanningTab({
                 </div>
               </div>
 
-              {/* Row 3: Status, Situation, Priority, Classification and Tipo Select filters */}
+              {/* Row 3: Tipo, Status, Situation, Priority and Classification Select filters */}
               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Tarefa</span>
+                  <select
+                    value={taskTypeFilter}
+                    onChange={(e) => setTaskTypeFilter(e.target.value)}
+                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
+                  >
+                    <option value="all">Todos os Tipos</option>
+                    <option value="default">PADRÃO</option>
+                    <option value="fiscalizacao">FISCALIZAÇÃO</option>
+                    <option value="demanda_ouvidoria">DEMANDA OUVIDORIA</option>
+                    <option value="recurso_revisao">RECURSO DE REVISÃO</option>
+                  </select>
+                </div>
+
                 <div className="flex flex-col gap-1.5">
                   <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🚦 Status</span>
                   <select
@@ -7545,21 +7560,6 @@ export function PlanningTab({
                     <option value="all">Todas as Classificações</option>
                     <option value="true">PROGRAMADAS</option>
                     <option value="false">EXTRAORDINÁRIAS</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Tarefa</span>
-                  <select
-                    value={taskTypeFilter}
-                    onChange={(e) => setTaskTypeFilter(e.target.value)}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
-                  >
-                    <option value="all">Todos os Tipos</option>
-                    <option value="default">PADRÃO</option>
-                    <option value="fiscalizacao">FISCALIZAÇÃO</option>
-                    <option value="demanda_ouvidoria">DEMANDA OUVIDORIA</option>
-                    <option value="recurso_revisao">RECURSO DE REVISÃO</option>
                   </select>
                 </div>
               </div>

@@ -88,6 +88,9 @@ import {
   OperationalAdjustment,
   AdjustmentType,
   Task,
+  WaterBalance,
+  WATER_BALANCE_ETAPAS,
+  WaterBalanceEtapa,
 } from "./types";
 
 import { calculateDemand, formatNumber, formatInteger, cn } from "./lib/utils";
@@ -7145,7 +7148,7 @@ const renderSupplyTable = () => {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
-              className="flex flex-col gap-6 max-w-4xl"
+              className="flex flex-col gap-6 w-full"
             >
               <div className="bg-white rounded-[2rem] border border-slate-200 p-8 shadow-sm">
                 {manageSubTab === "list" && !editingRegionId && (
@@ -7159,14 +7162,17 @@ const renderSupplyTable = () => {
                         onClick={() => {
                           const maxWbId = waterBalances.length > 0 ? Math.max(...waterBalances.map(w => Number(w.id) || 0)) : 0;
                           const newId = maxWbId + 1;
+                          const today = new Date().toISOString().split('T')[0];
+                          const userName = currentUser?.name || "Administrador";
                           setWaterBalances([...waterBalances, {
                             id: newId,
                             description: `Novo Balanço Hídrico`,
-                            responsible: "",
-                            deliveryDate: "",
-                            receivedBy: "",
-                            receiptDate: "",
-                            status: "Pendente"
+                            etapa: "Criado",
+                            status: "Pendente",
+                            datasEtapas: { "Criado": today },
+                            responsaveisEtapas: { "Criado": userName },
+                            createdAt: today,
+                            createdBy: userName
                           }]);
                           setSelectedWaterBalanceId(newId);
                           setManageSubTab("balance");
@@ -7183,9 +7189,16 @@ const renderSupplyTable = () => {
                           <div className="flex items-center justify-between">
                             <div>
                               <h3 className="text-lg font-black text-slate-800">{wb.description || "Sem Descrição"}</h3>
-                              <p className="text-sm font-medium text-slate-500 mt-1">
-                                Responsável: {wb.responsible || "Não informado"} • Status: {wb.status}
-                              </p>
+                              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-50 text-[#1A3E8A] border border-blue-200/60">
+                                  Etapa: {wb.etapa || wb.status || "Criado"}
+                                </span>
+                                {(wb.createdBy || wb.responsible) && (
+                                  <span className="text-xs font-semibold text-slate-500">
+                                    • Responsável/Criador: <strong className="text-slate-700">{wb.createdBy || wb.responsible}</strong>
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             <div className="flex items-center gap-3">
                               <button
@@ -7450,75 +7463,265 @@ const renderSupplyTable = () => {
                   </div>
                 )}
 
-                {manageSubTab === "balance" && !editingRegionId && (
-                  <div className="space-y-6">
-                    <div className="flex justify-between items-center bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                      <div>
-                        <h2 className="text-xl font-black text-slate-800 tracking-tight">Detalhes do Balanço Hídrico</h2>
-                        <p className="text-sm font-medium text-slate-500 mt-1">Preencha as informações gerais referentes a este balanço.</p>
+                {manageSubTab === "balance" && !editingRegionId && (() => {
+                  const currentWbStage: WaterBalanceEtapa = (activeBalance?.etapa as WaterBalanceEtapa) || (activeBalance?.status === "Validado" ? "Validado" : "Criado");
+                  const activeWbIndex = WATER_BALANCE_ETAPAS.indexOf(currentWbStage) === -1 ? 0 : WATER_BALANCE_ETAPAS.indexOf(currentWbStage);
+
+                  const getWbStageDuration = (index: number) => {
+                    if (!activeBalance) return 0;
+                    const dates = activeBalance.datasEtapas || {};
+                    const stage = WATER_BALANCE_ETAPAS[index];
+                    if (stage === "Finalizado") return 0;
+                    const nextStage = WATER_BALANCE_ETAPAS[index + 1];
+                    
+                    if (!dates[stage]) return 0;
+                    
+                    const start = new Date(dates[stage]);
+                    const end = nextStage && dates[nextStage] ? new Date(dates[nextStage]) : new Date();
+                    
+                    const startMidnight = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                    const endMidnight = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+                    
+                    const diffTime = endMidnight.getTime() - startMidnight.getTime();
+                    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                    return Math.max(0, diffDays);
+                  };
+
+                  const handleWbStageChange = (newStage: WaterBalanceEtapa) => {
+                    if (!activeBalance) return;
+                    const currentStage = (activeBalance.etapa as WaterBalanceEtapa) || (activeBalance.status === "Validado" ? "Validado" : "Criado");
+                    const today = new Date().toISOString().split('T')[0];
+                    const userName = currentUser?.name || "Administrador";
+
+                    const updatedDates = { ...(activeBalance.datasEtapas || {}) };
+                    const updatedResponsaveis = { ...(activeBalance.responsaveisEtapas || {}) };
+
+                    // Ensure "Criado" date and creator
+                    if (!updatedDates["Criado"]) {
+                      updatedDates["Criado"] = activeBalance.createdAt || today;
+                    }
+                    if (!updatedResponsaveis["Criado"]) {
+                      updatedResponsaveis["Criado"] = activeBalance.createdBy || activeBalance.responsible || userName;
+                    }
+
+                    // Record responsible who finalized current stage
+                    if (currentStage && currentStage !== newStage) {
+                      updatedResponsaveis[currentStage] = userName;
+                    }
+
+                    // Set date for the new stage
+                    updatedDates[newStage] = today;
+
+                    // If new stage is Finalizado, record responsible as well
+                    if (newStage === "Finalizado") {
+                      updatedResponsaveis["Finalizado"] = userName;
+                    }
+
+                    // If skipping stages forward, ensure all prior stages have entry dates
+                    const newIndex = WATER_BALANCE_ETAPAS.indexOf(newStage);
+                    for (let i = 0; i <= newIndex; i++) {
+                      const stg = WATER_BALANCE_ETAPAS[i];
+                      if (!updatedDates[stg]) {
+                        updatedDates[stg] = today;
+                      }
+                    }
+
+                    updateActiveBalance({
+                      etapa: newStage,
+                      status: newStage === "Validado" || newStage === "Finalizado" ? "Validado" : "Pendente",
+                      datasEtapas: updatedDates,
+                      responsaveisEtapas: updatedResponsaveis
+                    });
+                  };
+
+                  return (
+                    <div className="space-y-6">
+                      {/* Box Detalhes do Balanço Hídrico */}
+                      <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                        <div>
+                          <h2 className="text-xl font-black text-slate-800 tracking-tight">Detalhes do Balanço Hídrico</h2>
+                          <p className="text-sm font-medium text-slate-500 mt-1">Preencha as informações gerais referentes a este balanço.</p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2 col-span-1 md:col-span-2">
-                        <label className="text-xs font-black text-slate-500 uppercase tracking-widest pl-2">Descrição</label>
-                        <input
-                          type="text"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-adasa-mid transition-all"
-                          placeholder="Ex: Balanço Hídrico 2024"
-                          value={activeBalance?.description || ""}
-                          onChange={(e) => updateActiveBalance({ description: e.target.value })}
-                        />
+
+                      {/* Campos do formulário: Descrição e Etapas */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-xs font-black text-slate-500 uppercase tracking-widest pl-2">Descrição</label>
+                          <input
+                            type="text"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-adasa-mid transition-all"
+                            placeholder="Ex: Balanço Hídrico 2026"
+                            value={activeBalance?.description || ""}
+                            onChange={(e) => updateActiveBalance({ description: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-xs font-black text-slate-500 uppercase tracking-widest pl-2">Etapas</label>
+                          <select
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-adasa-mid transition-all"
+                            value={currentWbStage}
+                            onChange={(e) => handleWbStageChange(e.target.value as WaterBalanceEtapa)}
+                          >
+                            {WATER_BALANCE_ETAPAS.map((stage) => (
+                              <option key={stage} value={stage}>
+                                {stage}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-black text-slate-500 uppercase tracking-widest pl-2">Responsável</label>
-                        <input
-                          type="text"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-adasa-mid transition-all"
-                          placeholder="Nome do responsável"
-                          value={activeBalance?.responsible || ""}
-                          onChange={(e) => updateActiveBalance({ responsible: e.target.value })}
-                        />
+
+                      {/* Horizontal Process Flow Timeline - Mesmas cores e modelo de FiscalizacaoEditor */}
+                      <div className="bg-slate-50/70 border border-slate-200/60 rounded-3xl p-4 sm:p-5 w-full">
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3.5">
+                          📍 Fluxo do Processo (Tempo de Permanência Exato)
+                        </div>
+                        <div className="w-full">
+                          <div className="flex items-center justify-between w-full relative">
+                            {WATER_BALANCE_ETAPAS.map((stage, index) => {
+                              const isActive = currentWbStage === stage;
+                              const isCompleted = activeWbIndex >= index;
+                              const isLineCompleted = activeWbIndex > index;
+                              const duration = getWbStageDuration(index);
+
+                              return (
+                                <React.Fragment key={stage}>
+                                  {/* Step Node */}
+                                  <div 
+                                    className="flex flex-col items-center relative group cursor-pointer z-10 shrink-0" 
+                                    onClick={() => handleWbStageChange(stage)}
+                                    title={`Mudar para: ${stage}`}
+                                  >
+                                    <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-black transition-all shadow-sm ${
+                                      isActive ? 'bg-[#1A3E8A] text-white ring-4 ring-blue-100 scale-105 font-black' :
+                                      isCompleted ? 'bg-emerald-500 text-white ring-4 ring-emerald-100' :
+                                      'bg-white border border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600'
+                                    }`}>
+                                      {isCompleted && !isActive ? '✓' : index + 1}
+                                    </div>
+                                    <span className={`text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-center mt-1.5 w-16 sm:w-24 md:w-28 leading-tight transition-colors line-clamp-2 ${
+                                      isActive ? 'text-[#1A3E8A]' : isCompleted ? 'text-emerald-600' : 'text-slate-400 group-hover:text-slate-600'
+                                    }`}>
+                                      {stage}
+                                    </span>
+                                  </div>
+
+                                  {/* Connecting Line with exact days duration badge */}
+                                  {index < WATER_BALANCE_ETAPAS.length - 1 && (
+                                    <div className="flex-1 h-0.5 bg-slate-200 relative mx-1 sm:mx-2 -mt-5 min-w-[20px]">
+                                      <div 
+                                        className="absolute top-0 left-0 h-full bg-emerald-500 transition-all duration-300"
+                                        style={{ width: isLineCompleted ? '100%' : '0%' }}
+                                      />
+                                      {/* Exact days circle badge */}
+                                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                                        <div className={`h-4.5 min-w-7 sm:min-w-8 px-1 rounded-full flex items-center justify-center text-[8px] sm:text-[9px] font-extrabold shadow-sm transition-all border ${
+                                          isLineCompleted 
+                                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700 scale-105' 
+                                            : 'bg-slate-50 border-slate-200 text-slate-400'
+                                        }`} title={`Tempo exato que o balanço ficou nesta etapa: ${duration} dias`}>
+                                          {duration}d
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                          </div>
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-black text-slate-500 uppercase tracking-widest pl-2">Recebido Por</label>
-                        <input
-                          type="text"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-adasa-mid transition-all"
-                          placeholder="Nome de quem recebeu"
-                          value={activeBalance?.receivedBy || ""}
-                          onChange={(e) => updateActiveBalance({ receivedBy: e.target.value })}
-                        />
+
+                      {/* Table: Histórico de Permanência por Etapa */}
+                      <div className="mt-6 border border-slate-200/80 bg-slate-50/50 rounded-2xl p-4 sm:p-5">
+                        <div className="mb-3">
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
+                            📋 HISTÓRICO DE PERMANÊNCIA POR ETAPA
+                          </h4>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                            Detalhamento exato de datas, tempos de permanência e responsáveis por etapa
+                          </p>
+                        </div>
+                        <div className="overflow-hidden border border-slate-200/60 rounded-xl bg-white shadow-sm">
+                          <table className="w-full text-left border-collapse font-sans">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                                <th className="px-4 py-2.5 font-bold">Etapa</th>
+                                <th className="px-4 py-2.5 font-bold text-center">Data de Entrada</th>
+                                <th className="px-4 py-2.5 font-bold text-right">Tempo de Permanência</th>
+                                <th className="px-4 py-2.5 font-bold text-left pl-6">Responsável</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-xs">
+                              {WATER_BALANCE_ETAPAS.map((stage, index) => {
+                                const dates = activeBalance?.datasEtapas || {};
+                                const responsaveis = activeBalance?.responsaveisEtapas || {};
+                                const entryDate = dates[stage] || (stage === "Criado" ? (activeBalance?.createdAt || new Date().toISOString().split('T')[0]) : "");
+                                const isActive = currentWbStage === stage;
+                                const isCompleted = activeWbIndex >= index;
+                                const duration = getWbStageDuration(index);
+                                const responsibleName = responsaveis[stage] || (stage === "Criado" ? (activeBalance?.createdBy || activeBalance?.responsible || currentUser?.name || "Administrador") : (isCompleted && !isActive ? (currentUser?.name || "Administrador") : "-"));
+
+                                const formattedDate = entryDate 
+                                  ? entryDate.split('-').reverse().join('/') 
+                                  : '-';
+
+                                return (
+                                  <tr 
+                                    key={stage} 
+                                    className={`transition-colors ${
+                                      isActive 
+                                        ? 'bg-blue-50/40 hover:bg-blue-50/60 font-semibold' 
+                                        : 'hover:bg-slate-50/40'
+                                    }`}
+                                  >
+                                    <td className="px-4 py-3 flex items-center gap-2">
+                                      <span className={`w-2 h-2 rounded-full ${
+                                        isActive ? 'bg-blue-600 animate-pulse' :
+                                        isCompleted ? 'bg-emerald-500' : 'bg-slate-200'
+                                      }`} />
+                                      <span className={isActive ? 'text-[#1A3E8A] font-bold' : isCompleted ? 'text-slate-700 font-semibold' : 'text-slate-400'}>
+                                        {stage}
+                                      </span>
+                                      {isActive && (
+                                        <span className="inline-block text-[9px] bg-blue-100 text-[#1A3E8A] font-bold px-1.5 py-0.5 rounded ml-1 uppercase">
+                                          Atual
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 text-center font-semibold text-slate-600">
+                                      {formattedDate}
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-extrabold text-slate-800">
+                                      {!entryDate || stage === "Finalizado" ? (
+                                        <span className="text-slate-300 font-normal">-</span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded text-slate-700">
+                                          {duration === 0 ? "Hoje" : `${duration} ${duration === 1 ? 'dia' : 'dias'}`}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 text-left pl-6 font-medium text-slate-700">
+                                      {responsibleName && responsibleName !== "-" ? (
+                                        <span className="inline-flex items-center gap-1.5 text-slate-800 font-bold bg-slate-100/80 px-2.5 py-1 rounded-lg border border-slate-200/60">
+                                          👤 {responsibleName}
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-300 font-normal">-</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-black text-slate-500 uppercase tracking-widest pl-2">Data da Entrega</label>
-                        <input
-                          type="date"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-adasa-mid transition-all"
-                          value={activeBalance?.deliveryDate || ""}
-                          onChange={(e) => updateActiveBalance({ deliveryDate: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-black text-slate-500 uppercase tracking-widest pl-2">Data do Recebimento</label>
-                        <input
-                          type="date"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-adasa-mid transition-all"
-                          value={activeBalance?.receiptDate || ""}
-                          onChange={(e) => updateActiveBalance({ receiptDate: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2 col-span-1 md:col-span-2">
-                        <label className="text-xs font-black text-slate-500 uppercase tracking-widest pl-2">Situação</label>
-                        <select
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-adasa-mid transition-all appearance-none"
-                          value={activeBalance?.status || "Pendente"}
-                          onChange={(e) => updateActiveBalance({ status: e.target.value as "Validado" | "Pendente" })}
-                        >
-                          <option value="Pendente">Pendente</option>
-                          <option value="Validado">Validado</option>
-                        </select>
-                      </div>
-                      <div className="col-span-1 md:col-span-2 flex justify-end mt-4">
+
+                      {/* Botão de Salvar Balanço */}
+                      <div className="flex justify-end mt-4">
                         <RequirePermission moduleId="water_balances" action="edit">
                           <button
                             onClick={() => handleSaveModule("water-balances", { waterBalances })}
@@ -7535,8 +7738,8 @@ const renderSupplyTable = () => {
                         </RequirePermission>
                       </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {manageSubTab === "systems" && !editingRegionId && (
                   <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm flex flex-col p-6 overflow-hidden">
