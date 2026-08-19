@@ -760,6 +760,7 @@ export function PlanningTab({
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [expandedQuarterGroups, setExpandedQuarterGroups] = useState<Record<string, boolean>>({});
   const [expandedPlanQuarterAreaGroups, setExpandedPlanQuarterAreaGroups] = useState<Record<string, boolean>>({});
+  const [consolidationViewMode, setConsolidationViewMode] = useState<"plan_quarter_area" | "plan_area_quarter" | "plan_area_category">("plan_quarter_area");
   const [collapsedAreas, setCollapsedAreas] = useState<Record<string, boolean>>({});
   const [areaTableGroupMode, setAreaTableGroupMode] = useState<"category" | "status">("category");
   const [areaTableSort, setAreaTableSort] = useState<{ field: string, dir: "asc" | "desc" } | null>({ field: "end", dir: "asc" });
@@ -5219,48 +5220,127 @@ export function PlanningTab({
               </div>
             </div>
 
-            {/* Visual Table Grouped by Plan -> Quarter -> Area */}
+            {/* Visual Table Consolidated Views with Switching Buttons */}
             <div className="lg:col-span-12 bg-white border border-slate-200/90 rounded-[2rem] p-6 shadow-sm text-left mt-6 space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-4">
+              <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-4 border-b border-slate-100 pb-4">
                 <div>
                   <dt className="text-xs font-black tracking-widest text-slate-400 uppercase">Visão Consolidada</dt>
-                  <h4 className="text-lg font-black text-slate-800 mt-1 font-sans">Consolidação por Plano, Trimestre e Área</h4>
+                  <h4 className="text-lg font-black text-slate-800 mt-1 font-sans">
+                    {consolidationViewMode === "plan_quarter_area" && "Consolidação por Plano, Trimestre e Área"}
+                    {consolidationViewMode === "plan_area_quarter" && "Consolidação por Plano, Área e Trimestre"}
+                    {consolidationViewMode === "plan_area_category" && "Consolidação por Plano, Área de Atuação e Categoria"}
+                  </h4>
                   <p className="text-xs font-medium text-slate-500 mt-0.5 leading-snug">
-                    Resumo analítico temporal e operacional. Clique nas linhas de Plano e Trimestre para recolher ou expandir as áreas.
+                    {consolidationViewMode === "plan_quarter_area" && "Resumo analítico temporal e operacional. Clique nas linhas de Plano e Trimestre para recolher ou expandir as áreas."}
+                    {consolidationViewMode === "plan_area_quarter" && "Resumo analítico temporal. Clique nas linhas de Plano e Área para recolher ou expandir os trimestres."}
+                    {consolidationViewMode === "plan_area_category" && "Resumo analítico multinível. Clique nas linhas de Plano e Área para recolher ou expandir a árvore de categorias."}
                   </p>
                 </div>
                 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const expanded: Record<string, boolean> = {};
-                      const traverse = (node: any) => {
-                        expanded[node.id] = true;
-                        if (node.children) node.children.forEach(traverse);
-                      };
-                      groupedPlanQuarterAreaData.forEach(traverse);
-                      setExpandedPlanQuarterAreaGroups(expanded);
-                    }}
-                    className="px-3 py-1.5 text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-100/80 transition-colors uppercase tracking-wider cursor-pointer"
-                  >
-                    Expandir Todos
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const collapsed: Record<string, boolean> = {};
-                      visiblePlanQuarterAreaGroupedRows.forEach(r => {
-                        if (r.type !== "area") {
-                          collapsed[r.id] = false;
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Selector: Alternar Visões de Consolidação */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Visão:</span>
+                    <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setConsolidationViewMode("plan_quarter_area")}
+                        className={cn(
+                          "px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap",
+                          consolidationViewMode === "plan_quarter_area"
+                            ? "bg-white text-indigo-700 shadow-sm font-black"
+                            : "text-slate-600 hover:text-slate-900"
+                        )}
+                        title="Consolidação por Plano, Trimestre e Área"
+                      >
+                        Plano, Trimestre e Área
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConsolidationViewMode("plan_area_quarter")}
+                        className={cn(
+                          "px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap",
+                          consolidationViewMode === "plan_area_quarter"
+                            ? "bg-white text-indigo-700 shadow-sm font-black"
+                            : "text-slate-600 hover:text-slate-900"
+                        )}
+                        title="Consolidação por Plano, Área e Trimestre"
+                      >
+                        Plano, Área e Trimestre
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConsolidationViewMode("plan_area_category")}
+                        className={cn(
+                          "px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap",
+                          consolidationViewMode === "plan_area_category"
+                            ? "bg-white text-indigo-700 shadow-sm font-black"
+                            : "text-slate-600 hover:text-slate-900"
+                        )}
+                        title="Consolidação por Plano, Área de Atuação e Categoria"
+                      >
+                        Plano, Área e Categoria
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Actions: Expandir / Recolher Todos */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const expanded: Record<string, boolean> = {};
+                        const traverse = (node: any) => {
+                          expanded[node.id] = true;
+                          if (node.children) node.children.forEach(traverse);
+                        };
+                        if (consolidationViewMode === "plan_quarter_area") {
+                          groupedPlanQuarterAreaData.forEach(traverse);
+                          setExpandedPlanQuarterAreaGroups(expanded);
+                        } else if (consolidationViewMode === "plan_area_quarter") {
+                          groupedQuarterDashboardData.forEach(traverse);
+                          setExpandedQuarterGroups(expanded);
+                        } else {
+                          groupedDashboardData.forEach(traverse);
+                          setExpandedGroups(expanded);
                         }
-                      });
-                      setExpandedPlanQuarterAreaGroups(collapsed);
-                    }}
-                    className="px-3 py-1.5 text-xs bg-slate-100 border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-200/80 transition-colors uppercase tracking-wider cursor-pointer"
-                  >
-                    Recolher Todos
-                  </button>
+                      }}
+                      className="px-3 py-1.5 text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-100/80 transition-colors uppercase tracking-wider cursor-pointer"
+                    >
+                      Expandir Todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const collapsed: Record<string, boolean> = {};
+                        if (consolidationViewMode === "plan_quarter_area") {
+                          visiblePlanQuarterAreaGroupedRows.forEach(r => {
+                            if (r.type !== "area") {
+                              collapsed[r.id] = false;
+                            }
+                          });
+                          setExpandedPlanQuarterAreaGroups(collapsed);
+                        } else if (consolidationViewMode === "plan_area_quarter") {
+                          visibleQuarterGroupedRows.forEach(r => {
+                            if (r.type !== "quarter") {
+                              collapsed[r.id] = false;
+                            }
+                          });
+                          setExpandedQuarterGroups(collapsed);
+                        } else {
+                          visibleGroupedRows.forEach(r => {
+                            if (r.type !== "category") {
+                              collapsed[r.id] = false;
+                            }
+                          });
+                          setExpandedGroups(collapsed);
+                        }
+                      }}
+                      className="px-3 py-1.5 text-xs bg-slate-100 border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-200/80 transition-colors uppercase tracking-wider cursor-pointer"
+                    >
+                      Recolher Todos
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -5279,502 +5359,343 @@ export function PlanningTab({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {visiblePlanQuarterAreaGroupedRows.map((row) => {
-                      const isExpanded = expandedPlanQuarterAreaGroups[row.id] !== undefined ? expandedPlanQuarterAreaGroups[row.id] : (isAnyFilterActive ? true : row.depth < 1); // defaults to true for depth < 1
-                      
-                      const renderDate = (dStr: string | null) => {
-                        if (!dStr) return <span className="text-slate-300">-</span>;
-                        try {
-                          const d = new Date(dStr);
-                          if (isNaN(d.getTime())) return <span className="text-slate-300">-</span>;
-                          return <span className="font-mono text-slate-700 font-medium">{d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</span>;
-                        } catch {
-                          return <span className="text-slate-300">-</span>;
-                        }
-                      };
+                    {/* Render active table rows based on consolidationViewMode */}
+                    {consolidationViewMode === "plan_quarter_area" && (
+                      visiblePlanQuarterAreaGroupedRows.map((row) => {
+                        const isExpanded = expandedPlanQuarterAreaGroups[row.id] !== undefined ? expandedPlanQuarterAreaGroups[row.id] : (isAnyFilterActive ? true : row.depth < 1);
+                        
+                        const renderDate = (dStr: string | null) => {
+                          if (!dStr) return <span className="text-slate-300">-</span>;
+                          try {
+                            const d = new Date(dStr);
+                            if (isNaN(d.getTime())) return <span className="text-slate-300">-</span>;
+                            return <span className="font-mono text-slate-700 font-medium">{d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</span>;
+                          } catch {
+                            return <span className="text-slate-300">-</span>;
+                          }
+                        };
 
-                      return (
-                        <tr 
-                          key={row.id} 
-                          onClick={() => {
-                            if (row.type !== "area") {
-                              setExpandedPlanQuarterAreaGroups(prev => ({
-                                ...prev,
-                                [row.id]: !isExpanded
-                              }));
-                            }
-                          }}
-                          className={cn(
-                            "group transition-all duration-150 border-l-[3px]",
-                            row.type === "plan" 
-                              ? "bg-slate-100/75 hover:bg-slate-100 text-slate-900 border-l-indigo-600 cursor-pointer font-black"
-                              : row.type === "quarter"
-                                ? "bg-slate-50/50 hover:bg-amber-50/30 text-slate-800 border-l-amber-500 cursor-pointer font-bold"
-                                : "bg-white hover:bg-slate-50 text-slate-700 border-l-transparent font-medium"
-                          )}
-                        >
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1.5" style={{ paddingLeft: `${row.depth * 1.5}rem` }}>
-                              {row.type !== "area" ? (
-                                <span className="text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors p-0.5">
-                                  {isExpanded ? <ChevronDown size={14} className="stroke-[2.5]" /> : <ChevronRight size={14} className="stroke-[2.5]" />}
-                                </span>
-                              ) : (
-                                <span className="w-5" />
-                              )}
+                        return (
+                          <tr 
+                            key={row.id} 
+                            onClick={() => {
+                              if (row.type !== "area") {
+                                setExpandedPlanQuarterAreaGroups(prev => ({
+                                  ...prev,
+                                  [row.id]: !isExpanded
+                                }));
+                              }
+                            }}
+                            className={cn(
+                              "group transition-all duration-150 border-l-[3px]",
+                              row.type === "plan" 
+                                ? "bg-slate-100/75 hover:bg-slate-100 text-slate-900 border-l-indigo-600 cursor-pointer font-black"
+                                : row.type === "quarter"
+                                  ? "bg-slate-50/50 hover:bg-amber-50/30 text-slate-800 border-l-amber-500 cursor-pointer font-bold"
+                                  : "bg-white hover:bg-slate-50 text-slate-700 border-l-transparent font-medium"
+                            )}
+                          >
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1.5" style={{ paddingLeft: `${row.depth * 1.5}rem` }}>
+                                {row.type !== "area" ? (
+                                  <span className="text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors p-0.5">
+                                    {isExpanded ? <ChevronDown size={14} className="stroke-[2.5]" /> : <ChevronRight size={14} className="stroke-[2.5]" />}
+                                  </span>
+                                ) : (
+                                  <span className="w-5" />
+                                )}
 
-                              <div className="flex items-center gap-2">
-                                {row.type === "plan" && (
-                                  <span className="p-1 bg-indigo-50 text-indigo-600 rounded-lg">
-                                    <FolderKanban size={14} className="stroke-[2.5]" />
-                                  </span>
-                                )}
-                                {row.type === "quarter" && (
-                                  <span className="p-1 bg-amber-50 text-amber-600 rounded-lg">
-                                    <Calendar size={12} className="stroke-[2]" />
-                                  </span>
-                                )}
-                                {row.type === "area" && (
-                                  <span className="p-1 bg-sky-50 text-sky-600 rounded-lg">
-                                    <Layers size={13} className="stroke-[2]" />
-                                  </span>
-                                )}
-                                
-                                <span className={cn(
-                                  "truncate select-none",
-                                  row.type === "plan" ? "text-xs font-black tracking-tight" : row.type === "quarter" ? "text-xs font-bold" : "text-xs text-slate-600"
-                                )}>
-                                  {row.name}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-3 text-center">{renderDate(row.startDate)}</td>
-                          <td className="px-4 py-3 text-center">{renderDate(row.endDate)}</td>
-                          <td className="px-4 py-3 text-center font-black text-slate-800">{row.total}</td>
-                          <td className="px-4 py-3 text-center font-bold text-slate-400">{row.pending || <span className="text-slate-200">0</span>}</td>
-                          <td className="px-4 py-3 text-center font-bold text-blue-500">{row.inProgress || <span className="text-slate-200">0</span>}</td>
-                          <td className="px-4 py-3 text-center font-bold text-emerald-600">{row.completed || <span className="text-slate-200">0</span>}</td>
-                          
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden w-full max-w-[120px]">
-                                <div 
-                                  className={cn(
-                                    "h-full rounded-full transition-all duration-300",
-                                    row.avgProgress === 100 
-                                      ? "bg-emerald-500"
-                                      : row.avgProgress >= 50
-                                        ? "bg-blue-500"
-                                        : row.avgProgress > 0 ? "bg-slate-400" : "bg-slate-300"
+                                <div className="flex items-center gap-2">
+                                  {row.type === "plan" && (
+                                    <span className="p-1 bg-indigo-50 text-indigo-600 rounded-lg">
+                                      <FolderKanban size={14} className="stroke-[2.5]" />
+                                    </span>
                                   )}
-                                  style={{ width: `${row.avgProgress}%` }}
-                                />
+                                  {row.type === "quarter" && (
+                                    <span className="p-1 bg-amber-50 text-amber-600 rounded-lg">
+                                      <Calendar size={12} className="stroke-[2]" />
+                                    </span>
+                                  )}
+                                  {row.type === "area" && (
+                                    <span className="p-1 bg-sky-50 text-sky-600 rounded-lg">
+                                      <Layers size={13} className="stroke-[2]" />
+                                    </span>
+                                  )}
+                                  
+                                  <span className={cn(
+                                    "truncate select-none",
+                                    row.type === "plan" ? "text-xs font-black tracking-tight" : row.type === "quarter" ? "text-xs font-bold" : "text-xs text-slate-600"
+                                  )}>
+                                    {row.name}
+                                  </span>
+                                </div>
                               </div>
-                              <span className={cn(
-                                "text-xs font-black w-10 text-right leading-none",
-                                row.avgProgress === 100 
-                                  ? "text-emerald-700 animate-pulse"
-                                  : row.avgProgress >= 50
-                                    ? "text-blue-700"
-                                    : row.avgProgress > 0 ? "text-slate-600" : "text-slate-400"
-                              )}>
-                                {row.avgProgress}%
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {visiblePlanQuarterAreaGroupedRows.length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="p-12 text-center text-slate-400 italic font-bold">
-                          Nenhum dado consolidado disponível para os filtros atuais.
-                        </td>
-                      </tr>
+                            </td>
+
+                            <td className="px-4 py-3 text-center">{renderDate(row.startDate)}</td>
+                            <td className="px-4 py-3 text-center">{renderDate(row.endDate)}</td>
+                            <td className="px-4 py-3 text-center font-black text-slate-800">{row.total}</td>
+                            <td className="px-4 py-3 text-center font-bold text-slate-400">{row.pending || <span className="text-slate-200">0</span>}</td>
+                            <td className="px-4 py-3 text-center font-bold text-blue-500">{row.inProgress || <span className="text-slate-200">0</span>}</td>
+                            <td className="px-4 py-3 text-center font-bold text-emerald-600">{row.completed || <span className="text-slate-200">0</span>}</td>
+                            
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden w-full max-w-[120px]">
+                                  <div 
+                                    className={cn(
+                                      "h-full rounded-full transition-all duration-300",
+                                      row.avgProgress === 100 
+                                        ? "bg-emerald-500"
+                                        : row.avgProgress >= 50
+                                          ? "bg-blue-500"
+                                          : row.avgProgress > 0 ? "bg-slate-400" : "bg-slate-300"
+                                    )}
+                                    style={{ width: `${row.avgProgress}%` }}
+                                  />
+                                </div>
+                                <span className={cn(
+                                  "text-xs font-black w-10 text-right leading-none",
+                                  row.avgProgress === 100 
+                                    ? "text-emerald-700 animate-pulse"
+                                    : row.avgProgress >= 50
+                                      ? "text-blue-700"
+                                      : row.avgProgress > 0 ? "text-slate-600" : "text-slate-400"
+                                )}>
+                                  {row.avgProgress}%
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
 
-            {/* Visual Table Grouped by Plan -> Area -> Quarter */}
-            <div className="lg:col-span-12 bg-white border border-slate-200/90 rounded-[2rem] p-6 shadow-sm text-left mt-6 space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-4">
-                <div>
-                  <dt className="text-xs font-black tracking-widest text-slate-400 uppercase">Visão Consolidada</dt>
-                  <h4 className="text-lg font-black text-slate-800 mt-1 font-sans">Consolidação por Plano, Área e Trimestre</h4>
-                  <p className="text-xs font-medium text-slate-500 mt-0.5 leading-snug">
-                    Resumo analítico temporal. Clique nas linhas de Plano e Área para recolher ou expandir os trimestres.
-                  </p>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const expanded: Record<string, boolean> = {};
-                      const traverse = (node: any) => {
-                        expanded[node.id] = true;
-                        if (node.children) node.children.forEach(traverse);
-                      };
-                      groupedQuarterDashboardData.forEach(traverse);
-                      setExpandedQuarterGroups(expanded);
-                    }}
-                    className="px-3 py-1.5 text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-100/80 transition-colors uppercase tracking-wider cursor-pointer"
-                  >
-                    Expandir Todos
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const collapsed: Record<string, boolean> = {};
-                      visibleQuarterGroupedRows.forEach(r => {
-                        if (r.type !== "quarter") {
-                          collapsed[r.id] = false;
-                        }
-                      });
-                      setExpandedQuarterGroups(collapsed);
-                    }}
-                    className="px-3 py-1.5 text-xs bg-slate-100 border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-200/80 transition-colors uppercase tracking-wider cursor-pointer"
-                  >
-                    Recolher Todos
-                  </button>
-                </div>
-              </div>
+                    {consolidationViewMode === "plan_area_quarter" && (
+                      visibleQuarterGroupedRows.map((row) => {
+                        const isExpanded = expandedQuarterGroups[row.id] !== undefined ? expandedQuarterGroups[row.id] : (isAnyFilterActive ? true : row.depth < 1);
+                        
+                        const renderDate = (dStr: string | null) => {
+                          if (!dStr) return <span className="text-slate-300">-</span>;
+                          try {
+                            const d = new Date(dStr);
+                            if (isNaN(d.getTime())) return <span className="text-slate-300">-</span>;
+                            return <span className="font-mono text-slate-700 font-medium">{d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</span>;
+                          } catch {
+                            return <span className="text-slate-300">-</span>;
+                          }
+                        };
 
-              <div className="overflow-x-auto border border-slate-200/60 rounded-2xl shadow-xs">
-                <table className="w-full text-left text-xs text-slate-600 border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-400 border-b border-slate-200 font-black uppercase text-[10px] tracking-wider">
-                      <th className="px-4 py-3.5 min-w-[280px]">Grupo / Nome</th>
-                      <th className="px-4 py-3.5 text-center min-w-[110px]">Data Início</th>
-                      <th className="px-4 py-3.5 text-center min-w-[110px]">Data Fim</th>
-                      <th className="px-4 py-3.5 text-center">Qtde Tarefa</th>
-                      <th className="px-4 py-3.5 text-center text-slate-400">Qtde Não Iniciada</th>
-                      <th className="px-4 py-3.5 text-center text-blue-500">Qtde Em Andamento</th>
-                      <th className="px-4 py-3.5 text-center text-emerald-600">Qtde Concluídas</th>
-                      <th className="px-4 py-3.5 min-w-[140px]">Progresso</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {visibleQuarterGroupedRows.map((row) => {
-                      const isExpanded = expandedQuarterGroups[row.id] !== undefined ? expandedQuarterGroups[row.id] : (isAnyFilterActive ? true : row.depth < 1); // defaults to true for depth < 1
-                      
-                      const renderDate = (dStr: string | null) => {
-                        if (!dStr) return <span className="text-slate-300">-</span>;
-                        try {
-                          const d = new Date(dStr);
-                          if (isNaN(d.getTime())) return <span className="text-slate-300">-</span>;
-                          return <span className="font-mono text-slate-700 font-medium">{d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</span>;
-                        } catch {
-                          return <span className="text-slate-300">-</span>;
-                        }
-                      };
-
-                      return (
-                        <tr 
-                          key={row.id} 
-                          onClick={() => {
-                            if (row.type !== "quarter") {
-                              setExpandedQuarterGroups(prev => ({
-                                ...prev,
-                                [row.id]: !isExpanded
-                              }));
-                            }
-                          }}
-                          className={cn(
-                            "group transition-all duration-150 border-l-[3px]",
-                            row.type === "plan" 
-                              ? "bg-slate-100/75 hover:bg-slate-100 text-slate-900 border-l-indigo-600 cursor-pointer font-black"
-                              : row.type === "area"
-                                ? "bg-slate-50/50 hover:bg-indigo-50/20 text-slate-800 border-l-sky-500 cursor-pointer font-bold"
-                                : "bg-white hover:bg-slate-50 text-slate-700 border-l-transparent font-medium"
-                          )}
-                        >
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1.5" style={{ paddingLeft: `${row.depth * 1.5}rem` }}>
-                              {row.type !== "quarter" ? (
-                                <span className="text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors p-0.5">
-                                  {isExpanded ? <ChevronDown size={14} className="stroke-[2.5]" /> : <ChevronRight size={14} className="stroke-[2.5]" />}
-                                </span>
-                              ) : (
-                                <span className="w-5" />
-                              )}
-
-                              <div className="flex items-center gap-2">
-                                {row.type === "plan" && (
-                                  <span className="p-1 bg-indigo-50 text-indigo-600 rounded-lg">
-                                    <FolderKanban size={14} className="stroke-[2.5]" />
+                        return (
+                          <tr 
+                            key={row.id} 
+                            onClick={() => {
+                              if (row.type !== "quarter") {
+                                setExpandedQuarterGroups(prev => ({
+                                  ...prev,
+                                  [row.id]: !isExpanded
+                                }));
+                              }
+                            }}
+                            className={cn(
+                              "group transition-all duration-150 border-l-[3px]",
+                              row.type === "plan" 
+                                ? "bg-slate-100/75 hover:bg-slate-100 text-slate-900 border-l-indigo-600 cursor-pointer font-black"
+                                : row.type === "area"
+                                  ? "bg-slate-50/50 hover:bg-indigo-50/20 text-slate-800 border-l-sky-500 cursor-pointer font-bold"
+                                  : "bg-white hover:bg-slate-50 text-slate-700 border-l-transparent font-medium"
+                            )}
+                          >
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1.5" style={{ paddingLeft: `${row.depth * 1.5}rem` }}>
+                                {row.type !== "quarter" ? (
+                                  <span className="text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors p-0.5">
+                                    {isExpanded ? <ChevronDown size={14} className="stroke-[2.5]" /> : <ChevronRight size={14} className="stroke-[2.5]" />}
                                   </span>
+                                ) : (
+                                  <span className="w-5" />
                                 )}
-                                {row.type === "area" && (
-                                  <span className="p-1 bg-sky-50 text-sky-600 rounded-lg">
-                                    <Layers size={13} className="stroke-[2]" />
-                                  </span>
-                                )}
-                                {row.type === "quarter" && (
-                                  <span className="p-1 bg-amber-50 text-amber-600 rounded-lg">
-                                    <Calendar size={12} className="stroke-[2]" />
-                                  </span>
-                                )}
-                                
-                                <span className={cn(
-                                  "truncate select-none",
-                                  row.type === "plan" ? "text-xs font-black tracking-tight" : row.type === "area" ? "text-xs font-bold" : "text-xs text-slate-600"
-                                )}>
-                                  {row.name}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
 
-                          <td className="px-4 py-3 text-center">{renderDate(row.startDate)}</td>
-                          <td className="px-4 py-3 text-center">{renderDate(row.endDate)}</td>
-                          <td className="px-4 py-3 text-center font-black text-slate-800">{row.total}</td>
-                          <td className="px-4 py-3 text-center font-bold text-slate-400">{row.pending || <span className="text-slate-200">0</span>}</td>
-                          <td className="px-4 py-3 text-center font-bold text-blue-500">{row.inProgress || <span className="text-slate-200">0</span>}</td>
-                          <td className="px-4 py-3 text-center font-bold text-emerald-600">{row.completed || <span className="text-slate-200">0</span>}</td>
-                          
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden w-full max-w-[120px]">
-                                <div 
-                                  className={cn(
-                                    "h-full rounded-full transition-all duration-300",
-                                    row.avgProgress === 100 
-                                      ? "bg-emerald-500"
-                                      : row.avgProgress >= 50
-                                        ? "bg-blue-500"
-                                        : row.avgProgress > 0 ? "bg-slate-400" : "bg-slate-300"
+                                <div className="flex items-center gap-2">
+                                  {row.type === "plan" && (
+                                    <span className="p-1 bg-indigo-50 text-indigo-600 rounded-lg">
+                                      <FolderKanban size={14} className="stroke-[2.5]" />
+                                    </span>
                                   )}
-                                  style={{ width: `${row.avgProgress}%` }}
-                                />
+                                  {row.type === "area" && (
+                                    <span className="p-1 bg-sky-50 text-sky-600 rounded-lg">
+                                      <Layers size={13} className="stroke-[2]" />
+                                    </span>
+                                  )}
+                                  {row.type === "quarter" && (
+                                    <span className="p-1 bg-amber-50 text-amber-600 rounded-lg">
+                                      <Calendar size={12} className="stroke-[2]" />
+                                    </span>
+                                  )}
+                                  
+                                  <span className={cn(
+                                    "truncate select-none",
+                                    row.type === "plan" ? "text-xs font-black tracking-tight" : row.type === "area" ? "text-xs font-bold" : "text-xs text-slate-600"
+                                  )}>
+                                    {row.name}
+                                  </span>
+                                </div>
                               </div>
-                              <span className={cn(
-                                "text-xs font-black w-10 text-right leading-none",
-                                row.avgProgress === 100 
-                                  ? "text-emerald-700 animate-pulse"
-                                  : row.avgProgress >= 50
-                                    ? "text-blue-700"
-                                    : row.avgProgress > 0 ? "text-slate-600" : "text-slate-400"
-                              )}>
-                                {row.avgProgress}%
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {visibleQuarterGroupedRows.length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="p-12 text-center text-slate-400 italic font-bold">
-                          Nenhum dado consolidado disponível para os filtros atuais.
-                        </td>
-                      </tr>
+                            </td>
+
+                            <td className="px-4 py-3 text-center">{renderDate(row.startDate)}</td>
+                            <td className="px-4 py-3 text-center">{renderDate(row.endDate)}</td>
+                            <td className="px-4 py-3 text-center font-black text-slate-800">{row.total}</td>
+                            <td className="px-4 py-3 text-center font-bold text-slate-400">{row.pending || <span className="text-slate-200">0</span>}</td>
+                            <td className="px-4 py-3 text-center font-bold text-blue-500">{row.inProgress || <span className="text-slate-200">0</span>}</td>
+                            <td className="px-4 py-3 text-center font-bold text-emerald-600">{row.completed || <span className="text-slate-200">0</span>}</td>
+                            
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden w-full max-w-[120px]">
+                                  <div 
+                                    className={cn(
+                                      "h-full rounded-full transition-all duration-300",
+                                      row.avgProgress === 100 
+                                        ? "bg-emerald-500"
+                                        : row.avgProgress >= 50
+                                          ? "bg-blue-500"
+                                          : row.avgProgress > 0 ? "bg-slate-400" : "bg-slate-300"
+                                    )}
+                                    style={{ width: `${row.avgProgress}%` }}
+                                  />
+                                </div>
+                                <span className={cn(
+                                  "text-xs font-black w-10 text-right leading-none",
+                                  row.avgProgress === 100 
+                                    ? "text-emerald-700 animate-pulse"
+                                    : row.avgProgress >= 50
+                                      ? "text-blue-700"
+                                      : row.avgProgress > 0 ? "text-slate-600" : "text-slate-400"
+                                )}>
+                                  {row.avgProgress}%
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
 
-            {/* Visual Table Grouped by Plan -> Area -> Category */}
-            <div className="lg:col-span-12 bg-white border border-slate-200/90 rounded-[2rem] p-6 shadow-sm text-left mt-6 space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-4">
-                <div>
-                  <dt className="text-xs font-black tracking-widest text-slate-400 uppercase">Visão Consolidada</dt>
-                  <h4 className="text-lg font-black text-slate-800 mt-1 font-sans">Consolidação por Plano, Área de Atuação e Categoria</h4>
-                  <p className="text-xs font-medium text-slate-500 mt-0.5 leading-snug">
-                    Resumo analítico multinível. Clique nas linhas de Plano e Área para recolher ou expandir a árvore de informações.
-                  </p>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const expanded: Record<string, boolean> = {};
-                      const traverse = (node: any) => {
-                        expanded[node.id] = true;
-                        if (node.children) node.children.forEach(traverse);
-                      };
-                      groupedDashboardData.forEach(traverse);
-                      setExpandedGroups(expanded);
-                    }}
-                    className="px-3 py-1.5 text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-100/80 transition-colors uppercase tracking-wider cursor-pointer"
-                  >
-                    Expandir Todos
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Collapse All: set all known/visible plans and areas to false
-                      const collapsed: Record<string, boolean> = {};
-                      visibleGroupedRows.forEach(r => {
-                        if (r.type !== "category") {
-                          collapsed[r.id] = false;
-                        }
-                      });
-                      setExpandedGroups(collapsed);
-                    }}
-                    className="px-3 py-1.5 text-xs bg-slate-100 border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-200/80 transition-colors uppercase tracking-wider cursor-pointer"
-                  >
-                    Recolher Todos
-                  </button>
-                </div>
-              </div>
+                    {consolidationViewMode === "plan_area_category" && (
+                      visibleGroupedRows.map((row) => {
+                        const isExpanded = expandedGroups[row.id] !== undefined ? expandedGroups[row.id] : (isAnyFilterActive ? true : row.depth < 1);
+                        
+                        const renderDate = (dStr: string | null) => {
+                          if (!dStr) return <span className="text-slate-300">-</span>;
+                          try {
+                            const d = new Date(dStr);
+                            if (isNaN(d.getTime())) return <span className="text-slate-300">-</span>;
+                            return <span className="font-mono text-slate-700 font-medium">{d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</span>;
+                          } catch {
+                            return <span className="text-slate-300">-</span>;
+                          }
+                        };
 
-              <div className="overflow-x-auto border border-slate-200/60 rounded-2xl shadow-xs">
-                <table className="w-full text-left text-xs text-slate-600 border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-400 border-b border-slate-200 font-black uppercase text-[10px] tracking-wider">
-                      <th className="px-4 py-3.5 min-w-[280px]">Grupo / Nome</th>
-                      <th className="px-4 py-3.5 text-center min-w-[110px]">Data Início</th>
-                      <th className="px-4 py-3.5 text-center min-w-[110px]">Data Fim</th>
-                      <th className="px-4 py-3.5 text-center">Qtde Tarefa</th>
-                      <th className="px-4 py-3.5 text-center text-slate-400">Qtde Não Iniciada</th>
-                      <th className="px-4 py-3.5 text-center text-blue-500">Qtde Em Andamento</th>
-                      <th className="px-4 py-3.5 text-center text-emerald-600">Qtde Concluídas</th>
-                      <th className="px-4 py-3.5 min-w-[140px]">Progresso</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {visibleGroupedRows.map((row) => {
-                      const isExpanded = expandedGroups[row.id] !== undefined ? expandedGroups[row.id] : (isAnyFilterActive ? true : row.depth < 1); // defaults to true for depth < 1
-                      
-                      // Formatting helper for start/end date
-                      const renderDate = (dStr: string | null) => {
-                        if (!dStr) return <span className="text-slate-300">-</span>;
-                        try {
-                          const d = new Date(dStr);
-                          if (isNaN(d.getTime())) return <span className="text-slate-300">-</span>;
-                          return <span className="font-mono text-slate-700 font-medium">{d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</span>;
-                        } catch {
-                          return <span className="text-slate-300">-</span>;
-                        }
-                      };
-
-                      return (
-                        <tr 
-                          key={row.id} 
-                          onClick={() => {
-                            if (row.type !== "category") {
-                              setExpandedGroups(prev => ({
-                                ...prev,
-                                [row.id]: !isExpanded
-                              }));
-                            }
-                          }}
-                          className={cn(
-                            "group transition-all duration-150 border-l-[3px]",
-                            row.type === "plan" 
-                              ? "bg-slate-100/75 hover:bg-slate-100 text-slate-900 border-l-indigo-600 cursor-pointer font-black"
-                              : row.type === "area"
-                                ? "bg-slate-50/50 hover:bg-indigo-50/20 text-slate-800 border-l-sky-500 cursor-pointer font-bold"
-                                : "bg-white hover:bg-slate-50 text-slate-700 border-l-transparent font-medium"
-                          )}
-                        >
-                          {/* Group / Name field with custom indentation */}
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1.5" style={{ paddingLeft: `${row.depth * 1.5}rem` }}>
-                              {row.type !== "category" ? (
-                                <span className="text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors p-0.5">
-                                  {isExpanded ? <ChevronDown size={14} className="stroke-[2.5]" /> : <ChevronRight size={14} className="stroke-[2.5]" />}
-                                </span>
-                              ) : (
-                                <span className="w-5" /> // spacer to align leaf categories with plan/area chevron
-                              )}
-
-                              <div className="flex items-center gap-2">
-                                {row.type === "plan" && (
-                                  <span className="p-1 bg-indigo-50 text-indigo-600 rounded-lg">
-                                    <FolderKanban size={14} className="stroke-[2.5]" />
+                        return (
+                          <tr 
+                            key={row.id} 
+                            onClick={() => {
+                              if (row.type !== "category") {
+                                setExpandedGroups(prev => ({
+                                  ...prev,
+                                  [row.id]: !isExpanded
+                                }));
+                              }
+                            }}
+                            className={cn(
+                              "group transition-all duration-150 border-l-[3px]",
+                              row.type === "plan" 
+                                ? "bg-slate-100/75 hover:bg-slate-100 text-slate-900 border-l-indigo-600 cursor-pointer font-black"
+                                : row.type === "area"
+                                  ? "bg-slate-50/50 hover:bg-indigo-50/20 text-slate-800 border-l-sky-500 cursor-pointer font-bold"
+                                  : "bg-white hover:bg-slate-50 text-slate-700 border-l-transparent font-medium"
+                            )}
+                          >
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1.5" style={{ paddingLeft: `${row.depth * 1.5}rem` }}>
+                                {row.type !== "category" ? (
+                                  <span className="text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors p-0.5">
+                                    {isExpanded ? <ChevronDown size={14} className="stroke-[2.5]" /> : <ChevronRight size={14} className="stroke-[2.5]" />}
                                   </span>
+                                ) : (
+                                  <span className="w-5" />
                                 )}
-                                {row.type === "area" && (
-                                  <span className="p-1 bg-sky-50 text-sky-600 rounded-lg">
-                                    <Layers size={13} className="stroke-[2]" />
-                                  </span>
-                                )}
-                                {row.type === "category" && (
-                                  <span className="p-1 bg-slate-100 text-slate-500 rounded-lg">
-                                    <Tag size={12} className="stroke-[2]" />
-                                  </span>
-                                )}
-                                
-                                <span className={cn(
-                                  "truncate select-none",
-                                  row.type === "plan" ? "text-xs font-black tracking-tight" : row.type === "area" ? "text-xs font-bold" : "text-xs text-slate-600"
-                                )}>
-                                  {row.name}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
 
-                          {/* Data Início */}
-                          <td className="px-4 py-3 text-center">
-                            {renderDate(row.startDate)}
-                          </td>
-
-                          {/* Data Fim */}
-                          <td className="px-4 py-3 text-center">
-                            {renderDate(row.endDate)}
-                          </td>
-
-                          {/* Qtde Tarefa */}
-                          <td className="px-4 py-3 text-center font-black text-slate-800">
-                            {row.total}
-                          </td>
-
-                          {/* Qtde Não Iniciada */}
-                          <td className="px-4 py-3 text-center font-bold text-slate-400">
-                            {row.pending || <span className="text-slate-200">0</span>}
-                          </td>
-
-                          {/* Qtde Em Andamento */}
-                          <td className="px-4 py-3 text-center font-bold text-blue-500">
-                            {row.inProgress || <span className="text-slate-200">0</span>}
-                          </td>
-
-                          {/* Qtde Concluídas */}
-                          <td className="px-4 py-3 text-center font-bold text-emerald-600">
-                            {row.completed || <span className="text-slate-200">0</span>}
-                          </td>
-
-                          {/* Progresso com barra de progresso visual */}
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden w-full max-w-[120px]">
-                                <div 
-                                  className={cn(
-                                    "h-full rounded-full transition-all duration-300",
-                                    row.avgProgress === 100 
-                                      ? "bg-emerald-500"
-                                      : row.avgProgress >= 50
-                                        ? "bg-blue-500"
-                                        : row.avgProgress > 0 ? "bg-slate-400" : "bg-slate-300"
+                                <div className="flex items-center gap-2">
+                                  {row.type === "plan" && (
+                                    <span className="p-1 bg-indigo-50 text-indigo-600 rounded-lg">
+                                      <FolderKanban size={14} className="stroke-[2.5]" />
+                                    </span>
                                   )}
-                                  style={{ width: `${row.avgProgress}%` }}
-                                />
+                                  {row.type === "area" && (
+                                    <span className="p-1 bg-sky-50 text-sky-600 rounded-lg">
+                                      <Layers size={13} className="stroke-[2]" />
+                                    </span>
+                                  )}
+                                  {row.type === "category" && (
+                                    <span className="p-1 bg-slate-100 text-slate-500 rounded-lg">
+                                      <Tag size={12} className="stroke-[2]" />
+                                    </span>
+                                  )}
+                                  
+                                  <span className={cn(
+                                    "truncate select-none",
+                                    row.type === "plan" ? "text-xs font-black tracking-tight" : row.type === "area" ? "text-xs font-bold" : "text-xs text-slate-600"
+                                  )}>
+                                    {row.name}
+                                  </span>
+                                </div>
                               </div>
-                              <span className={cn(
-                                "text-xs font-black w-10 text-right leading-none",
-                                row.avgProgress === 100 
-                                  ? "text-emerald-700 animate-pulse"
-                                  : row.avgProgress >= 50
-                                    ? "text-blue-700"
-                                    : row.avgProgress > 0 ? "text-slate-600" : "text-slate-400"
-                              )}>
-                                {row.avgProgress}%
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {visibleGroupedRows.length === 0 && (
+                            </td>
+
+                            <td className="px-4 py-3 text-center">{renderDate(row.startDate)}</td>
+                            <td className="px-4 py-3 text-center">{renderDate(row.endDate)}</td>
+                            <td className="px-4 py-3 text-center font-black text-slate-800">{row.total}</td>
+                            <td className="px-4 py-3 text-center font-bold text-slate-400">{row.pending || <span className="text-slate-200">0</span>}</td>
+                            <td className="px-4 py-3 text-center font-bold text-blue-500">{row.inProgress || <span className="text-slate-200">0</span>}</td>
+                            <td className="px-4 py-3 text-center font-bold text-emerald-600">{row.completed || <span className="text-slate-200">0</span>}</td>
+                            
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden w-full max-w-[120px]">
+                                  <div 
+                                    className={cn(
+                                      "h-full rounded-full transition-all duration-300",
+                                      row.avgProgress === 100 
+                                        ? "bg-emerald-500"
+                                        : row.avgProgress >= 50
+                                          ? "bg-blue-500"
+                                          : row.avgProgress > 0 ? "bg-slate-400" : "bg-slate-300"
+                                    )}
+                                    style={{ width: `${row.avgProgress}%` }}
+                                  />
+                                </div>
+                                <span className={cn(
+                                  "text-xs font-black w-10 text-right leading-none",
+                                  row.avgProgress === 100 
+                                    ? "text-emerald-700 animate-pulse"
+                                    : row.avgProgress >= 50
+                                      ? "text-blue-700"
+                                      : row.avgProgress > 0 ? "text-slate-600" : "text-slate-400"
+                                )}>
+                                  {row.avgProgress}%
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+
+                    {((consolidationViewMode === "plan_quarter_area" && visiblePlanQuarterAreaGroupedRows.length === 0) ||
+                      (consolidationViewMode === "plan_area_quarter" && visibleQuarterGroupedRows.length === 0) ||
+                      (consolidationViewMode === "plan_area_category" && visibleGroupedRows.length === 0)) && (
                       <tr>
                         <td colSpan={8} className="p-12 text-center text-slate-400 italic font-bold">
                           Nenhum dado consolidado disponível para os filtros atuais.
