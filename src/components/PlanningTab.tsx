@@ -448,12 +448,22 @@ export function PlanningTab({
   const [isTasksFiltersExpanded, setIsTasksFiltersExpanded] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [hasSubtasksFilter, setHasSubtasksFilter] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string[]>(["Não iniciada", "Em andamento"]);
   const [situationFilter, setSituationFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [isProgrammedFilter, setIsProgrammedFilter] = useState<string>("all");
   const [taskTypeFilter, setTaskTypeFilter] = useState<string>("all");
+
+  const handleStatusFilterToggle = (statusVal: string) => {
+    setStatusFilter(prev => {
+      if (prev.includes(statusVal)) {
+        return prev.filter(s => s !== statusVal);
+      } else {
+        return [...prev, statusVal];
+      }
+    });
+  };
   
   // New plan and area filters
   const [planFilter, setPlanFilter] = useState<string>("all");
@@ -465,8 +475,9 @@ export function PlanningTab({
   const [periodValueFilter, setPeriodValueFilter] = useState<string>("all");
 
   const isAnyFilterActive = useMemo(() => {
+    const isStatusFiltered = !(statusFilter.length === 2 && statusFilter.includes("Não iniciada") && statusFilter.includes("Em andamento")) && statusFilter.length !== 3;
     return (
-      statusFilter !== "all" ||
+      isStatusFiltered ||
       situationFilter !== "all" ||
       priorityFilter !== "all" ||
       categoryFilter !== "all" ||
@@ -783,6 +794,7 @@ export function PlanningTab({
   const [isRegModalOpen, setIsRegModalOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [editingTask, setEditingTask] = useState<Partial<Task>>({});
+  const [editTaskParentSearch, setEditTaskParentSearch] = useState("");
 
   useEffect(() => {
     // Synchronize Categories for editingTask
@@ -1492,7 +1504,7 @@ export function PlanningTab({
         if (isMyTasksSelected) {
           setViewMode(prev => ["area", "responsible", "table", "gantt"].includes(prev) ? "board" : prev);
         }
-        setStatusFilter("all");
+        setStatusFilter(["Não iniciada", "Em andamento"]);
         setSituationFilter("all");
         setPriorityFilter("all");
         setCategoryFilter("all");
@@ -1549,8 +1561,9 @@ export function PlanningTab({
     }
 
     // Check status
-    if (statusFilter !== "all") {
-      if (normalizeStatus(t.status) !== statusFilter) return false;
+    if (statusFilter.length < 3) {
+      if (statusFilter.length === 0) return false;
+      if (!statusFilter.includes(normalizeStatus(t.status))) return false;
     }
 
     // Check situation
@@ -1653,6 +1666,25 @@ export function PlanningTab({
     // Clone all tasks
     tasks.forEach(t => {
       tMap[t.id] = { ...t };
+    });
+
+    // If subtasks are missing type, planId, areaIds, or categoryIds, inherit from parent
+    Object.values(tMap).forEach(t => {
+      if (t.parentId && tMap[t.parentId]) {
+        const parent = tMap[t.parentId];
+        if ((!t.type || t.type === 'default') && parent.type && parent.type !== 'default') {
+          t.type = parent.type;
+        }
+        if (!t.planId && parent.planId) {
+          t.planId = parent.planId;
+        }
+        if ((!t.areaIds || t.areaIds.length === 0) && parent.areaIds && parent.areaIds.length > 0) {
+          t.areaIds = [...parent.areaIds];
+        }
+        if ((!t.categoryIds || t.categoryIds.length === 0) && parent.categoryIds && parent.categoryIds.length > 0) {
+          t.categoryIds = [...parent.categoryIds];
+        }
+      }
     });
     
     // Build children mapping using the clones
@@ -1873,8 +1905,9 @@ export function PlanningTab({
     }
 
     // Check status
-    if (statusFilter !== "all") {
-      if (normalizeStatus(t.status) !== statusFilter) return false;
+    if (statusFilter.length < 3) {
+      if (statusFilter.length === 0) return false;
+      if (!statusFilter.includes(normalizeStatus(t.status))) return false;
     }
 
     // Check situation
@@ -3275,12 +3308,14 @@ export function PlanningTab({
       } : undefined
     });
     setTaskFormTab("form");
+    setEditTaskParentSearch("");
     setIsFormOpen(true);
   };
 
   // Open modal for task editing
   const handleEditTask = (task: Task) => {
     setFormMode("edit");
+    setEditTaskParentSearch("");
     // Format dates back to YYYY-MM-DD for form binding
     const fmtDate = (d: string | null) => {
       if (!d) return "";
@@ -4241,17 +4276,40 @@ export function PlanningTab({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🚦 Status</span>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-600 bg-white text-slate-700 font-bold"
-                >
-                  <option value="all">Todos os Status</option>
-                  <option value="Não iniciada">NÃO INICIADA</option>
-                  <option value="Em andamento">EM ANDAMENTO</option>
-                  <option value="Concluída">CONCLUÍDA</option>
-                </select>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🚦 Status</span>
+                  <span className="text-[10px] font-bold text-slate-400">
+                    {statusFilter.length === 3 ? "Todos" : `${statusFilter.length} sel.`}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-white border border-slate-200 rounded-xl min-h-[38px]">
+                  {[
+                    { id: "Não iniciada", label: "Não iniciada", dot: "bg-slate-400" },
+                    { id: "Em andamento", label: "Em andamento", dot: "bg-blue-500" },
+                    { id: "Concluída", label: "Concluída", dot: "bg-emerald-500" },
+                  ].map((opt) => {
+                    const isChecked = statusFilter.includes(opt.id);
+                    return (
+                      <label
+                        key={opt.id}
+                        className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs font-semibold cursor-pointer transition-all select-none ${
+                          isChecked
+                            ? "bg-indigo-50/70 border-indigo-200 text-indigo-900 shadow-xs"
+                            : "bg-transparent border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleStatusFilterToggle(opt.id)}
+                          className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 accent-indigo-600 cursor-pointer"
+                        />
+                        <span className={`w-1.5 h-1.5 rounded-full ${opt.dot}`} />
+                        <span className="whitespace-nowrap text-[11px] sm:text-xs">{opt.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -4376,14 +4434,14 @@ export function PlanningTab({
             </div>
 
             {/* Clear Filters Button if any is changed */}
-            {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || statusFilter !== "all" || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || periodTypeFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all") && (
+            {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || statusFilter.length !== 2 || !statusFilter.includes("Não iniciada") || !statusFilter.includes("Em andamento") || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || periodTypeFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all") && (
               <div className="pt-2 flex justify-end">
                 <button
                   onClick={() => {
                     setPlanFilter("all");
                     setSelectedAreaIds([]);
                     setSelectedResponsibleIds([]);
-                    setStatusFilter("all");
+                    setStatusFilter(["Não iniciada", "Em andamento"]);
                     setSituationFilter("all");
                     setPriorityFilter("all");
                     setCategoryFilter("all");
@@ -7265,17 +7323,40 @@ export function PlanningTab({
 
                     {/* Status */}
                     <div className="flex flex-col gap-1.5">
-                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🚦 Status</span>
-                      <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
-                      >
-                        <option value="all">Todos os Status</option>
-                        <option value="Não iniciada">NÃO INICIADA</option>
-                        <option value="Em andamento">EM ANDAMENTO</option>
-                        <option value="Concluída">CONCLUÍDA</option>
-                      </select>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🚦 Status</span>
+                        <span className="text-[10px] font-bold text-slate-400">
+                          {statusFilter.length === 3 ? "Todos" : `${statusFilter.length} sel.`}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-white border border-slate-200 rounded-xl min-h-[42px]">
+                        {[
+                          { id: "Não iniciada", label: "Não iniciada", dot: "bg-slate-400" },
+                          { id: "Em andamento", label: "Em andamento", dot: "bg-blue-500" },
+                          { id: "Concluída", label: "Concluída", dot: "bg-emerald-500" },
+                        ].map((opt) => {
+                          const isChecked = statusFilter.includes(opt.id);
+                          return (
+                            <label
+                              key={opt.id}
+                              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold cursor-pointer transition-all select-none ${
+                                isChecked
+                                  ? "bg-slate-100 border-slate-300 text-slate-800 shadow-xs"
+                                  : "bg-transparent border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleStatusFilterToggle(opt.id)}
+                                className="w-3.5 h-3.5 rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid accent-adasa-mid cursor-pointer"
+                              />
+                              <span className={`w-1.5 h-1.5 rounded-full ${opt.dot}`} />
+                              <span className="whitespace-nowrap text-[11px] sm:text-xs">{opt.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     {/* Situação */}
@@ -7322,11 +7403,11 @@ export function PlanningTab({
 
                   {/* Consultar / Limpar Buttons */}
                   <div className="flex justify-center items-center gap-4 pt-2">
-                    {(planFilter !== "all" || statusFilter !== "all" || situationFilter !== "all" || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
+                    {(planFilter !== "all" || statusFilter.length !== 2 || !statusFilter.includes("Não iniciada") || !statusFilter.includes("Em andamento") || situationFilter !== "all" || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
                       <button
                         onClick={() => {
                           setPlanFilter("all");
-                          setStatusFilter("all");
+                          setStatusFilter(["Não iniciada", "Em andamento"]);
                           setSituationFilter("all");
                           setTaskTypeFilter("all");
                           setSearchTerm("");
@@ -7509,17 +7590,40 @@ export function PlanningTab({
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🚦 Status</span>
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
-                  >
-                    <option value="all">Todos os Status</option>
-                    <option value="Não iniciada">NÃO INICIADA</option>
-                    <option value="Em andamento">EM ANDAMENTO</option>
-                    <option value="Concluída">CONCLUÍDA</option>
-                  </select>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🚦 Status</span>
+                    <span className="text-[10px] font-bold text-slate-400">
+                      {statusFilter.length === 3 ? "Todos" : `${statusFilter.length} sel.`}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-white border border-slate-200 rounded-xl min-h-[42px]">
+                    {[
+                      { id: "Não iniciada", label: "Não iniciada", dot: "bg-slate-400" },
+                      { id: "Em andamento", label: "Em andamento", dot: "bg-blue-500" },
+                      { id: "Concluída", label: "Concluída", dot: "bg-emerald-500" },
+                    ].map((opt) => {
+                      const isChecked = statusFilter.includes(opt.id);
+                      return (
+                        <label
+                          key={opt.id}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold cursor-pointer transition-all select-none ${
+                            isChecked
+                              ? "bg-slate-100 border-slate-300 text-slate-800 shadow-xs"
+                              : "bg-transparent border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleStatusFilterToggle(opt.id)}
+                            className="w-3.5 h-3.5 rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid accent-adasa-mid cursor-pointer"
+                          />
+                          <span className={`w-1.5 h-1.5 rounded-full ${opt.dot}`} />
+                          <span className="whitespace-nowrap text-[11px] sm:text-xs">{opt.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-1.5">
@@ -7592,13 +7696,13 @@ export function PlanningTab({
 
               {/* Consultar / Limpar Buttons */}
               <div className="flex justify-center items-center gap-4 pt-2">
-                  {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || statusFilter !== "all" || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
+                  {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || statusFilter.length !== 2 || !statusFilter.includes("Não iniciada") || !statusFilter.includes("Em andamento") || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
                     <button
                       onClick={() => {
                         setPlanFilter("all");
                         setSelectedAreaIds([]);
                         setSelectedResponsibleIds([]);
-                        setStatusFilter("all");
+                        setStatusFilter(["Não iniciada", "Em andamento"]);
                         setSituationFilter("all");
                         setPriorityFilter("all");
                         setCategoryFilter("all");
@@ -9330,7 +9434,9 @@ export function PlanningTab({
                                   const isExpanded = isAnyFilterActive ? (expandedTasks[n.id] !== false) : !!expandedTasks[n.id];
                                   if (isExpanded) {
                                     const taskChildren = childrenMap[n.id] || [];
-                                    const visibleChildren = taskChildren.filter(c => childMatchesOrIsPath(c.id));
+                                    const visibleChildren = isAnyFilterActive
+                                      ? taskChildren.filter(c => childMatchesOrIsPath(c.id) || matchesFilters(n))
+                                      : taskChildren;
                                     if (visibleChildren.length > 0) {
                                       buildList(visibleChildren, depth + 1);
                                     }
@@ -10870,110 +10976,113 @@ export function PlanningTab({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl p-6 shadow-2xl max-w-5xl w-full border border-slate-200 text-left max-h-[90vh] overflow-y-auto custom-scrollbar space-y-4"
+              className="bg-white rounded-3xl p-7 shadow-2xl max-w-5xl w-full border border-slate-200 text-left max-h-[90vh] overflow-y-auto custom-scrollbar space-y-5"
             >
-              <div className="flex flex-wrap justify-between items-center gap-3 pb-3 border-b border-slate-100">
-                <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">
+              <div className="flex flex-wrap justify-between items-center gap-3 pb-3.5 border-b border-slate-100">
+                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
                   {formMode === "create" ? "Nova Atividade" : "Editar Atividade"}
                 </h3>
                 <div className="flex items-center gap-2.5">
                   <button
                     type="button"
                     onClick={() => setIsFormOpen(false)}
-                    className="px-4 py-1.5 font-bold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                    className="px-4 py-2 font-bold text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
                   >
                     Fechar
                   </button>
                   <button
                     type="button"
                     onClick={(e) => handleFormSubmit(e as any)}
-                    className="px-4 py-1.5 font-bold text-xs text-white bg-adasa-mid hover:bg-adasa-dark rounded-xl transition-colors shadow-sm"
+                    className="px-5 py-2 font-bold text-sm text-white bg-adasa-mid hover:bg-adasa-dark rounded-xl transition-colors shadow-sm cursor-pointer"
                   >
                     {formMode === "create" ? "Inserir Atividade" : "Gravar Alterações"}
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsFormOpen(false)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors ml-1"
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors ml-1 cursor-pointer"
                     title="Fechar modal"
                   >
-                    <X size={16} />
+                    <X size={18} />
                   </button>
                 </div>
               </div>
 
-              {formMode === "edit" && (
-                <div className="flex gap-2 border-b border-slate-100 pb-2">
+              {/* Tab Navigation (Available in both Create and Edit modes) */}
+              <div className="flex flex-wrap gap-2 border-b border-slate-100 pb-3">
+                <button
+                  type="button"
+                  onClick={() => setTaskFormTab("form")}
+                  className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors cursor-pointer ${taskFormTab === "form" ? "bg-adasa-mid text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                >
+                  Formulário
+                </button>
+                {editingTask.type === 'fiscalizacao' && (
                   <button
                     type="button"
-                    onClick={() => setTaskFormTab("form")}
-                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${taskFormTab === "form" ? "bg-adasa-mid text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
+                    onClick={() => setTaskFormTab("fiscalizacao")}
+                    className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors cursor-pointer ${taskFormTab === "fiscalizacao" ? "bg-adasa-mid text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
                   >
-                    Formulário
+                    Dados da Fiscalização
                   </button>
-                  {editingTask.type === 'fiscalizacao' && (
+                )}
+                {(editingTask.type === 'demanda_ouvidoria' || editingTask.type === 'recurso') && (
+                  <button
+                    type="button"
+                    onClick={() => setTaskFormTab("recurso")}
+                    className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors cursor-pointer ${(taskFormTab === "recurso" || taskFormTab === "demanda_ouvidoria") ? "bg-adasa-mid text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  >
+                    Demanda Ouvidoria
+                  </button>
+                )}
+                {editingTask.type === 'recurso_revisao' && (
+                  <button
+                    type="button"
+                    onClick={() => setTaskFormTab("recurso_revisao")}
+                    className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors cursor-pointer ${taskFormTab === "recurso_revisao" ? "bg-adasa-mid text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  >
+                    Recurso de Revisão
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setTaskFormTab("notes")}
+                  className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors cursor-pointer ${taskFormTab === "notes" ? "bg-adasa-mid text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                >
+                  Anotações
+                </button>
+                {formMode === "edit" && (
+                  <>
                     <button
                       type="button"
-                      onClick={() => setTaskFormTab("fiscalizacao")}
-                      className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${taskFormTab === "fiscalizacao" ? "bg-adasa-mid text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
+                      onClick={() => setTaskFormTab("comments")}
+                      className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors cursor-pointer ${taskFormTab === "comments" ? "bg-adasa-mid text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
                     >
-                      Dados da Fiscalização
+                      Comentários
                     </button>
-                  )}
-                  {(editingTask.type === 'demanda_ouvidoria' || editingTask.type === 'recurso') && (
                     <button
                       type="button"
-                      onClick={() => setTaskFormTab("recurso")}
-                      className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${(taskFormTab === "recurso" || taskFormTab === "demanda_ouvidoria") ? "bg-adasa-mid text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
+                      onClick={() => setTaskFormTab("links")}
+                      className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors cursor-pointer ${taskFormTab === "links" ? "bg-adasa-mid text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
                     >
-                      Demanda Ouvidoria
+                      Links
                     </button>
-                  )}
-                  {editingTask.type === 'recurso_revisao' && (
                     <button
                       type="button"
-                      onClick={() => setTaskFormTab("recurso_revisao")}
-                      className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${taskFormTab === "recurso_revisao" ? "bg-adasa-mid text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
+                      onClick={() => setTaskFormTab("calc")}
+                      className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors cursor-pointer ${taskFormTab === "calc" ? "bg-adasa-mid text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
                     >
-                      Recurso de Revisão
+                      Cálculo do Progresso
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setTaskFormTab("notes")}
-                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${taskFormTab === "notes" ? "bg-adasa-mid text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
-                  >
-                    Anotações
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTaskFormTab("comments")}
-                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${taskFormTab === "comments" ? "bg-adasa-mid text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
-                  >
-                    Comentários
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTaskFormTab("links")}
-                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${taskFormTab === "links" ? "bg-adasa-mid text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
-                  >
-                    Links
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTaskFormTab("calc")}
-                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${taskFormTab === "calc" ? "bg-adasa-mid text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
-                  >
-                    Cálculo do Progresso
-                  </button>
-                </div>
-              )}
+                  </>
+                )}
+              </div>
 
               <form onSubmit={handleFormSubmit} className={taskFormTab === "form" ? "grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4" : "hidden"}>
                 {/* Plan of Activities (Exactly One) */}
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Selecione a qual plano estratégico principal esta atividade se vincula">
-                    <CalendarDays size={14} className="text-blue-500 shrink-0" />
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Selecione a qual plano estratégico principal esta atividade se vincula">
+                    <CalendarDays size={15} className="text-blue-500 shrink-0" />
                     Plano de Atividades (Vincular a um)
                   </label>
                   <select
@@ -10986,7 +11095,7 @@ export function PlanningTab({
                         planId: val || null
                       }));
                     }}
-                    className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white focus:border-adasa-mid outline-none"
+                    className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 bg-white focus:border-adasa-mid outline-none"
                   >
                     <option value="">Selecione um Plano...</option>
                     {plans.map(p => (
@@ -10996,9 +11105,9 @@ export function PlanningTab({
                 </div>
 
                 {/* Tipo de Tarefa */}
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Define o tipo de atividade para campos específicos">
-                    <Layers size={14} className="text-adasa-mid shrink-0" />
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Define o tipo de atividade para campos específicos">
+                    <Layers size={15} className="text-adasa-mid shrink-0" />
                     Tipo de Tarefa
                   </label>
                   <select
@@ -11046,10 +11155,14 @@ export function PlanningTab({
                         }
                         return next;
                       });
-                      if (e.target.value === 'fiscalizacao') setTaskFormTab('fiscalizacao');
-                      else if (e.target.value === 'demanda_ouvidoria' || e.target.value === 'recurso') setTaskFormTab('recurso');
-                      else if (e.target.value === 'recurso_revisao') setTaskFormTab('recurso_revisao');
-                      else setTaskFormTab('form');
+
+                      // If currently on a specific tab that does not match the new type, switch to the corresponding tab or form
+                      if (taskFormTab !== 'form' && taskFormTab !== 'notes' && taskFormTab !== 'comments' && taskFormTab !== 'links' && taskFormTab !== 'calc') {
+                        if (newType === 'fiscalizacao') setTaskFormTab('fiscalizacao');
+                        else if (newType === 'demanda_ouvidoria' || newType === 'recurso') setTaskFormTab('recurso');
+                        else if (newType === 'recurso_revisao') setTaskFormTab('recurso_revisao');
+                        else setTaskFormTab('form');
+                      }
                     }}
                     className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none transition-all placeholder:text-slate-400 bg-slate-50/10 focus:bg-white"
                   >
@@ -11061,9 +11174,9 @@ export function PlanningTab({
                 </div>
 
                 {/* Title */}
-                <div className="space-y-1 md:col-span-2">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Nome identificador da tarefa, etapa ou processo">
-                    <Type size={14} className="text-purple-500 shrink-0" />
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Nome identificador da tarefa, etapa ou processo">
+                    <Type size={15} className="text-purple-500 shrink-0" />
                     Título da Tarefa/Etapa
                   </label>
                   <input
@@ -11077,10 +11190,40 @@ export function PlanningTab({
                 </div>
 
                 {/* Tarefa Pai */}
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Define a hierarquia. Se preenchido, esta se tornará uma subtarefa">
-                    <Layers size={14} className="text-emerald-500 shrink-0" /> Tarefa Pai
+                <div className="space-y-1.5 min-w-0">
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center justify-between gap-1.5" title="Define a hierarquia. Se preenchido, esta se tornará uma subtarefa">
+                    <span className="flex items-center gap-1.5">
+                      <Layers size={15} className="text-emerald-500 shrink-0" /> Tarefa Pai
+                    </span>
+                    {editTaskParentSearch && (
+                      <span className="text-xs font-bold text-slate-400 lowercase font-normal">
+                        filtrando por "{editTaskParentSearch}"
+                      </span>
+                    )}
                   </label>
+
+                  {/* Campo de filtro de texto para facilitar a busca no combobox */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Buscar / filtrar tarefa pai por nome ou SEI..."
+                      value={editTaskParentSearch}
+                      onChange={(e) => setEditTaskParentSearch(e.target.value)}
+                      className="w-full pl-8 pr-14 py-2 text-sm font-semibold text-slate-700 border-2 border-slate-200 rounded-xl outline-none focus:border-adasa-mid bg-slate-50/10 focus:bg-white"
+                    />
+                    <Search size={14} className="absolute left-3 top-3 text-slate-400" />
+                    {editTaskParentSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setEditTaskParentSearch("")}
+                        className="absolute right-2 top-2 text-[10px] font-black bg-slate-100 hover:bg-slate-200 text-slate-500 px-2 py-0.5 rounded uppercase cursor-pointer"
+                        title="Limpar filtro"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+
                   <select
                     value={editingTask.parentId || ""}
                     onChange={(e) => {
@@ -11102,7 +11245,7 @@ export function PlanningTab({
                         return newState;
                       });
                     }}
-                    className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-700 focus:border-adasa-mid outline-none bg-slate-50/10 focus:bg-white"
+                    className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none bg-slate-50/10 focus:bg-white truncate"
                   >
                     <option value="">Nenhuma (Tarefa Raiz)</option>
                     {tasks
@@ -11116,6 +11259,15 @@ export function PlanningTab({
                         }
                         return true;
                       })
+                      .filter(t => {
+                        if (!editTaskParentSearch.trim()) return true;
+                        if (editingTask.parentId && t.id === editingTask.parentId) return true;
+                        const query = editTaskParentSearch.toLowerCase();
+                        const displayName = getTaskDisplayName(t).toLowerCase();
+                        const title = (t.title || "").toLowerCase();
+                        const sei = (t.seiProcess || "").toLowerCase();
+                        return displayName.includes(query) || title.includes(query) || sei.includes(query);
+                      })
                       .map(t => {
                         const displayName = getTaskDisplayName(t);
                         return (
@@ -11128,9 +11280,9 @@ export function PlanningTab({
                 </div>
 
                 {/* Dependency (Depends On) */}
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Atividade que deve ser concluída antes desta iniciar (vincula as datas automaticamente)">
-                    <Link2 size={14} className="text-orange-500 shrink-0" />
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Atividade que deve ser concluída antes desta iniciar (vincula as datas automaticamente)">
+                    <Link2 size={15} className="text-orange-500 shrink-0" />
                     Depende de (Pré-requisito)
                   </label>
                   <select
@@ -11173,7 +11325,7 @@ export function PlanningTab({
                         return next;
                       });
                     }}
-                    className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-600 focus:border-adasa-mid outline-none"
+                    className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none"
                   >
                     <option value="">Nenhuma (Início Imediato)</option>
                     {tasks.filter(t => t.parentId === editingTask.parentId && t.id !== editingTask.id && (editingTask.planId ? t.planId === editingTask.planId : true)).map(t => {
@@ -11189,50 +11341,50 @@ export function PlanningTab({
 
                 {/* Calendar Dates (Lock if rollup is enabled) */}
                 <div className="grid grid-cols-2 gap-4 md:col-span-2">
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Data prevista para o início da atividade">
-                      <Calendar size={14} className="text-adasa-mid shrink-0" />
-                      Data de Início {editingTask.id && hasChildren(editingTask.id) && <Info size={11} className="text-dashed text-indigo-500 shrink-0" />}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Data prevista para o início da atividade">
+                      <Calendar size={15} className="text-adasa-mid shrink-0" />
+                      Data de Início {editingTask.id && hasChildren(editingTask.id) && <Info size={13} className="text-dashed text-indigo-500 shrink-0" />}
                     </label>
                     <input
                       type="date"
                       value={editingTask.startDate || ""}
                       onChange={(e) => setEditingTask(prev => ({ ...prev, startDate: e.target.value }))}
                       disabled={editingTask.id !== undefined && hasChildren(editingTask.id)}
-                      className={`w-full border-2 border-slate-200 text-slate-700 rounded-xl px-3.5 py-2 text-xs font-semibold focus:border-adasa-mid outline-none ${
+                      className={`w-full border-2 border-slate-200 text-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-semibold focus:border-adasa-mid outline-none ${
                         editingTask.id !== undefined && hasChildren(editingTask.id) ? "bg-slate-100 border-slate-200 cursor-not-allowed opacity-80" : ""
                       }`}
                     />
                     {editingTask.id !== undefined && hasChildren(editingTask.id) && (
-                      <span className="block text-[9px] font-bold text-indigo-500 tracking-tight leading-tight">Mínimo das subtarefas filhas</span>
+                      <span className="block text-xs font-bold text-indigo-500 tracking-tight leading-tight">Mínimo das subtarefas filhas</span>
                     )}
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Data prevista para o término da atividade">
-                      <CalendarCheck size={14} className="text-indigo-500 shrink-0" />
-                      Data de Fim {editingTask.id && hasChildren(editingTask.id) && <Info size={11} className="text-indigo-500 shrink-0" />}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Data prevista para o término da atividade">
+                      <CalendarCheck size={15} className="text-indigo-500 shrink-0" />
+                      Data de Fim {editingTask.id && hasChildren(editingTask.id) && <Info size={13} className="text-indigo-500 shrink-0" />}
                     </label>
                     <input
                       type="date"
                       value={editingTask.endDate || ""}
                       onChange={(e) => setEditingTask(prev => ({ ...prev, endDate: e.target.value }))}
                       disabled={editingTask.id !== undefined && hasChildren(editingTask.id)}
-                      className={`w-full border-2 border-slate-200 text-slate-700 rounded-xl px-3.5 py-2 text-xs font-semibold focus:border-adasa-mid outline-none ${
+                      className={`w-full border-2 border-slate-200 text-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-semibold focus:border-adasa-mid outline-none ${
                         editingTask.id !== undefined && hasChildren(editingTask.id) ? "bg-slate-100 border-slate-200 cursor-not-allowed opacity-80" : ""
                       }`}
                     />
                     {editingTask.id !== undefined && hasChildren(editingTask.id) && (
-                      <span className="block text-[9px] font-bold text-indigo-500 tracking-tight leading-tight">Máximo das subtarefas filhas</span>
+                      <span className="block text-xs font-bold text-indigo-500 tracking-tight leading-tight">Máximo das subtarefas filhas</span>
                     )}
                   </div>
                 </div>
 
                 {/* Progress (Percentage) */}
                 <div className="grid grid-cols-2 gap-4 md:col-span-2">
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Percentual de evolução da execução">
-                      <Percent size={14} className="text-yellow-500 shrink-0" />
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Percentual de evolução da execução">
+                      <Percent size={15} className="text-yellow-500 shrink-0" />
                       Progresso (%)
                     </label>
                     <input
@@ -11250,25 +11402,25 @@ export function PlanningTab({
                         }
                       }}
                       disabled={editingTask.id !== undefined && hasChildren(editingTask.id)}
-                      className={`w-full border-2 border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 focus:border-adasa-mid outline-none ${
+                      className={`w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none ${
                         editingTask.id !== undefined && hasChildren(editingTask.id) ? "bg-slate-100 border-slate-200 cursor-not-allowed opacity-85" : ""
                       }`}
                     />
                     {editingTask.id !== undefined && hasChildren(editingTask.id) && (
-                      <span className="block text-[9px] font-bold text-indigo-500 tracking-tight leading-tight">Média das subtarefas filhas</span>
+                      <span className="block text-xs font-bold text-indigo-500 tracking-tight leading-tight">Média das subtarefas filhas</span>
                     )}
                   </div>
 
-                  <div className="space-y-1 font-semibold leading-normal">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Status atual da tarefa (Calculado automaticamente com base no progresso)">
-                      <Activity size={14} className="text-cyan-500 shrink-0" />
+                  <div className="space-y-1.5 font-semibold leading-normal">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Status atual da tarefa (Calculado automaticamente com base no progresso)">
+                      <Activity size={15} className="text-cyan-500 shrink-0" />
                       Status
                     </label>
                     <select
                       value={getStatusFromProgress(editingTask.progress ?? 0)}
                       onChange={(e) => setEditingTask(prev => ({ ...prev, status: e.target.value }))}
                       disabled={true}
-                      className="w-full bg-slate-100 border-2 border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-600 focus:border-adasa-mid outline-none cursor-not-allowed opacity-85"
+                      className="w-full bg-slate-100 border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-700 focus:border-adasa-mid outline-none cursor-not-allowed opacity-85"
                     >
                       <option value="Não iniciada">Não iniciada</option>
                       <option value="Em andamento">Em andamento</option>
@@ -11278,9 +11430,9 @@ export function PlanningTab({
                 </div>
 
                 {/* Technical Meta Filters */}
-                <div className="space-y-1 md:col-span-2">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Número de referência no Sistema Eletrônico de Informações (SEI)">
-                    <FileText size={14} className="text-red-500 shrink-0" />
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Número de referência no Sistema Eletrônico de Informações (SEI)">
+                    <FileText size={15} className="text-red-500 shrink-0" />
                     Processo SEI
                   </label>
                   <input
@@ -11288,20 +11440,20 @@ export function PlanningTab({
                     value={editingTask.seiProcess || ""}
                     onChange={(e) => setEditingTask(prev => ({ ...prev, seiProcess: e.target.value }))}
                     placeholder="Ex: 00197-00001234/2024-56"
-                    className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-600 focus:border-adasa-mid outline-none"
+                    className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none"
                   />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:col-span-2">
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Nível de urgência e importância (Baixa, Média, Alta)">
-                      <AlertTriangle size={14} className="text-rose-500 shrink-0" />
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Nível de urgência e importância (Baixa, Média, Alta)">
+                      <AlertTriangle size={15} className="text-rose-500 shrink-0" />
                       Prioridade
                     </label>
                     <select
                       value={editingTask.priority || "Média"}
                       onChange={(e) => setEditingTask(prev => ({ ...prev, priority: e.target.value }))}
-                      className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-600 focus:border-adasa-mid outline-none"
+                      className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none"
                     >
                       <option value="Alta">Alta</option>
                       <option value="Média">Média</option>
@@ -11309,24 +11461,24 @@ export function PlanningTab({
                     </select>
                   </div>
                   
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Indica se é uma atividade de rotina (Programada) ou inserida sob demanda (Não programada)">
-                      <Tag size={14} className="text-fuchsia-500 shrink-0" />
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Indica se é uma atividade de rotina (Programada) ou inserida sob demanda (Não programada)">
+                      <Tag size={15} className="text-fuchsia-500 shrink-0" />
                       Classificação
                     </label>
                     <select
                       value={editingTask.isProgrammed === false ? "false" : "true"}
                       onChange={(e) => setEditingTask(prev => ({ ...prev, isProgrammed: e.target.value === "true" }))}
-                      className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-600 focus:border-adasa-mid outline-none"
+                      className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none"
                     >
                       <option value="true">Programada</option>
                       <option value="false">Não programada</option>
                     </select>
                   </div>
                   
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Peso de relevância para o cálculo do progresso da tarefa pai ou plano">
-                      <Scale size={14} className="text-violet-500 shrink-0" />
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Peso de relevância para o cálculo do progresso da tarefa pai ou plano">
+                      <Scale size={15} className="text-violet-500 shrink-0" />
                       Peso Relativo
                     </label>
                     <input
@@ -11337,23 +11489,23 @@ export function PlanningTab({
                       onChange={(e) => {
                         setEditingTask(prev => ({ ...prev, weight: e.target.value as any }));
                       }}
-                      className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-600 font-semibold focus:border-adasa-mid outline-none transition-all placeholder:text-slate-400"
+                      className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none transition-all placeholder:text-slate-400"
                     />
                   </div>
                 </div>
 
                 {/* Areas of Activities (One or More) */}
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Setores organizacionais responsáveis por esta atividade">
-                    <Briefcase size={14} className="text-lime-500 shrink-0" />
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Setores organizacionais responsáveis por esta atividade">
+                    <Briefcase size={15} className="text-lime-500 shrink-0" />
                     Áreas de Vinculação
                     {editingTask.parentId && taskById[editingTask.parentId]?.areaIds?.length ? " (Herdado e bloqueado pela Tarefa Pai)" : ""}
                   </label>
-                  <div className={`bg-slate-50 border-2 border-slate-200 rounded-xl p-3 max-h-40 overflow-y-auto space-y-1.5 ${editingTask.parentId && taskById[editingTask.parentId]?.areaIds?.length ? "opacity-60 pointer-events-none" : ""}`}>
+                  <div className={`bg-slate-50 border-2 border-slate-200 rounded-xl p-3.5 max-h-44 overflow-y-auto space-y-2 ${editingTask.parentId && taskById[editingTask.parentId]?.areaIds?.length ? "opacity-60 pointer-events-none" : ""}`}>
                     {[...areas].sort((a,b) => a.name.localeCompare(b.name)).map(a => {
                       const isChecked = editingTask.areaIds?.includes(a.id);
                       return (
-                        <label key={a.id} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-600 hover:text-slate-800">
+                        <label key={a.id} className="flex items-center gap-2.5 cursor-pointer text-sm font-semibold text-slate-700 hover:text-slate-900">
                           <input
                             type="checkbox"
                             checked={!!isChecked}
@@ -11369,33 +11521,33 @@ export function PlanningTab({
                                 return { ...prev, areaIds: next };
                               });
                             }}
-                            className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0"
+                            className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0 cursor-pointer"
                           />
                           <span>{a.name}</span>
                         </label>
                       );
                     })}
                     {areas.length === 0 && (
-                      <span className="block text-xs text-slate-400 italic">Nenhuma Área cadastrada sob o cadastro auxiliar.</span>
+                      <span className="block text-sm text-slate-400 italic">Nenhuma Área cadastrada sob o cadastro auxiliar.</span>
                     )}
                   </div>
                 </div>
 
                 {/* Categories of Activities (One or More) */}
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Assuntos temáticos aos quais a atividade se relaciona">
-                    <ListTree size={14} className="text-amber-500 shrink-0" />
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Assuntos temáticos aos quais a atividade se relaciona">
+                    <ListTree size={15} className="text-amber-500 shrink-0" />
                     Categorias (Filtradas pelas Áreas selecionadas)
                     {editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length ? " (Herdado e bloqueado pela Tarefa Pai)" : ""}
                   </label>
-                  <div className={`bg-slate-50 border-2 border-slate-200 rounded-xl p-3 max-h-40 overflow-y-auto space-y-1.5 ${editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length ? "opacity-60 pointer-events-none" : ""}`}>
+                  <div className={`bg-slate-50 border-2 border-slate-200 rounded-xl p-3.5 max-h-44 overflow-y-auto space-y-2 ${editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length ? "opacity-60 pointer-events-none" : ""}`}>
                     {categories.filter(c => c.areaIds?.some(aid => editingTask.areaIds?.includes(aid))).length === 0 ? (
-                      <span className="block text-xs text-slate-400 italic">Nenhuma categoria encontrada para as áreas selecionadas.</span>
+                      <span className="block text-sm text-slate-400 italic">Nenhuma categoria encontrada para as áreas selecionadas.</span>
                     ) : (
                       categories.filter(c => c.areaIds?.some(aid => editingTask.areaIds?.includes(aid))).sort((a,b) => a.name.localeCompare(b.name)).map(c => {
                         const isChecked = editingTask.categoryIds?.includes(c.id);
                         return (
-                          <label key={c.id} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-600 hover:text-slate-800">
+                          <label key={c.id} className="flex items-center gap-2.5 cursor-pointer text-sm font-semibold text-slate-700 hover:text-slate-900">
                             <input
                               type="checkbox"
                               checked={!!isChecked}
@@ -11411,7 +11563,7 @@ export function PlanningTab({
                                   return { ...prev, categoryIds: next };
                                 });
                               }}
-                              className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0"
+                              className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0 cursor-pointer"
                             />
                             <span>{c.name} <span className="opacity-50 font-normal">({c.areaIds?.map(aid => areas.find(a => a.id === aid)?.name).filter(Boolean).join(", ")})</span></span>
                           </label>
@@ -11422,19 +11574,19 @@ export function PlanningTab({
                 </div>
 
                 {/* Designated Responsibles (One or More) */}
-                <div className="space-y-1 md:col-span-2">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Profissionais ou equipes que atuarão na execução da atividade">
-                    <Users size={14} className="text-sky-500 shrink-0" />
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Profissionais ou equipes que atuarão na execução da atividade">
+                    <Users size={15} className="text-sky-500 shrink-0" />
                     Responsáveis Designados (Filtrados por Área)
                   </label>
-                  <div className="bg-slate-50 border-2 border-slate-200 rounded-xl p-3 max-h-40 overflow-y-auto space-y-1.5 animate-none">
+                  <div className="bg-slate-50 border-2 border-slate-200 rounded-xl p-3.5 max-h-44 overflow-y-auto space-y-2 animate-none">
                     {responsibles.filter(r => !editingTask.areaIds || editingTask.areaIds.length === 0 || r.areaIds?.some(aid => editingTask.areaIds?.includes(aid))).length === 0 ? (
-                      <span className="block text-xs text-slate-400 italic font-medium">Nenhum responsável encontrado para as áreas selecionadas.</span>
+                      <span className="block text-sm text-slate-400 italic font-medium">Nenhum responsável encontrado para as áreas selecionadas.</span>
                     ) : (
                       responsibles.filter(r => !editingTask.areaIds || editingTask.areaIds.length === 0 || r.areaIds?.some(aid => editingTask.areaIds?.includes(aid))).sort((a,b) => a.name.localeCompare(b.name)).map(r => {
                       const isChecked = editingTask.responsibleIds?.includes(r.id);
                       return (
-                        <label key={r.id} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-600 hover:text-slate-800">
+                        <label key={r.id} className="flex items-center gap-2.5 cursor-pointer text-sm font-semibold text-slate-700 hover:text-slate-900">
                           <input
                             type="checkbox"
                             checked={!!isChecked}
@@ -11448,28 +11600,26 @@ export function PlanningTab({
                                 return { ...prev, responsibleIds: next };
                               });
                             }}
-                            className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0"
+                            className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0 cursor-pointer"
                           />
                           <div>
-                            <span className="font-bold text-slate-700">{r.name}</span>
-                            {r.role && <span className="text-[9px] text-slate-500 font-black ml-1.5 uppercase bg-slate-200 px-1.5 py-0.5 rounded">{r.role}</span>}
+                            <span className="font-bold text-slate-800">{r.name}</span>
+                            {r.role && <span className="text-[10px] text-slate-500 font-black ml-2 uppercase bg-slate-200 px-2 py-0.5 rounded">{r.role}</span>}
                           </div>
                         </label>
                       );
                     }))}
                     {responsibles.length === 0 && (
-                      <span className="block text-xs text-slate-400 italic font-medium">Nenhum responsável cadastrado sob o cadastro auxiliar.</span>
+                      <span className="block text-sm text-slate-400 italic font-medium">Nenhum responsável cadastrado sob o cadastro auxiliar.</span>
                     )}
                   </div>
                 </div>
 
-
-
                 {formMode === "edit" && editingTask.updatedAt && (
-                  <div className="space-y-1 md:col-span-2">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider font-semibold">Atualização</label>
-                    <div className="px-3.5 py-2 text-xs font-semibold text-slate-500 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2">
-                      <Clock size={12} className="text-slate-400" />
+                  <div className="space-y-1.5 md:col-span-2">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider font-semibold">Atualização</label>
+                    <div className="px-3.5 py-2.5 text-sm font-semibold text-slate-500 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2">
+                      <Clock size={14} className="text-slate-400" />
                       <span>{formatDateTime(editingTask.updatedAt)} por {editingTask.updatedBy || 'Sistema'}</span>
                     </div>
                   </div>
@@ -11479,13 +11629,13 @@ export function PlanningTab({
                   <button
                     type="button"
                     onClick={() => setIsFormOpen(false)}
-                    className="px-5 py-2 font-bold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                    className="px-6 py-2.5 font-bold text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
                   >
                     Fechar
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 font-bold text-xs text-white bg-adasa-mid hover:bg-adasa-dark rounded-xl transition-colors shadow-sm"
+                    className="px-6 py-2.5 font-bold text-sm text-white bg-adasa-mid hover:bg-adasa-dark rounded-xl transition-colors shadow-sm cursor-pointer"
                   >
                     {formMode === "create" ? "Inserir Atividade" : "Gravar Alterações"}
                   </button>
@@ -11494,24 +11644,24 @@ export function PlanningTab({
 
               {taskFormTab === "notes" && (
                 <div className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider font-semibold flex items-center gap-2"><BookOpen size={14}/> Notas técnicas / Justificativas</label>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider font-semibold flex items-center gap-2"><BookOpen size={15}/> Anotações</label>
                     <textarea
                       rows={5}
                       value={editingTask.notes || ""}
                       onChange={(e) => setEditingTask(prev => ({ ...prev, notes: e.target.value, description: e.target.value }))}
-                      placeholder="Justificativa técnica, observações sobre o andamento e fontes dos dados..."
-                      className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-700 focus:border-adasa-mid outline-none transition-all placeholder:text-slate-400"
+                      placeholder="Anotações técnicas, observações sobre o andamento e fontes dos dados..."
+                      className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-700 focus:border-adasa-mid outline-none transition-all placeholder:text-slate-400"
                     ></textarea>
                   </div>
                   
                   <div className="space-y-3 pt-3 border-t border-slate-100">
-                    <label className="block text-[11px] font-black text-slate-600 uppercase tracking-wider font-semibold flex items-center gap-2">
-                      <ListTodo size={14} className="text-slate-400"/> 
+                    <label className="block text-xs font-black text-slate-600 uppercase tracking-wider font-semibold flex items-center gap-2">
+                      <ListTodo size={15} className="text-slate-400"/> 
                       Lista de verificação ({(editingTask.checklist || []).filter(c => c.completed).length} de {(editingTask.checklist || []).length} itens concluídos)
                     </label>
                     
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       {(editingTask.checklist || []).map((item, index) => (
                         <div 
                           key={item.id} 
@@ -11534,10 +11684,10 @@ export function PlanningTab({
                             className="text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing"
                             title="Arraste para reordenar"
                           >
-                            <GripVertical size={14} />
+                            <GripVertical size={15} />
                           </button>
                           
-                          <span className="text-[10px] font-bold text-slate-400 w-4 text-right select-none">{index + 1}.</span>
+                          <span className="text-xs font-bold text-slate-400 w-4 text-right select-none">{index + 1}.</span>
                           
                           <button
                             type="button"
@@ -11548,7 +11698,7 @@ export function PlanningTab({
                             }}
                             className={item.completed ? "text-indigo-500" : "text-slate-300 hover:text-indigo-400"}
                           >
-                            {item.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                            {item.completed ? <CheckCircle2 size={19} /> : <Circle size={19} />}
                           </button>
 
                           <input
@@ -11559,7 +11709,7 @@ export function PlanningTab({
                               newChecklist[index] = { ...item, text: e.target.value };
                               setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
                             }}
-                            className={`flex-1 bg-transparent border-none outline-none text-xs ${item.completed ? 'text-slate-400 line-through' : 'text-slate-700'}`}
+                            className={`flex-1 bg-transparent border-none outline-none text-sm ${item.completed ? 'text-slate-400 line-through' : 'text-slate-700'}`}
                             placeholder="Descrição do item..."
                           />
 
@@ -11573,7 +11723,7 @@ export function PlanningTab({
                             className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                             title="Remover item"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={15} />
                           </button>
                         </div>
                       ))}
@@ -11585,9 +11735,9 @@ export function PlanningTab({
                             const newItem = { id: Date.now().toString() + Math.random().toString(36).substring(7), text: "", completed: false };
                             setEditingTask(prev => ({ ...prev, checklist: [...(prev.checklist || []), newItem] }));
                           }}
-                          className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-indigo-500 transition-colors"
+                          className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-indigo-600 transition-colors cursor-pointer"
                         >
-                          <Plus size={14} /> Adicionar um item
+                          <Plus size={15} /> Adicionar um item
                         </button>
                       </div>
                     </div>
@@ -11597,14 +11747,14 @@ export function PlanningTab({
                     <button
                       type="button"
                       onClick={() => setIsFormOpen(false)}
-                      className="px-5 py-2 font-bold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                      className="px-6 py-2.5 font-bold text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
                     >
                       Fechar Ajustes
                     </button>
                     <button
                       type="button"
                       onClick={(e) => handleFormSubmit(e as any)}
-                      className="px-5 py-2 font-bold text-xs text-white bg-adasa-mid hover:bg-adasa-dark rounded-xl transition-colors shadow-sm"
+                      className="px-6 py-2.5 font-bold text-sm text-white bg-adasa-mid hover:bg-adasa-dark rounded-xl transition-colors shadow-sm cursor-pointer"
                     >
                       {formMode === "create" ? "Inserir Atividade" : "Gravar Alterações"}
                     </button>
@@ -12158,7 +12308,9 @@ export function PlanningTab({
     const taskChildren = forceFlat ? [] : (childrenMap[task.id] || []);
     const hasSubs = taskChildren.length > 0;
     
-    let visibleChildren = taskChildren.filter(c => childMatchesOrIsPath(c.id));
+    let visibleChildren = isAnyFilterActive 
+      ? taskChildren.filter(c => childMatchesOrIsPath(c.id) || matchesFilters(task))
+      : taskChildren;
 
     // To respect the rule: Lucide React icons to differentiate root task from subtask
     const TaskIcon = depth === 0 ? FolderKanban : ListTodo;

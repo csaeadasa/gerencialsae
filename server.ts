@@ -4429,6 +4429,43 @@ export async function startServer(isVercel = false) {
         let previousTaskId: number | null = null;
         const createdTaskIds: number[] = [];
 
+        let parentTaskType: string = "default";
+        let parentOuvidoriaData: any = null;
+        let parentFiscalizacaoData: any = null;
+        let parentRecursoRevData: any = null;
+        let finalPlanId = planId ? parseInt(planId) : null;
+        let finalAreaIds = Array.isArray(areaIds) ? [...areaIds] : [];
+        let finalCategoryIds = Array.isArray(categoryIds) ? [...categoryIds] : [];
+        let finalResponsibleIds = Array.isArray(responsibleIds) ? [...responsibleIds] : [];
+
+        if (parentId) {
+          const pRes = await client.query(
+            "SELECT plan_id, type, ouvidoria_data, fiscalizacao_data, recurso_rev_data FROM pl_tasks WHERE id = $1",
+            [parseInt(parentId)]
+          );
+          if (pRes.rows.length > 0) {
+            const pRow = pRes.rows[0];
+            if (pRow.type) parentTaskType = pRow.type;
+            if (pRow.ouvidoria_data) parentOuvidoriaData = pRow.ouvidoria_data;
+            if (pRow.fiscalizacao_data) parentFiscalizacaoData = pRow.fiscalizacao_data;
+            if (pRow.recurso_rev_data) parentRecursoRevData = pRow.recurso_rev_data;
+            if (!finalPlanId && pRow.plan_id) finalPlanId = pRow.plan_id;
+
+            if (finalAreaIds.length === 0) {
+              const paRes = await client.query("SELECT area_id FROM pl_task_areas WHERE task_id = $1", [parseInt(parentId)]);
+              finalAreaIds = paRes.rows.map(r => r.area_id);
+            }
+            if (finalCategoryIds.length === 0) {
+              const pcRes = await client.query("SELECT category_id FROM pl_task_categories WHERE task_id = $1", [parseInt(parentId)]);
+              finalCategoryIds = pcRes.rows.map(r => r.category_id);
+            }
+            if (finalResponsibleIds.length === 0) {
+              const prRes = await client.query("SELECT responsible_id FROM pl_task_responsibles WHERE task_id = $1", [parseInt(parentId)]);
+              finalResponsibleIds = prRes.rows.map(r => r.responsible_id);
+            }
+          }
+        }
+
         for (const item of itemsRes.rows) {
           const duration = Number(item.duration_days) || 0;
           const taskWeight = Number(item.weight) || 1;
@@ -4455,8 +4492,8 @@ export async function startServer(isVercel = false) {
             `INSERT INTO pl_tasks (
                title, description, start_date, end_date, status, parent_id, progress,
                priority, notes, plan_id, depends_on_task_id, created_at, created_by,
-               is_programmed, weight, updated_at, updated_by
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, $13, $14, NOW(), $12)
+               is_programmed, weight, updated_at, updated_by, type, ouvidoria_data, fiscalizacao_data, recurso_rev_data
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, $13, $14, NOW(), $12, $15, $16, $17, $18)
              RETURNING id`,
             [
               item.name,
@@ -4468,11 +4505,15 @@ export async function startServer(isVercel = false) {
               0, // progress
               priority || "Média",
               `Gerada a partir do Modelo ID: ${modelId}`,
-              planId ? parseInt(planId) : null,
+              finalPlanId,
               (sequential && previousTaskId) ? previousTaskId : null,
               createdBy || "SGI Pro",
               isProgrammed !== false,
-              taskWeight
+              taskWeight,
+              parentTaskType,
+              parentOuvidoriaData ? (typeof parentOuvidoriaData === 'object' ? JSON.stringify(parentOuvidoriaData) : parentOuvidoriaData) : null,
+              parentFiscalizacaoData ? (typeof parentFiscalizacaoData === 'object' ? JSON.stringify(parentFiscalizacaoData) : parentFiscalizacaoData) : null,
+              parentRecursoRevData ? (typeof parentRecursoRevData === 'object' ? JSON.stringify(parentRecursoRevData) : parentRecursoRevData) : null
             ]
           );
 
@@ -4481,8 +4522,8 @@ export async function startServer(isVercel = false) {
           previousTaskId = newTaskId;
 
           // Insert areas
-          if (Array.isArray(areaIds) && areaIds.length > 0) {
-            for (const aId of areaIds) {
+          if (Array.isArray(finalAreaIds) && finalAreaIds.length > 0) {
+            for (const aId of finalAreaIds) {
               await client.query(
                 "INSERT INTO pl_task_areas (task_id, area_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
                 [newTaskId, Number(aId)]
@@ -4491,8 +4532,8 @@ export async function startServer(isVercel = false) {
           }
 
           // Insert categories
-          if (Array.isArray(categoryIds) && categoryIds.length > 0) {
-            for (const cId of categoryIds) {
+          if (Array.isArray(finalCategoryIds) && finalCategoryIds.length > 0) {
+            for (const cId of finalCategoryIds) {
               await client.query(
                 "INSERT INTO pl_task_categories (task_id, category_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
                 [newTaskId, Number(cId)]
@@ -4501,8 +4542,8 @@ export async function startServer(isVercel = false) {
           }
 
           // Insert responsibles
-          if (Array.isArray(responsibleIds) && responsibleIds.length > 0) {
-            for (const rId of responsibleIds) {
+          if (Array.isArray(finalResponsibleIds) && finalResponsibleIds.length > 0) {
+            for (const rId of finalResponsibleIds) {
               await client.query(
                 "INSERT INTO pl_task_responsibles (task_id, responsible_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
                 [newTaskId, Number(rId)]
