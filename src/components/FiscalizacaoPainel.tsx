@@ -438,9 +438,9 @@ export function FiscalizacaoPainel({ tasks, plans = [], onEditTaskClick }: Fisca
         }
       }
       const s = normalizeStatus(t.status);
-      if (dataMap[q] && dataMap[q][s as keyof typeof dataMap[string]] !== undefined && s !== 'total') {
-         (dataMap[q][s as keyof typeof dataMap[string]] as number)++;
-         dataMap[q].total++;
+      if (dataMap[q] && (s === 'Não iniciada' || s === 'Em andamento' || s === 'Concluída')) {
+        dataMap[q][s] += 1;
+        dataMap[q].total += 1;
       }
     });
 

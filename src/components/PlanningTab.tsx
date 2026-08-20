@@ -64,7 +64,7 @@ import { RecursoRevisaoEditor } from './RecursoRevisaoEditor';
 import { Task, Plan, Area, Category, Responsible } from "../types";
 import { cn } from "../lib/utils";
 import { useAuth } from "../lib/auth";
-import { FISCALIZACAO_ETAPAS, FISCALIZACAO_ETAPA_INICIAL } from "../lib/fiscalizacao";
+import { createFiscalizacaoChecklist, FISCALIZACAO_ETAPAS, FISCALIZACAO_ETAPA_INICIAL } from "../lib/fiscalizacao";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, CartesianGrid, LabelList } from "recharts";
 import { PlanningSkeleton } from "../modules/planning/PlanningSkeleton";
 import { TaskModelManager } from "./TaskModelManager";
@@ -3286,6 +3286,7 @@ export function PlanningTab({
       areaIds: defaultAreaIds,
       responsibleIds: defaultResponsibleIds,
       type: selectedType,
+      checklist: selectedType === "fiscalizacao" ? createFiscalizacaoChecklist() : [],
       ouvidoriaData: (selectedType === "demanda_ouvidoria" || selectedType === "recurso") ? { classificacaoImovel: 'Residencial', tipoManifestacao: 'Demanda Ouvidoria', servico: 'Água', situacao: 'Recebido', resultadoProcesso: 'Em Análise', complexidade: 'Média', categoria: 'Consumo Medido' } : undefined,
       recursoData: (selectedType === "demanda_ouvidoria" || selectedType === "recurso") ? {
         classificacaoImovel: 'Residencial',
@@ -3334,6 +3335,9 @@ export function PlanningTab({
       planId: task.planId || null,
       areaIds: task.areaIds || [],
       responsibleIds: task.responsibleIds || [],
+      checklist: task.type === "fiscalizacao" && (!task.checklist || task.checklist.length === 0)
+        ? createFiscalizacaoChecklist()
+        : task.checklist || [],
       weight: task.weight !== undefined ? task.weight : 1
     });
     setTaskFormTab("form");
@@ -11054,6 +11058,9 @@ export function PlanningTab({
                             constatacoes: [],
                             termosNotificacao: []
                           };
+                        }
+                        if (newType === 'fiscalizacao' && (!next.checklist || next.checklist.length === 0)) {
+                          next.checklist = createFiscalizacaoChecklist();
                         }
                         if ((newType === 'demanda_ouvidoria' || newType === 'recurso') && !next.ouvidoriaData && !next.recursoData) {
                           next.ouvidoriaData = {
