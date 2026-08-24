@@ -64,7 +64,7 @@ import { RecursoRevisaoEditor } from './RecursoRevisaoEditor';
 import { Task, Plan, Area, Category, Responsible } from "../types";
 import { cn } from "../lib/utils";
 import { useAuth } from "../lib/auth";
-import { createFiscalizacaoChecklist, FISCALIZACAO_ETAPAS, FISCALIZACAO_ETAPA_INICIAL } from "../lib/fiscalizacao";
+import { createFiscalizacaoChecklist, ensureFiscalizacaoChecklist, FISCALIZACAO_ETAPAS, FISCALIZACAO_ETAPA_INICIAL } from "../lib/fiscalizacao";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, CartesianGrid, LabelList } from "recharts";
 import { PlanningSkeleton } from "../modules/planning/PlanningSkeleton";
 import { TaskModelManager } from "./TaskModelManager";
@@ -3335,8 +3335,8 @@ export function PlanningTab({
       planId: task.planId || null,
       areaIds: task.areaIds || [],
       responsibleIds: task.responsibleIds || [],
-      checklist: task.type === "fiscalizacao" && (!task.checklist || task.checklist.length === 0)
-        ? createFiscalizacaoChecklist()
+      checklist: task.type === "fiscalizacao"
+        ? ensureFiscalizacaoChecklist(task.checklist)
         : task.checklist || [],
       weight: task.weight !== undefined ? task.weight : 1
     });
@@ -11059,8 +11059,8 @@ export function PlanningTab({
                             termosNotificacao: []
                           };
                         }
-                        if (newType === 'fiscalizacao' && (!next.checklist || next.checklist.length === 0)) {
-                          next.checklist = createFiscalizacaoChecklist();
+                        if (newType === 'fiscalizacao') {
+                          next.checklist = ensureFiscalizacaoChecklist(next.checklist);
                         }
                         if ((newType === 'demanda_ouvidoria' || newType === 'recurso') && !next.ouvidoriaData && !next.recursoData) {
                           next.ouvidoriaData = {

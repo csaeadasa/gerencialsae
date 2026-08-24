@@ -1,3 +1,5 @@
+import type { ChecklistItem } from "../types";
+
 export const FISCALIZACAO_ETAPAS = [
   "Planejamento",
   "Execução",
@@ -20,9 +22,30 @@ export const FISCALIZACAO_CHECKLIST_ITENS = [
   "Encaminhamento do Relatório à Superintendência e à prestadora",
 ] as const;
 
-export const createFiscalizacaoChecklist = () =>
-  FISCALIZACAO_CHECKLIST_ITENS.map((text, index) => ({
-    id: `fiscalizacao-${index + 1}`,
-    text,
-    completed: false,
-  }));
+const normalizeChecklistText = (text: string) => text.trim().toLocaleLowerCase("pt-BR");
+
+export const ensureFiscalizacaoChecklist = (checklist: ChecklistItem[] = []): ChecklistItem[] => {
+  const completedChecklist = checklist.map(item => ({ ...item }));
+  const existingTexts = new Set(completedChecklist.map(item => normalizeChecklistText(item.text)));
+  const usedIds = new Set(completedChecklist.map(item => item.id));
+
+  FISCALIZACAO_CHECKLIST_ITENS.forEach((text, index) => {
+    if (existingTexts.has(normalizeChecklistText(text))) return;
+
+    const baseId = `fiscalizacao-${index + 1}`;
+    let id = baseId;
+    let suffix = 2;
+    while (usedIds.has(id)) {
+      id = `${baseId}-${suffix}`;
+      suffix += 1;
+    }
+
+    completedChecklist.push({ id, text, completed: false });
+    existingTexts.add(normalizeChecklistText(text));
+    usedIds.add(id);
+  });
+
+  return completedChecklist;
+};
+
+export const createFiscalizacaoChecklist = (): ChecklistItem[] => ensureFiscalizacaoChecklist();
