@@ -252,7 +252,7 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
       
       <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
         <div className="p-4">
-          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Texto da Contribuição Sugerida (Com destaques)</span>
+          <span className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-3">Texto da Contribuição Sugerida (Com destaques)</span>
           <div className="text-xs text-slate-800 font-medium whitespace-pre-wrap leading-relaxed">
             {diffParts.map((part, pIdx) => {
               if (part.added) {
@@ -267,7 +267,7 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
         </div>
         <div className="p-4 bg-slate-50 flex flex-col gap-4">
           <div>
-            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Justificativa do Participante</span>
+            <span className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-3">Justificativa do Participante</span>
             <div className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
               {c.justification}
             </div>
@@ -275,12 +275,12 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
           
           {(isEditingAnalysis || technicalJustification || c.technicalJustification) && (
             <div className="pt-4 border-t border-slate-200">
-              <span className="block text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-2">Justificativa Técnica (Resposta)</span>
+              <span className="block text-xs font-black text-indigo-600 uppercase tracking-wider mb-3">Justificativa Técnica (Resposta)</span>
               {isEditingAnalysis ? (
                 <textarea
                   value={technicalJustification}
                   onChange={(e) => setTechnicalJustification(e.target.value)}
-                  rows={3}
+                  rows={6}
                   className="w-full bg-white px-3 py-2 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800"
                   placeholder="Insira a justificativa técnica para esta contribuição..."
                 />
@@ -441,21 +441,21 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
               </label>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Texto Final do Dispositivo</label>
+              <label className="block text-xs font-black text-slate-800 uppercase tracking-widest mb-2">Texto Final do Dispositivo</label>
               <textarea
                 value={finalText}
                 onChange={(e) => setFinalText(e.target.value)}
-                rows={4}
+                rows={10}
                 className="w-full bg-white px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800 font-medium"
                 placeholder="Insira como ficará o texto final..."
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Justificativa Técnica Final</label>
+              <label className="block text-xs font-black text-slate-800 uppercase tracking-widest mb-2">Justificativa Técnica Final</label>
               <textarea
                 value={finalJustification}
                 onChange={(e) => setFinalJustification(e.target.value)}
-                rows={3}
+                rows={6}
                 className="w-full bg-white px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800"
                 placeholder="Insira as considerações técnicas da ADASA sobre o aceite ou não das contribuições..."
               />
@@ -514,7 +514,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [participantRankingViewMode, setParticipantRankingViewMode] = useState<"chart" | "bento">("bento");
 
   // Minuta da Norma State
-  const [minutaModel, setMinutaModel] = useState<"nova" | "alteracao">("nova");
+  const minutaModel = selectedTomada?.tipoResolucao === "alteracao" ? "alteracao" : "nova";
   const [minutaTipoAto, setMinutaTipoAto] = useState<string>("NORMA");
   const [minutaNumero, setMinutaNumero] = useState<string>("XX");
   const [minutaData, setMinutaData] = useState<string>(() => {
@@ -565,11 +565,6 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   useEffect(() => {
     if (selectedTomada && selectedTomada.id) {
       fetchTomadaDetails(String(selectedTomada.id));
-      if (selectedTomada.tipoResolucao === "alteracao") {
-        setMinutaModel("alteracao");
-      } else {
-        setMinutaModel("nova");
-      }
     }
   }, [selectedTomada?.id]);
 
@@ -689,6 +684,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [contributingArticleId, setContributingArticleId] = useState<string | null>(null);
   const [editingContributionId, setEditingContributionId] = useState<string | number | null>(null);
   const [participantFilter, setParticipantFilter] = useState<string>("all");
+  const [publicContributionsView, setPublicContributionsView] = useState<"minhas" | "todas">("todas");
+  const [contributionsSortConfig, setContributionsSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [proposedText, setProposedText] = useState("");
   const [justification, setJustification] = useState("");
   const [contributeArticleFilter, setContributeArticleFilter] = useState<"todos" | "com_contribuicao" | "sem_contribuicao">("todos");
@@ -1960,6 +1957,107 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       }
     };
 
+    const handleExportConsolidadoPDF = () => {
+      try {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+          showToast("Erro", "O bloqueador de pop-ups impediu a geração do PDF.", "error");
+          return;
+        }
+
+        const safeNumero = (selectedTomada.numero || "participacao").replace(/[^a-zA-Z0-9_-]/g, "_");
+        const title = `Quadro Consolidado da Redação Final - ${selectedTomada.numero || "N/A"}`;
+        
+        const escapeHtml = (unsafe: string) => {
+          return (unsafe || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        };
+
+        let html = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>${title}</title>
+            <style>
+              body { font-family: sans-serif; font-size: 11px; margin: 20px; color: #333; }
+              h1 { font-size: 16px; text-align: center; margin-bottom: 20px; text-transform: uppercase; color: #111; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 20px; page-break-inside: auto; }
+              tr { page-break-inside: avoid; page-break-after: auto; }
+              th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+              th { background-color: #f8fafc; font-weight: bold; color: #475569; text-transform: uppercase; font-size: 10px; }
+              .text-red { color: #e11d48; }
+              .text-green { color: #059669; }
+              pre { white-space: pre-wrap; font-family: inherit; margin: 0; font-size: 11px; }
+              @media print {
+                @page { margin: 1.5cm; size: landscape; }
+                body { margin: 0; }
+              }
+            </style>
+          </head>
+          <body>
+            <h1>${title}</h1>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 40px;">Nº</th>
+                  ${selectedTomada.tipoResolucao === "alteracao" ? '<th style="width: 20%;">Texto Atual (Vigente)</th>' : ''}
+                  <th style="width: 25%;">Texto Proposto em Consulta (Minuta)</th>
+                  <th style="width: 25%;">Texto Final do Dispositivo</th>
+                  <th style="width: 20%;">Justificativa Técnica</th>
+                  <th style="width: 120px;">Contribuições</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+
+        currentArticles.forEach((art, idx) => {
+          const cArt = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
+          const a = cArt.filter(c => c.decision === "Acatada" || c.decision === "Acatada Parcialmente").length;
+          const na = cArt.filter(c => c.decision === "Não Acatada" || c.decision === "Prejudicada" || c.decision === "Retida para Estudos Adicionais").length;
+          const pend = cArt.filter(c => !c.decision).length;
+          
+          const origText = escapeHtml(art.proposedText || art.originalText || "");
+          const origTextVigente = escapeHtml(art.originalText || "Sem texto original cadastrado");
+          const fText = escapeHtml(art.finalText || art.proposedText || art.originalText || "");
+          const fJust = escapeHtml(art.finalJustification || "-");
+          
+          html += `
+            <tr>
+              <td>${idx + 1}</td>
+              ${selectedTomada.tipoResolucao === "alteracao" ? `<td><pre>${origTextVigente}</pre></td>` : ''}
+              <td><pre>${origText}</pre></td>
+              <td><pre>${fText}</pre></td>
+              <td><pre>${fJust}</pre></td>
+              <td>
+                Total: <b>${cArt.length}</b><br>
+                <span class="text-green">Acatadas/Parc: ${a}</span><br>
+                <span class="text-red">Não Acat/Outras: ${na}</span><br>
+                Pendentes: ${pend}
+              </td>
+            </tr>
+          `;
+        });
+
+        html += `
+              </tbody>
+            </table>
+          </body>
+          </html>
+        `;
+
+        printWindow.document.write(html);
+        printWindow.document.close();
+        
+        // Timeout para garantir que o CSS seja renderizado antes de chamar print()
+        setTimeout(() => {
+          printWindow.print();
+        }, 500);
+
+      } catch (error: any) {
+        console.error("Erro ao gerar PDF:", error);
+        showToast("Erro na Exportação", "Não foi possível gerar o arquivo PDF.", "error");
+      }
+    };
+
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4 border-b border-slate-200 pb-4">
@@ -2050,33 +2148,31 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               </div>
             )}
             
-            <div className="flex border-b border-slate-200 gap-8 px-2">
+            <div className="flex gap-4 mb-2 p-1.5 bg-slate-100 rounded-2xl w-fit border border-slate-200/60 shadow-inner overflow-x-auto">
               <button
                 onClick={() => isTomadaAberta && setPublicTab("contribuir")}
                 disabled={!isTomadaAberta}
                 className={cn(
-                  "py-4 text-sm font-bold transition-all border-b-2 flex items-center gap-2",
-                  publicTab === "contribuir" ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-800",
-                  !isTomadaAberta && "opacity-50 cursor-not-allowed text-slate-400"
+                  "px-6 py-3 text-xs sm:text-sm font-black uppercase tracking-wider transition-all flex items-center gap-2 rounded-xl outline-none whitespace-nowrap",
+                  publicTab === "contribuir" 
+                    ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" 
+                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50",
+                  !isTomadaAberta && "opacity-50 cursor-not-allowed text-slate-400 hover:bg-transparent hover:text-slate-500"
                 )}
               >
-                <Edit3 size={18} /> {userContributedCount > 0 ? "Gerenciar Contribuições" : "Contribuir"}
+                <Edit3 size={18} /> {userContributedCount > 0 ? "GERENCIAR CONTRIBUIÇÕES" : "CONTRIBUIR"}
                 {!isTomadaAberta && <Lock size={14} className="ml-1" />}
               </button>
               <button
                 onClick={() => setPublicTab("ver")}
                 className={cn(
-                  "py-4 text-sm font-bold transition-all border-b-2 flex items-center gap-2",
-                  publicTab === "ver" ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-800"
+                  "px-6 py-3 text-xs sm:text-sm font-black uppercase tracking-wider transition-all flex items-center gap-2 rounded-xl outline-none whitespace-nowrap",
+                  publicTab === "ver" 
+                    ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" 
+                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                 )}
               >
-                <FileText size={18} /> Ver Contribuições
-              </button>
-              <button
-                onClick={() => { setActiveView("technical_analysis"); setAnalysisTab("painel"); }}
-                className="py-4 text-sm font-bold transition-all border-b-2 border-transparent text-slate-500 hover:text-indigo-600 flex items-center gap-2"
-              >
-                <BarChart2 size={18} /> Painel das Contribuições & Gráficos
+                <FileText size={18} /> TABELA DE CONTRIBUIÇÕES
               </button>
             </div>
           </div>
@@ -2313,14 +2409,14 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         </div>
                       </div>
                       
-                      <div className="space-y-4">
+                      <div className="space-y-6">
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                          <label className="block text-xs font-black text-slate-800 uppercase tracking-widest mb-2">
                             Texto da Contribuição Sugerida
                           </label>
                           <textarea 
                             className="w-full bg-white px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-600 text-sm text-slate-800 font-medium shadow-2xs"
-                            rows={6}
+                            rows={10}
                             value={proposedText}
                             onChange={e => setProposedText(e.target.value)}
                             placeholder="Insira a redação que você propõe para este dispositivo..."
@@ -2328,12 +2424,12 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                          <label className="block text-xs font-black text-slate-800 uppercase tracking-widest mb-2">
                             Justificativa Técnica / Motivação
                           </label>
                           <textarea 
                             className="w-full bg-white px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-600 text-sm shadow-2xs"
-                            rows={3}
+                            rows={6}
                             placeholder="Explique os motivos técnicos, operacionais ou jurídicos da alteração solicitada..."
                             value={justification}
                             onChange={e => setJustification(e.target.value)}
@@ -2383,18 +2479,33 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                   : "Nenhum dispositivo encontrado para o filtro selecionado."}
               </div>
             )}
-
-            {/* Removes back button */}
           </div>
         )}
 
         {activeView === "public_view" && publicTab === "ver" && (
           <div className="space-y-6 w-full">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
-              <div className="text-xs font-bold text-slate-500">
-                Total de <strong className="text-slate-900">{tomadaContributions.length}</strong> {tomadaContributions.length === 1 ? 'contribuição recebida' : 'contribuições recebidas'} organizadas por dispositivo (ordem crescente).
+              <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200/60 overflow-hidden">
+                <button 
+                  onClick={() => setPublicContributionsView("minhas")}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 outline-none",
+                    publicContributionsView === "minhas" ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-700"
+                  )}
+                >
+                  Minhas Contribuições
+                </button>
+                <button 
+                  onClick={() => setPublicContributionsView("todas")}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 outline-none",
+                    publicContributionsView === "todas" ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-700"
+                  )}
+                >
+                  Todas as Contribuições
+                </button>
               </div>
-              {tomadaContributions.length > 0 && (
+              {tomadaContributions.length > 0 && publicContributionsView === "todas" && (
                 <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
                   <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Filtrar por:</span>
                   <select 
@@ -2410,44 +2521,293 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 </div>
               )}
             </div>
-            
-            {tomadaContributions.length === 0 ? (
-               <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center shadow-sm max-w-4xl mx-auto">
-                 <MessageSquare className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                 <h3 className="text-lg font-black text-slate-700">Nenhuma contribuição recebida</h3>
-                 <p className="text-slate-500 text-sm mt-2 max-w-md mx-auto">
-                   Ainda não há contribuições para os artigos desta consulta ou tomada de subsídios.
-                 </p>
-               </div>
-            ) : (() => {
-              const sortedContributions = [...tomadaContributions]
-                .filter(c => participantFilter === "all" || c.authorName === participantFilter)
-                .sort((a, b) => {
-                  const artAIndex = currentArticles.findIndex(art => String(art.id) === String(a.articleId));
-                  const artBIndex = currentArticles.findIndex(art => String(art.id) === String(b.articleId));
-                  const orderA = artAIndex !== -1 ? artAIndex : 999999;
-                  const orderB = artBIndex !== -1 ? artBIndex : 999999;
-                  if (orderA !== orderB) return orderA - orderB;
-                  return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
-                });
+
+            {(() => {
+              const baseList = publicContributionsView === "minhas" 
+                ? tomadaContributions.filter(c => String(c.userId) === String(effectiveUser?.id))
+                : tomadaContributions.filter(c => participantFilter === "all" || c.authorName === participantFilter);
+
+              if (baseList.length === 0) {
+                 return (
+                   <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center shadow-sm max-w-4xl mx-auto mt-6">
+                     <MessageSquare className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                     <h3 className="text-lg font-black text-slate-700">Nenhuma contribuição encontrada</h3>
+                     <p className="text-slate-500 text-sm mt-2 max-w-md mx-auto">
+                       Não há contribuições correspondentes para este filtro ou categoria.
+                     </p>
+                   </div>
+                 );
+              }
+
+              const handleSort = (key: string) => {
+                let direction: 'asc' | 'desc' = 'asc';
+                if (contributionsSortConfig && contributionsSortConfig.key === key && contributionsSortConfig.direction === 'asc') {
+                  direction = 'desc';
+                }
+                setContributionsSortConfig({ key, direction });
+              };
+
+              const getSortIcon = (key: string) => {
+                if (!contributionsSortConfig || contributionsSortConfig.key !== key) return <span className="ml-1 text-slate-300">↕</span>;
+                return contributionsSortConfig.direction === 'asc' ? <span className="ml-1 text-indigo-600">↑</span> : <span className="ml-1 text-indigo-600">↓</span>;
+              };
+
+              const sortedContributions = [...baseList].sort((a, b) => {
+                if (contributionsSortConfig) {
+                  if (contributionsSortConfig.key === 'data') {
+                     const aVal = new Date(a.createdAt || 0).getTime();
+                     const bVal = new Date(b.createdAt || 0).getTime();
+                     return contributionsSortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+                  }
+                  if (contributionsSortConfig.key === 'participante') {
+                     const aVal = (a.authorName || "").toLowerCase();
+                     const bVal = (b.authorName || "").toLowerCase();
+                     if (aVal < bVal) return contributionsSortConfig.direction === 'asc' ? -1 : 1;
+                     if (aVal > bVal) return contributionsSortConfig.direction === 'asc' ? 1 : -1;
+                     return 0;
+                  }
+                  if (contributionsSortConfig.key === 'parecer') {
+                     const aVal = (a.decision || "").toLowerCase();
+                     const bVal = (b.decision || "").toLowerCase();
+                     if (aVal < bVal) return contributionsSortConfig.direction === 'asc' ? -1 : 1;
+                     if (aVal > bVal) return contributionsSortConfig.direction === 'asc' ? 1 : -1;
+                     return 0;
+                  }
+                  if (contributionsSortConfig.key === 'dispositivo') {
+                     const artAIndex = currentArticles.findIndex(art => String(art.id) === String(a.articleId));
+                     const artBIndex = currentArticles.findIndex(art => String(art.id) === String(b.articleId));
+                     const orderA = artAIndex !== -1 ? artAIndex : 999999;
+                     const orderB = artBIndex !== -1 ? artBIndex : 999999;
+                     return contributionsSortConfig.direction === 'asc' ? orderA - orderB : orderB - orderA;
+                  }
+                  if (['texto_atual', 'texto_contribuicao', 'justificativa', 'justificativa_tecnica', 'texto_final'].includes(contributionsSortConfig.key)) {
+                    const getArt = (c: any) => currentArticles.find(art => String(art.id) === String(c.articleId));
+                    let aVal = "";
+                    let bVal = "";
+                    const artA = getArt(a);
+                    const artB = getArt(b);
+                    if (contributionsSortConfig.key === 'texto_atual') {
+                      aVal = artA?.originalText || "";
+                      bVal = artB?.originalText || "";
+                    } else if (contributionsSortConfig.key === 'texto_contribuicao') {
+                      aVal = a.proposedText || "";
+                      bVal = b.proposedText || "";
+                    } else if (contributionsSortConfig.key === 'justificativa') {
+                      aVal = a.justification || "";
+                      bVal = b.justification || "";
+                    } else if (contributionsSortConfig.key === 'justificativa_tecnica') {
+                      aVal = a.technicalJustification || artA?.finalJustification || "";
+                      bVal = b.technicalJustification || artB?.finalJustification || "";
+                    } else if (contributionsSortConfig.key === 'texto_final') {
+                      aVal = artA?.finalText || artA?.proposedText || artA?.originalText || "";
+                      bVal = artB?.finalText || artB?.proposedText || artB?.originalText || "";
+                    }
+                    aVal = aVal.toLowerCase();
+                    bVal = bVal.toLowerCase();
+                    if (aVal < bVal) return contributionsSortConfig.direction === 'asc' ? -1 : 1;
+                    if (aVal > bVal) return contributionsSortConfig.direction === 'asc' ? 1 : -1;
+                    return 0;
+                  }
+                }
+                // Default sort (device order then date)
+                const artAIndex = currentArticles.findIndex(art => String(art.id) === String(a.articleId));
+                const artBIndex = currentArticles.findIndex(art => String(art.id) === String(b.articleId));
+                const orderA = artAIndex !== -1 ? artAIndex : 999999;
+                const orderB = artBIndex !== -1 ? artBIndex : 999999;
+                if (orderA !== orderB) return orderA - orderB;
+                return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+              });
+
+              const handleExportContributionsExcel = () => {
+                  try {
+                      const rows = sortedContributions.map((c) => {
+                          const artIndex = currentArticles.findIndex(a => String(a.id) === String(c.articleId));
+                          const originalArticle = artIndex !== -1 ? currentArticles[artIndex] : undefined;
+                          
+                          const row: any = {
+                              "Data": formatDateBr(c.createdAt),
+                          };
+                          if (selectedTomada?.tipoResolucao === "alteracao") {
+                              row["Texto Atual (Vigente)"] = originalArticle?.originalText || "Sem texto original cadastrado";
+                          }
+                          row["Texto Proposto em Consulta (Minuta)"] = originalArticle?.proposedText !== undefined ? originalArticle.proposedText : (originalArticle?.originalText || "");
+                          row["Texto da Contribuição Sugerida"] = c.proposedText || "";
+                          row["Justificativa da Contribuição"] = c.justification || "";
+                          row["Participante"] = c.authorName || "";
+                          row["Parecer"] = c.decision || "Aguardando Análise";
+                          row["Justificativa Técnica"] = c.technicalJustification || originalArticle?.finalJustification || "";
+                          row["Texto Final do Dispositivo"] = originalArticle?.finalText || originalArticle?.proposedText || originalArticle?.originalText || "";
+                          return row;
+                      });
+
+                      const wb = XLSX.utils.book_new();
+                      const ws = XLSX.utils.json_to_sheet(rows);
+                      ws["!cols"] = [
+                          { wch: 15 },
+                          ...(selectedTomada?.tipoResolucao === "alteracao" ? [{ wch: 35 }] : []),
+                          { wch: 35 },
+                          { wch: 35 },
+                          { wch: 35 },
+                          { wch: 20 },
+                          { wch: 20 },
+                          { wch: 35 },
+                          { wch: 35 },
+                      ];
+                      XLSX.utils.book_append_sheet(wb, ws, "Contribuições");
+
+                      const viewType = publicContributionsView === "minhas" ? "Minhas" : "Todas";
+                      const safeNumero = (selectedTomada?.numero || "participacao").replace(/[^a-zA-Z0-9_-]/g, "_");
+                      XLSX.writeFile(wb, `Contribuicoes_${viewType}_${safeNumero}.xlsx`);
+                      showToast("Exportação Concluída", "O arquivo Excel foi gerado com sucesso!", "success");
+                  } catch (error) {
+                      console.error(error);
+                      showToast("Erro na Exportação", "Não foi possível gerar o arquivo Excel.", "error");
+                  }
+              };
+
+              const handleExportContributionsPDF = () => {
+                  try {
+                      const printWindow = window.open('', '_blank');
+                      if (!printWindow) {
+                          showToast("Erro", "O bloqueador de pop-ups impediu a geração do PDF.", "error");
+                          return;
+                      }
+
+                      const viewType = publicContributionsView === "minhas" ? "Minhas Contribuições" : "Todas as Contribuições";
+                      const title = `${viewType} - ${selectedTomada?.numero || "N/A"}`;
+                      
+                      const escapeHtml = (unsafe: string) => {
+                          return (unsafe || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+                      };
+
+                      let html = `
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                          <title>${title}</title>
+                          <style>
+                            body { font-family: sans-serif; font-size: 11px; margin: 20px; color: #333; }
+                            h1 { font-size: 16px; text-align: center; margin-bottom: 20px; text-transform: uppercase; color: #111; }
+                            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; page-break-inside: auto; }
+                            tr { page-break-inside: avoid; page-break-after: auto; }
+                            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+                            th { background-color: #f8fafc; font-weight: bold; color: #475569; text-transform: uppercase; font-size: 10px; }
+                            pre { white-space: pre-wrap; font-family: inherit; margin: 0; font-size: 11px; }
+                            @media print {
+                              @page { margin: 1.5cm; size: landscape; }
+                              body { margin: 0; }
+                            }
+                          </style>
+                        </head>
+                        <body>
+                          <h1>${title}</h1>
+                          <table>
+                            <thead>
+                              <tr>
+                                <th style="width: 80px;">Data</th>
+                                ${selectedTomada?.tipoResolucao === "alteracao" ? '<th style="width: 15%;">Texto Atual (Vigente)</th>' : ''}
+                                <th style="width: 15%;">Minuta</th>
+                                <th style="width: 15%;">Contribuição Sugerida</th>
+                                <th style="width: 15%;">Justificativa Participante</th>
+                                <th style="width: 100px;">Participante</th>
+                                <th style="width: 80px;">Parecer</th>
+                                <th style="width: 15%;">Justificativa Técnica</th>
+                                <th style="width: 15%;">Texto Final</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                      `;
+
+                      sortedContributions.forEach((c) => {
+                          const artIndex = currentArticles.findIndex(a => String(a.id) === String(c.articleId));
+                          const originalArticle = artIndex !== -1 ? currentArticles[artIndex] : undefined;
+                          
+                          const dataStr = escapeHtml(formatDateBr(c.createdAt));
+                          const vigStr = escapeHtml(originalArticle?.originalText || "Sem texto original cadastrado");
+                          const minStr = escapeHtml(originalArticle?.proposedText !== undefined ? originalArticle.proposedText : (originalArticle?.originalText || ""));
+                          const sugStr = escapeHtml(c.proposedText || "");
+                          const justStr = escapeHtml(c.justification || "");
+                          const partStr = escapeHtml(c.authorName || "");
+                          const parStr = escapeHtml(c.decision || "Aguardando Análise");
+                          const jTechStr = escapeHtml(c.technicalJustification || originalArticle?.finalJustification || "");
+                          const finStr = escapeHtml(originalArticle?.finalText || originalArticle?.proposedText || originalArticle?.originalText || "");
+
+                          html += `
+                          <tr>
+                            <td>${dataStr}</td>
+                            ${selectedTomada?.tipoResolucao === "alteracao" ? `<td><pre>${vigStr}</pre></td>` : ''}
+                            <td><pre>${minStr}</pre></td>
+                            <td><pre>${sugStr}</pre></td>
+                            <td><pre>${justStr}</pre></td>
+                            <td>${partStr}</td>
+                            <td>${parStr}</td>
+                            <td><pre>${jTechStr}</pre></td>
+                            <td><pre>${finStr}</pre></td>
+                          </tr>
+                          `;
+                      });
+
+                      html += `
+                            </tbody>
+                          </table>
+                        </body>
+                        </html>
+                      `;
+
+                      printWindow.document.write(html);
+                      printWindow.document.close();
+                      
+                      setTimeout(() => {
+                        printWindow.print();
+                      }, 500);
+
+                  } catch (error: any) {
+                      console.error("Erro ao gerar PDF:", error);
+                      showToast("Erro na Exportação", "Não foi possível gerar o arquivo PDF.", "error");
+                  }
+              };
 
               return (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mt-6">
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                      <FileText size={18} className="text-indigo-600" />
+                      {publicContributionsView === "minhas" ? "Minhas Contribuições" : "Todas as Contribuições"}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleExportContributionsPDF}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm hover:shadow transition-all group"
+                        title="Exportar para PDF"
+                      >
+                        <Printer size={14} className="group-hover:scale-110 transition-transform" />
+                        <span>Exportar PDF</span>
+                      </button>
+                      <button
+                        onClick={handleExportContributionsExcel}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm hover:shadow transition-all group"
+                        title="Exportar para Excel"
+                      >
+                        <FileSpreadsheet size={14} className="group-hover:scale-110 transition-transform" />
+                        <span>Exportar Excel</span>
+                      </button>
+                    </div>
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-slate-200 text-left min-w-[1300px]">
                       <thead className="bg-slate-50">
                         <tr>
-                          <th scope="col" className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-24">Data</th>
+                          <th scope="col" onClick={() => handleSort('data')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-24">Data{getSortIcon('data')}</th>
                           {selectedTomada?.tipoResolucao === "alteracao" && (
-                            <th scope="col" className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Texto Atual (Vigente)</th>
+                            <th scope="col" onClick={() => handleSort('texto_atual')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Texto Atual (Vigente){getSortIcon('texto_atual')}</th>
                           )}
-                          <th scope="col" className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Texto Proposto em Consulta (Minuta)</th>
-                          <th scope="col" className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Texto da Contribuição Sugerida</th>
-                          <th scope="col" className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-48">Justificativa da Contribuição</th>
-                          <th scope="col" className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-40">Participante</th>
-                          <th scope="col" className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-36">Parecer</th>
-                          <th scope="col" className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Justificativa Técnica</th>
-                          <th scope="col" className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Texto Final do Dispositivo</th>
+                          <th scope="col" onClick={() => handleSort('dispositivo')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Texto Proposto em Consulta (Minuta){getSortIcon('dispositivo')}</th>
+                          <th scope="col" onClick={() => handleSort('texto_contribuicao')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Texto da Contribuição Sugerida{getSortIcon('texto_contribuicao')}</th>
+                          <th scope="col" onClick={() => handleSort('justificativa')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-48">Justificativa da Contribuição{getSortIcon('justificativa')}</th>
+                          <th scope="col" onClick={() => handleSort('participante')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-40">Participante{getSortIcon('participante')}</th>
+                          <th scope="col" onClick={() => handleSort('parecer')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-36">Parecer{getSortIcon('parecer')}</th>
+                          <th scope="col" onClick={() => handleSort('justificativa_tecnica')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Justificativa Técnica{getSortIcon('justificativa_tecnica')}</th>
+                          <th scope="col" onClick={() => handleSort('texto_final')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Texto Final do Dispositivo{getSortIcon('texto_final')}</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-slate-200">
@@ -2590,7 +2950,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 </button>
                 <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
                   <CheckCircle2 className="text-emerald-600" size={20} />
-                  Análise Técnica
+                  Análise Técnica das Contribuições
                 </h3>
               </div>
               <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200/60 overflow-hidden">
@@ -3036,14 +3396,24 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           Comparativo detalhado entre a minuta em consulta e o texto final aprovado.
                         </p>
                       </div>
-                      <button
-                        onClick={handleExportConsolidadoExcel}
-                        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold shadow-sm hover:shadow transition-all group shrink-0"
-                        title="Exportar tabela consolidada e contribuições para Excel (.xlsx)"
-                      >
-                        <FileSpreadsheet size={15} className="group-hover:scale-110 transition-transform" />
-                        <span>Exportar Excel (.xlsx)</span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleExportConsolidadoPDF}
+                          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold shadow-sm hover:shadow transition-all group shrink-0"
+                          title="Imprimir ou Exportar para PDF"
+                        >
+                          <Printer size={15} className="group-hover:scale-110 transition-transform" />
+                          <span>Exportar PDF</span>
+                        </button>
+                        <button
+                          onClick={handleExportConsolidadoExcel}
+                          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold shadow-sm hover:shadow transition-all group shrink-0"
+                          title="Exportar tabela consolidada e contribuições para Excel (.xlsx)"
+                        >
+                          <FileSpreadsheet size={15} className="group-hover:scale-110 transition-transform" />
+                          <span>Exportar Excel</span>
+                        </button>
+                      </div>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse min-w-[800px]">
@@ -3349,31 +3719,10 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
                           Modelo Normativo
                         </label>
-                        <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
-                          <button
-                            type="button"
-                            onClick={() => setMinutaModel("nova")}
-                            className={cn(
-                              "py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2",
-                              minutaModel === "nova"
-                                ? "bg-white text-indigo-700 shadow-sm border border-slate-200 font-black"
-                                : "text-slate-600 hover:text-slate-900"
-                            )}
-                          >
-                            <span>Nova Norma (Integral)</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMinutaModel("alteracao")}
-                            className={cn(
-                              "py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2",
-                              minutaModel === "alteracao"
-                                ? "bg-white text-indigo-700 shadow-sm border border-slate-200 font-black"
-                                : "text-slate-600 hover:text-slate-900"
-                            )}
-                          >
-                            <span>Alteração de Norma Existente</span>
-                          </button>
+                        <div className="flex bg-slate-100 p-1 rounded-xl">
+                          <div className="w-full py-2 px-3 rounded-lg text-xs font-black bg-white text-indigo-700 shadow-sm border border-slate-200 flex items-center justify-center gap-2">
+                            <span>{minutaModel === "nova" ? "Nova Norma (Integral)" : "Alteração de Norma Existente"}</span>
+                          </div>
                         </div>
                       </div>
 
@@ -3692,7 +4041,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase tracking-widest font-black">
+                <tr className="bg-slate-50 border-b border-slate-200 text-sm text-slate-500 uppercase tracking-widest font-black">
                   <th className="px-5 py-4 w-32 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("numero")}>
                     <div className="flex items-center">Número {getSortIcon("numero")}</div>
                   </th>
@@ -3714,7 +4063,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                   <th className="px-5 py-4 w-28 text-right">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-sm">
+              <tbody className="divide-y divide-slate-100 text-base">
                 {sortedFilteredTomadas.map(tomada => {
                   const status = getStatus(tomada.dataInicio, tomada.dataFim);
                   const isAberta = status.startsWith("Aberta");
@@ -3722,11 +4071,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                   return (
                     <tr key={tomada.id} className="hover:bg-slate-50/40 transition-colors cursor-pointer align-top" onClick={() => handleOpenPublicView(tomada)}>
                       <td className="px-5 py-4 font-semibold text-slate-700">
-                        <span className="text-sm font-bold text-slate-800">{tomada.numero}</span>
+                        <span className="text-base font-bold text-slate-800">{tomada.numero}</span>
                       </td>
                       <td className="px-5 py-4 whitespace-nowrap">
                         <span className={cn(
-                          "px-2.5 py-1 rounded-lg text-xs font-bold border",
+                          "px-2.5 py-1 rounded-lg text-sm font-bold border",
                           tomada.meioParticipacao === "Consulta Pública"
                             ? "bg-sky-50 text-sky-700 border-sky-200"
                             : "bg-indigo-50 text-indigo-700 border-indigo-200"
@@ -3735,12 +4084,12 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         </span>
                       </td>
                       <td className="px-5 py-4">
-                        <div className="text-sm font-bold text-slate-800 mb-1">{tomada.title}</div>
-                        <div className="text-xs text-slate-500 line-clamp-2">{tomada.objeto}</div>
+                        <div className="text-base font-bold text-slate-800 mb-1">{tomada.title}</div>
+                        <div className="text-sm text-slate-500 line-clamp-2 leading-relaxed">{tomada.objeto}</div>
                       </td>
                       <td className="px-5 py-4 whitespace-nowrap">
                         <span className={cn(
-                          "px-2.5 py-1 rounded-lg text-xs font-bold border",
+                          "px-2.5 py-1 rounded-lg text-sm font-bold border",
                           tomada.tipoResolucao === "alteracao"
                             ? "bg-amber-50 text-amber-700 border-amber-200"
                             : "bg-emerald-50 text-emerald-700 border-emerald-200"
@@ -3753,7 +4102,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       </td>
                       <td className="px-5 py-4 whitespace-nowrap text-center">
                         <span className={cn(
-                          "px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-widest",
+                          "px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-widest",
                           isAberta ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
                         )}>
                           {status}
