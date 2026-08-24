@@ -7,9 +7,19 @@ import { Pool } from "pg";
 import { parse } from "csv-parse/sync";
 import cron from "node-cron";
 import { hashPassword, PASSWORD_HASH_PREFIX, verifyPassword } from "./server/core/security/password.js";
+import { GoogleGenAI, Type } from "@google/genai";
 
 export const app = express();
 let dbPool: Pool | null = null;
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
 
 function parseSafeInt(val: any): number | null {
   if (val === undefined || val === null || val === "") return null;
@@ -857,6 +867,178 @@ async function runStartupMigration() {
       await client.query(`
         ALTER TABLE pu_publications ADD COLUMN IF NOT EXISTS imagem_capa TEXT;
       `);
+
+      // Recreate tables with 'participation' terminology and SERIAL primary keys (prefix re_)
+      await client.query(`
+        DO $$
+        BEGIN
+          -- Check if re_participations exists with VARCHAR id, or drop to recreate with SERIAL PRIMARY KEY
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 're_participations' AND column_name = 'id' AND data_type = 'character varying'
+          ) THEN
+            DROP TABLE IF EXISTS re_participation_contributions CASCADE;
+            DROP TABLE IF EXISTS re_participation_articles CASCADE;
+            DROP TABLE IF EXISTS re_participation_attachments CASCADE;
+            DROP TABLE IF EXISTS re_participations CASCADE;
+          END IF;
+
+          -- Drop old legacy tables
+          DROP TABLE IF EXISTS reg_tomada_contributions CASCADE;
+          DROP TABLE IF EXISTS reg_tomada_articles CASCADE;
+          DROP TABLE IF EXISTS reg_tomada_anexos CASCADE;
+          DROP TABLE IF EXISTS reg_tomadas CASCADE;
+          DROP TABLE IF EXISTS re_tomada_contributions CASCADE;
+          DROP TABLE IF EXISTS re_tomada_articles CASCADE;
+          DROP TABLE IF EXISTS re_tomada_anexos CASCADE;
+          DROP TABLE IF EXISTS re_tomadas CASCADE;
+        END $$;
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS re_participations (
+          id SERIAL PRIMARY KEY,
+          numero VARCHAR(255),
+          meio_participacao VARCHAR(100) DEFAULT 'Consulta Pública',
+          title TEXT,
+          objeto TEXT,
+          dataInicio VARCHAR(50),
+          dataFim VARCHAR(50),
+          createdAt VARCHAR(50)
+        );
+      `);
+
+      await client.query(`
+        ALTER TABLE re_participations ADD COLUMN IF NOT EXISTS meio_participacao VARCHAR(100) DEFAULT 'Consulta Pública';
+        ALTER TABLE re_participations ADD COLUMN IF NOT EXISTS tipo_resolucao VARCHAR(50) DEFAULT 'nova';
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS re_participation_attachments (
+          id SERIAL PRIMARY KEY,
+          participation_id INTEGER REFERENCES re_participations(id) ON DELETE CASCADE,
+          name TEXT,
+          url TEXT
+        );
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS re_participation_articles (
+          id SERIAL PRIMARY KEY,
+          participation_id INTEGER REFERENCES re_participations(id) ON DELETE CASCADE,
+          order_index INTEGER,
+          original_text TEXT,
+          proposed_text TEXT,
+          final_text TEXT,
+          final_justification TEXT
+        );
+      `);
+
+      // Migration: Ensure final_text and final_justification exist on re_participation_articles
+      await client.query(`
+        ALTER TABLE re_participation_articles ADD COLUMN IF NOT EXISTS final_text TEXT;
+        ALTER TABLE re_participation_articles ADD COLUMN IF NOT EXISTS final_justification TEXT;
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS re_participation_contributions (
+          id SERIAL PRIMARY KEY,
+          article_id INTEGER NOT NULL REFERENCES re_participation_articles(id) ON DELETE CASCADE,
+          user_id INTEGER NOT NULL REFERENCES au_users(id) ON DELETE CASCADE,
+          proposed_text TEXT NOT NULL,
+          justification TEXT NOT NULL,
+          decision VARCHAR(50) DEFAULT NULL,
+          created_at VARCHAR(50),
+          CONSTRAINT unique_user_article_contribution UNIQUE (article_id, user_id)
+        );
+      `);
+
+      // Migration: Ensure decision column exists on re_participation_contributions
+      await client.query(`
+        ALTER TABLE re_participation_contributions ADD COLUMN IF NOT EXISTS decision VARCHAR(50) DEFAULT NULL;
+        ALTER TABLE re_participation_contributions ADD COLUMN IF NOT EXISTS complexity VARCHAR(50) DEFAULT NULL;
+        ALTER TABLE re_participation_contributions ADD COLUMN IF NOT EXISTS technical_justification TEXT DEFAULT NULL;
+      `);
+
+      // Migration: Ensure user_id column exists, backfill from author_name if present, drop author_name column
+      try {
+        await client.query(`
+          ALTER TABLE re_participation_contributions ADD COLUMN IF NOT EXISTS user_id INTEGER;
+        `);
+
+        // Check if author_name column exists to backfill user_id
+        const hasAuthorNameCol = await client.query(`
+          SELECT column_name FROM information_schema.columns 
+          WHERE table_name = 're_participation_contributions' AND column_name = 'author_name';
+        `);
+
+        if (hasAuthorNameCol.rows.length > 0) {
+          // Backfill user_id from author_name by matching au_users.name or creating user
+          const unlinkedContribs = await client.query(`
+            SELECT DISTINCT author_name FROM re_participation_contributions 
+            WHERE user_id IS NULL AND author_name IS NOT NULL AND TRIM(author_name) != '';
+          `);
+
+          for (const row of unlinkedContribs.rows) {
+            const authorName = (row.author_name || "").trim();
+            if (!authorName) continue;
+            
+            let uRes = await client.query("SELECT id FROM au_users WHERE LOWER(TRIM(name)) = LOWER($1) LIMIT 1", [authorName]);
+            let uid = uRes.rows.length > 0 ? uRes.rows[0].id : null;
+
+            if (!uid) {
+              const fakeEmail = `${authorName.toLowerCase().replace(/[^a-z0-9]/g, '.')}@adasa.df.gov.br`;
+              const checkEmail = await client.query("SELECT id FROM au_users WHERE LOWER(email) = LOWER($1) LIMIT 1", [fakeEmail]);
+              if (checkEmail.rows.length > 0) {
+                uid = checkEmail.rows[0].id;
+              } else {
+                const insUser = await client.query(
+                  "INSERT INTO au_users (name, email, password, role_id, status, agency) VALUES ($1, $2, $3, 'provider', 'active', 'Participação Social') RETURNING id",
+                  [authorName, fakeEmail, await hashPassword("1234")]
+                );
+                uid = insUser.rows[0].id;
+              }
+            }
+
+            if (uid) {
+              await client.query("UPDATE re_participation_contributions SET user_id = $1 WHERE user_id IS NULL AND author_name = $2", [uid, row.author_name]);
+            }
+          }
+
+          // If any user_id is still NULL, associate with the first admin user
+          await client.query(`
+            UPDATE re_participation_contributions 
+            SET user_id = (SELECT id FROM au_users ORDER BY id ASC LIMIT 1) 
+            WHERE user_id IS NULL;
+          `);
+
+          // Remove duplicate contributions per (article_id, user_id) before adding UNIQUE constraint
+          await client.query(`
+            DELETE FROM re_participation_contributions c1
+            WHERE c1.id NOT IN (
+              SELECT MAX(c2.id)
+              FROM re_participation_contributions c2
+              GROUP BY c2.article_id, c2.user_id
+            );
+          `);
+
+          // Drop the author_name column now that all records are bound to user_id
+          await client.query(`
+            ALTER TABLE re_participation_contributions DROP COLUMN IF EXISTS author_name;
+          `);
+        }
+
+        // Enforce foreign key and NOT NULL on user_id
+        await client.query(`
+          ALTER TABLE re_participation_contributions ALTER COLUMN user_id SET NOT NULL;
+          ALTER TABLE re_participation_contributions DROP CONSTRAINT IF EXISTS fk_participation_contributions_user;
+          ALTER TABLE re_participation_contributions ADD CONSTRAINT fk_participation_contributions_user FOREIGN KEY (user_id) REFERENCES au_users(id) ON DELETE CASCADE;
+          ALTER TABLE re_participation_contributions DROP CONSTRAINT IF EXISTS unique_user_article_contribution;
+          ALTER TABLE re_participation_contributions ADD CONSTRAINT unique_user_article_contribution UNIQUE (article_id, user_id);
+        `);
+      } catch (migErr) {
+        console.error("Erro na migração de re_participation_contributions:", migErr);
+      }
 
       // Performance Indexes (Task & Water Balance Modules)
       await client.query("CREATE INDEX IF NOT EXISTS idx_tasks_plan_id ON pl_tasks(plan_id);");
@@ -4570,6 +4752,626 @@ export async function startServer(isVercel = false) {
     }
   });
 
+
+// ==========================================
+// REGULAÇÃO - PARTICIPAÇÃO SOCIAL (CONSULTA PÚBLICA / TOMADA DE SUBSÍDIOS)
+// ==========================================
+
+const getParticipationsHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  try {
+    const { rows: participations } = await dbPool.query(
+      `SELECT 
+        id, 
+        numero, 
+        COALESCE(tipo_resolucao, 'nova') as "tipoResolucao",
+        COALESCE(meio_participacao, 'Consulta Pública') as "meioParticipacao", 
+        title, 
+        objeto, 
+        COALESCE(datainicio, '') as "dataInicio", 
+        COALESCE(datafim, '') as "dataFim", 
+        COALESCE(createdat, '') as "createdAt"
+       FROM re_participations 
+       ORDER BY id DESC`
+    );
+    
+    // Fetch attachments
+    const { rows: anexos } = await dbPool.query("SELECT * FROM re_participation_attachments");
+    
+    const result = participations.map(t => {
+      const dInicio = t.dataInicio || (t as any).datainicio || (t as any).data_inicio || "";
+      const dFim = t.dataFim || (t as any).datafim || (t as any).data_fim || "";
+      const cAt = t.createdAt || (t as any).createdat || (t as any).created_at || "";
+      return {
+        ...t,
+        tipoResolucao: t.tipoResolucao || (t as any).tipo_resolucao || "nova",
+        dataInicio: dInicio ? String(dInicio).split("T")[0] : "",
+        dataFim: dFim ? String(dFim).split("T")[0] : "",
+        createdAt: cAt,
+        meioParticipacao: t.meioParticipacao || (t as any).meio_participacao || "Consulta Pública",
+        anexos: anexos.filter(a => a.participation_id === t.id)
+      };
+    });
+    
+    res.json(result);
+  } catch (error) {
+    console.error("Error fetching participations:", error);
+    res.status(500).json({ error: "Failed to fetch participations" });
+  }
+};
+
+const getSingleParticipationHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  try {
+    const { id } = req.params;
+    const { rows: participations } = await dbPool.query(
+      `SELECT 
+        id, 
+        numero, 
+        COALESCE(tipo_resolucao, 'nova') as "tipoResolucao",
+        COALESCE(meio_participacao, 'Consulta Pública') as "meioParticipacao", 
+        title, 
+        objeto, 
+        COALESCE(datainicio, '') as "dataInicio", 
+        COALESCE(datafim, '') as "dataFim", 
+        COALESCE(createdat, '') as "createdAt"
+       FROM re_participations 
+       WHERE id = $1`,
+      [Number(id)]
+    );
+
+    if (participations.length === 0) {
+      return res.status(404).json({ error: "Participation not found" });
+    }
+
+    const { rows: anexos } = await dbPool.query(
+      "SELECT * FROM re_participation_attachments WHERE participation_id = $1",
+      [Number(id)]
+    );
+
+    const t = participations[0];
+    const dInicio = t.dataInicio || (t as any).datainicio || (t as any).data_inicio || "";
+    const dFim = t.dataFim || (t as any).datafim || (t as any).data_fim || "";
+    const cAt = t.createdAt || (t as any).createdat || (t as any).created_at || "";
+
+    res.json({
+      ...t,
+      tipoResolucao: t.tipoResolucao || (t as any).tipo_resolucao || "nova",
+      dataInicio: dInicio ? String(dInicio).split("T")[0] : "",
+      dataFim: dFim ? String(dFim).split("T")[0] : "",
+      createdAt: cAt,
+      meioParticipacao: t.meioParticipacao || (t as any).meio_participacao || "Consulta Pública",
+      anexos: anexos || []
+    });
+  } catch (error) {
+    console.error("Error fetching single participation:", error);
+    res.status(500).json({ error: "Failed to fetch participation" });
+  }
+};
+
+const createParticipationHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  const client = await dbPool.connect();
+  try {
+    const { numero, tipoResolucao, meioParticipacao, title, objeto, dataInicio, dataFim, createdAt, anexos, articles } = req.body;
+    const finalTipoResolucao = (tipoResolucao === 'alteracao' || req.body.tipo_resolucao === 'alteracao') ? 'alteracao' : 'nova';
+    const finalDataInicio = (dataInicio || req.body.data_inicio || req.body.datainicio || '').split("T")[0];
+    const finalDataFim = (dataFim || req.body.data_fim || req.body.datafim || '').split("T")[0];
+    
+    let finalNumero = numero;
+    if (!finalNumero) {
+      const currentYear = new Date().getFullYear();
+      const isTS = meioParticipacao === 'Tomada de Subsídios' || meioParticipacao === 'TS';
+      const prefix = isTS ? 'TS' : 'CP';
+      const { rows: existing } = await client.query(
+        "SELECT numero, meio_participacao FROM re_participations"
+      );
+      let maxNum = 0;
+      for (const row of existing) {
+        const rowMeio = row.meio_participacao || 'Consulta Pública';
+        const isSameType = isTS
+          ? (rowMeio === 'Tomada de Subsídios' || (row.numero && row.numero.trim().toUpperCase().startsWith('TS')))
+          : (rowMeio === 'Consulta Pública' || (row.numero && row.numero.trim().toUpperCase().startsWith('CP')));
+
+        if (isSameType && row.numero) {
+          const match = row.numero.match(/(?:CP|TS)?\s*(\d+)\s*\/\s*(\d{4})/i);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            const year = parseInt(match[2], 10);
+            if (year === currentYear && !isNaN(num) && num > maxNum) {
+              maxNum = num;
+            }
+          }
+        }
+      }
+      finalNumero = `${prefix} ${maxNum + 1}/${currentYear}`;
+    }
+
+    await client.query('BEGIN');
+    
+    const insertRes = await client.query(
+      `INSERT INTO re_participations (numero, tipo_resolucao, meio_participacao, title, objeto, datainicio, datafim, createdat)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id`,
+      [finalNumero, finalTipoResolucao, meioParticipacao || 'Consulta Pública', title, objeto, finalDataInicio, finalDataFim, createdAt || new Date().toISOString()]
+    );
+    
+    const participationId = insertRes.rows[0].id;
+    
+    if (anexos && anexos.length > 0) {
+      for (const anexo of anexos) {
+        await client.query(
+          `INSERT INTO re_participation_attachments (participation_id, name, url) VALUES ($1, $2, $3)`,
+          [participationId, anexo.name, anexo.url]
+        );
+      }
+    }
+    
+    if (articles && articles.length > 0) {
+      for (const art of articles) {
+        await client.query(
+          `INSERT INTO re_participation_articles (participation_id, order_index, original_text, proposed_text)
+           VALUES ($1, $2, $3, $4)`,
+          [participationId, art.order || 0, art.originalText, art.proposedText || null]
+        );
+      }
+    }
+    
+    await client.query('COMMIT');
+    res.json({ success: true, id: participationId });
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error("Error creating participation:", error);
+    res.status(500).json({ error: "Failed to create participation" });
+  } finally {
+    client.release();
+  }
+};
+
+const updateParticipationHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  const client = await dbPool.connect();
+  try {
+    const { id } = req.params;
+    const { numero, tipoResolucao, meioParticipacao, title, objeto, dataInicio, dataFim, anexos } = req.body;
+    const finalTipoResolucao = (tipoResolucao || req.body.tipo_resolucao) === 'alteracao' ? 'alteracao' : 'nova';
+    const finalDataInicio = (dataInicio || req.body.data_inicio || req.body.datainicio || '').split("T")[0];
+    const finalDataFim = (dataFim || req.body.data_fim || req.body.datafim || '').split("T")[0];
+    
+    await client.query('BEGIN');
+
+    await client.query(
+      `UPDATE re_participations 
+       SET numero = $1, tipo_resolucao = $2, meio_participacao = $3, title = $4, objeto = $5, datainicio = $6, datafim = $7
+       WHERE id = $8`,
+      [numero, finalTipoResolucao, meioParticipacao || 'Consulta Pública', title, objeto, finalDataInicio, finalDataFim, Number(id)]
+    );
+    
+    // If anexos is provided as an array, replace or update the attachments for this participation
+    if (Array.isArray(anexos)) {
+      // Remove old attachments
+      await client.query("DELETE FROM re_participation_attachments WHERE participation_id = $1", [Number(id)]);
+      // Insert new/kept attachments
+      for (const anexo of anexos) {
+        if (anexo && anexo.name) {
+          await client.query(
+            `INSERT INTO re_participation_attachments (participation_id, name, url) VALUES ($1, $2, $3)`,
+            [Number(id), anexo.name, anexo.url || '']
+          );
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error("Error updating participation:", error);
+    res.status(500).json({ error: "Failed to update participation" });
+  } finally {
+    client.release();
+  }
+};
+
+const deleteParticipationHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  try {
+    const { id } = req.params;
+    await dbPool.query("DELETE FROM re_participations WHERE id = $1", [Number(id)]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting participation:", error);
+    res.status(500).json({ error: "Failed to delete participation" });
+  }
+};
+
+const getArticlesHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  try {
+    const { id } = req.params;
+    const { rows } = await dbPool.query(
+      `SELECT id, participation_id as "tomadaId", participation_id as "participationId", 
+              order_index as "order", original_text as "originalText", 
+              proposed_text as "proposedText", final_text as "finalText", 
+              final_justification as "finalJustification" 
+       FROM re_participation_articles 
+       WHERE participation_id = $1 
+       ORDER BY order_index`,
+      [Number(id)]
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error("Error fetching articles:", error);
+    res.status(500).json({ error: "Failed to fetch articles" });
+  }
+};
+
+const getContributionsHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  try {
+    const { id } = req.params;
+    const { rows } = await dbPool.query(
+      `SELECT c.id, c.article_id as "articleId", c.user_id as "userId",
+              COALESCE(u.name, 'Participante') as "authorName", 
+              COALESCE(u.email, '') as "authorEmail",
+              c.proposed_text as "proposedText", c.justification, 
+              c.decision, c.complexity, c.technical_justification as "technicalJustification",
+              c.created_at as "createdAt"
+       FROM re_participation_contributions c
+       JOIN re_participation_articles a ON c.article_id = a.id
+       LEFT JOIN au_users u ON c.user_id = u.id
+       WHERE a.participation_id = $1
+       ORDER BY c.id DESC`,
+      [Number(id)]
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error("Error fetching contributions:", error);
+    res.status(500).json({ error: "Failed to fetch contributions" });
+  }
+};
+
+const createContributionHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  try {
+    const { articleId, userId, authorName, authorEmail, proposedText, justification, createdAt } = req.body;
+    let resolvedUserId = userId !== undefined && userId !== null && !isNaN(Number(userId)) ? Number(userId) : null;
+    
+    // If userId not provided directly as integer, resolve from au_users by email or name
+    if (!resolvedUserId) {
+      if (authorEmail) {
+        const uRes = await dbPool.query("SELECT id FROM au_users WHERE LOWER(email) = LOWER($1)", [authorEmail.trim()]);
+        if (uRes.rows.length > 0) resolvedUserId = uRes.rows[0].id;
+      }
+      if (!resolvedUserId && authorName) {
+        const uRes = await dbPool.query("SELECT id FROM au_users WHERE LOWER(name) = LOWER($1)", [authorName.trim()]);
+        if (uRes.rows.length > 0) resolvedUserId = uRes.rows[0].id;
+      }
+      // If user still doesn't exist, create an active registered user record in au_users
+      if (!resolvedUserId && (authorName || authorEmail)) {
+        const safeName = (authorName || "Usuário").trim();
+        const safeEmail = (authorEmail || `${safeName.toLowerCase().replace(/[^a-z0-9]/g, '.')}@adasa.df.gov.br`).trim();
+        const insUser = await dbPool.query(
+          "INSERT INTO au_users (name, email, password, role_id, status, agency) VALUES ($1, $2, $3, 'provider', 'active', 'Participação Social') RETURNING id",
+          [safeName, safeEmail, await hashPassword("1234")]
+        );
+        resolvedUserId = insUser.rows[0].id;
+      }
+    }
+
+    if (!resolvedUserId) {
+      return res.status(400).json({ error: "Usuário autenticado obrigatório para enviar contribuição." });
+    }
+
+    // Upsert contribution: enforce 1 proposal per user per article
+    const upsertRes = await dbPool.query(
+      `INSERT INTO re_participation_contributions (article_id, user_id, proposed_text, justification, created_at)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (article_id, user_id) 
+       DO UPDATE SET proposed_text = EXCLUDED.proposed_text,
+                     justification = EXCLUDED.justification,
+                     created_at = EXCLUDED.created_at
+       RETURNING id`,
+      [Number(articleId), resolvedUserId, proposedText, justification, createdAt || new Date().toISOString()]
+    );
+    
+    res.json({ success: true, id: upsertRes.rows[0].id });
+  } catch (error) {
+    console.error("Error creating contribution:", error);
+    res.status(500).json({ error: "Failed to create contribution" });
+  }
+};
+
+const updateContributionHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  try {
+    const { id } = req.params;
+    const { proposedText, justification, userId, decision } = req.body;
+    const parsedUserId = userId !== undefined && userId !== null && !isNaN(Number(userId)) ? Number(userId) : null;
+    
+    await dbPool.query(
+      `UPDATE re_participation_contributions
+       SET proposed_text = COALESCE($1, proposed_text),
+           justification = COALESCE($2, justification),
+           user_id = COALESCE($3, user_id),
+           decision = CASE WHEN $4::text IS NOT NULL THEN $4 ELSE decision END,
+           created_at = $5
+       WHERE id = $6`,
+      [
+        proposedText !== undefined ? proposedText : null,
+        justification !== undefined ? justification : null,
+        parsedUserId,
+        decision !== undefined ? decision : null,
+        new Date().toISOString(),
+        Number(id)
+      ]
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error updating contribution:", error);
+    res.status(500).json({ error: "Failed to update contribution" });
+  }
+};
+
+const updateContributionAnalysisHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  try {
+    const { id } = req.params;
+    const { decision, complexity, technicalJustification } = req.body;
+    
+    await dbPool.query(
+      `UPDATE re_participation_contributions
+       SET decision = $1,
+           complexity = $2,
+           technical_justification = $3
+       WHERE id = $4`,
+      [
+        decision !== undefined ? decision : null, 
+        complexity !== undefined ? complexity : null,
+        technicalJustification !== undefined ? technicalJustification : null,
+        Number(id)
+      ]
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error updating contribution analysis:", error);
+    res.status(500).json({ error: "Failed to update contribution analysis" });
+  }
+};
+
+const deleteContributionHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  try {
+    const { id } = req.params;
+    await dbPool.query("DELETE FROM re_participation_contributions WHERE id = $1", [Number(id)]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting contribution:", error);
+    res.status(500).json({ error: "Failed to delete contribution" });
+  }
+};
+
+const updateArticleHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  try {
+    const { id } = req.params;
+    const { originalText, proposedText, order, finalText, finalJustification } = req.body;
+    
+    await dbPool.query(
+      `UPDATE re_participation_articles 
+       SET original_text = COALESCE($1, original_text),
+           proposed_text = COALESCE($2, proposed_text),
+           order_index = COALESCE($3, order_index),
+           final_text = CASE WHEN $4::text IS NOT NULL THEN $4 ELSE final_text END,
+           final_justification = CASE WHEN $5::text IS NOT NULL THEN $5 ELSE final_justification END
+       WHERE id = $6`,
+      [
+        originalText !== undefined ? originalText : null, 
+        proposedText !== undefined ? proposedText : null, 
+        order !== undefined ? order : null,
+        finalText !== undefined ? finalText : null,
+        finalJustification !== undefined ? finalJustification : null,
+        Number(id)
+      ]
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error updating article:", error);
+    res.status(500).json({ error: "Failed to update article" });
+  }
+};
+
+const updateArticleFinalAnalysisHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  try {
+    const { id } = req.params;
+    const { finalText, finalJustification } = req.body;
+    
+    await dbPool.query(
+      `UPDATE re_participation_articles 
+       SET final_text = $1,
+           final_justification = $2
+       WHERE id = $3`,
+      [finalText !== undefined ? finalText : null, finalJustification !== undefined ? finalJustification : null, Number(id)]
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error updating article final analysis:", error);
+    res.status(500).json({ error: "Failed to update article final analysis" });
+  }
+};
+
+const updateParticipationArticlesBatchHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  try {
+    const { id } = req.params;
+    const { articles } = req.body;
+    if (Array.isArray(articles)) {
+      for (const art of articles) {
+        if (art.id && !String(art.id).startsWith('temp-')) {
+          await dbPool.query(
+            `UPDATE re_participation_articles 
+             SET original_text = $1, proposed_text = $2, order_index = $3
+             WHERE id = $4 AND participation_id = $5`,
+            [art.originalText || null, art.proposedText || null, art.order || 0, Number(art.id), Number(id)]
+          );
+        } else {
+          await dbPool.query(
+            `INSERT INTO re_participation_articles (participation_id, order_index, original_text, proposed_text)
+             VALUES ($1, $2, $3, $4)`,
+            [Number(id), art.order || 0, art.originalText || null, art.proposedText || null]
+          );
+        }
+      }
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error batch updating articles:", error);
+    res.status(500).json({ error: "Failed to update articles" });
+  }
+};
+
+// Route bindings for participations & legacy aliases
+app.get("/api/reg/participations", getParticipationsHandler);
+app.get("/api/reg/tomadas", getParticipationsHandler);
+
+app.get("/api/reg/participations/:id", getSingleParticipationHandler);
+app.get("/api/reg/tomadas/:id", getSingleParticipationHandler);
+
+app.post("/api/reg/participations", createParticipationHandler);
+app.post("/api/reg/tomadas", createParticipationHandler);
+
+app.put("/api/reg/participations/:id", updateParticipationHandler);
+app.put("/api/reg/tomadas/:id", updateParticipationHandler);
+
+app.delete("/api/reg/participations/:id", deleteParticipationHandler);
+app.delete("/api/reg/tomadas/:id", deleteParticipationHandler);
+
+app.get("/api/reg/participations/:id/articles", getArticlesHandler);
+app.get("/api/reg/tomadas/:id/articles", getArticlesHandler);
+
+app.put("/api/reg/participations/:id/articles", updateParticipationArticlesBatchHandler);
+app.put("/api/reg/tomadas/:id/articles", updateParticipationArticlesBatchHandler);
+
+app.put("/api/reg/articles/:id", updateArticleHandler);
+app.put("/api/reg/articles/:id/final-analysis", updateArticleFinalAnalysisHandler);
+
+app.get("/api/reg/participations/:id/contributions", getContributionsHandler);
+app.get("/api/reg/tomadas/:id/contributions", getContributionsHandler);
+
+app.post("/api/reg/contributions", createContributionHandler);
+app.put("/api/reg/contributions/:id", updateContributionHandler);
+app.put("/api/reg/contributions/:id/analysis", updateContributionAnalysisHandler);
+app.delete("/api/reg/contributions/:id", deleteContributionHandler);
+
+app.post("/api/reg/ai/analyze-contribution", async (req, res) => {
+  try {
+    const { originalText, proposedText, userJustification } = req.body;
+    
+    if (!originalText || !proposedText || !userJustification) {
+      return res.status(400).json({ error: "Missing required fields for AI analysis." });
+    }
+
+    const prompt = `Você é um analista técnico de regulação da ADASA (Agência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal).
+Você precisa analisar uma contribuição da sociedade para uma minuta de norma.
+O texto original do dispositivo é:
+"${originalText}"
+
+O texto sugerido pelo participante é:
+"${proposedText}"
+
+A justificativa fornecida pelo participante é:
+"${userJustification}"
+
+Avalie a contribuição com base no rigor técnico regulatório, clareza e impacto na prestação dos serviços. 
+Forneça a resposta em formato JSON estrito com os seguintes campos:
+- "decision": "Acatada", "Acatada Parcialmente", "Não Acatada", "Prejudicada" ou "Retida para Estudos Adicionais"
+- "complexity": "Alta", "Média" ou "Baixa"
+- "technicalJustification": Um texto técnico, impessoal e claro, com a justificativa técnica para a decisão tomada.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-flash-lite",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            decision: { type: Type.STRING },
+            complexity: { type: Type.STRING },
+            technicalJustification: { type: Type.STRING }
+          },
+          required: ["decision", "complexity", "technicalJustification"]
+        }
+      }
+    });
+
+    res.json(JSON.parse(response.text));
+  } catch (error) {
+    console.error("AI Analysis Error:", error);
+    res.status(500).json({ error: "Failed to generate AI analysis" });
+  }
+});
+
+app.post("/api/reg/ai/analyze-article", async (req, res) => {
+  try {
+    const { originalText, contributions } = req.body;
+    
+    if (!originalText || !contributions || !Array.isArray(contributions)) {
+      return res.status(400).json({ error: "Missing required fields for AI article analysis." });
+    }
+
+    const contributionsText = contributions.map((c: any, i: number) => `
+Contribuição ${i+1}:
+Parecer Técnico Dado: ${c.decision || "Não informado"}
+Surgestão do Participante: "${c.proposedText}"
+Justificativa: "${c.justification}"
+Resposta Técnica Dada: "${c.technicalJustification || "Não informada"}"
+`).join("\\n");
+
+    const prompt = `Você é um revisor técnico de regulação da ADASA.
+Abaixo está o texto original de um dispositivo normativo e uma lista de contribuições da sociedade com seus respectivos pareceres.
+
+Texto Original:
+"${originalText}"
+
+Contribuições:
+${contributionsText}
+
+Com base no texto original e nas contribuições que foram acatadas total ou parcialmente, escreva a Redação Final sugerida para este dispositivo e uma Justificativa Técnica Final consolidando a visão geral do que foi alterado e por quê.
+Se nenhuma contribuição foi acatada, a redação final deve ser igual à original e a justificativa deve apontar brevemente que não houve alterações.
+
+Forneça a resposta em formato JSON estrito com os seguintes campos:
+- "finalText": O texto consolidado do dispositivo.
+- "finalJustification": Um texto técnico, impessoal e claro, justificando como as contribuições moldaram a redação final.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-flash-lite",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            finalText: { type: Type.STRING },
+            finalJustification: { type: Type.STRING }
+          },
+          required: ["finalText", "finalJustification"]
+        }
+      }
+    });
+
+    res.json(JSON.parse(response.text));
+  } catch (error) {
+    console.error("AI Article Analysis Error:", error);
+    res.status(500).json({ error: "Failed to generate AI article analysis" });
+  }
+});
+
   // Global API error handler for things like PayloadTooLargeError from body-parser
   app.use("/api", (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error("Express API error:", err);
@@ -4603,11 +5405,6 @@ export async function startServer(isVercel = false) {
   }
 }
 
-if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
-  // Only auto-start if not built for Vercel serverless
-  const isCjsMain = typeof require !== 'undefined' && require.main === module;
-  const isEsmMain = typeof import.meta !== 'undefined' && import.meta.url === `file://${process.argv[1]}`;
-  if (isCjsMain || isEsmMain || process.argv[1]?.includes('server.cjs') || process.argv[1]?.includes('tsx') || process.argv[1]?.includes('esno')) {
-    startServer();
-  }
+if (!process.env.VERCEL) {
+  startServer();
 }

@@ -1,0 +1,1 @@
+export { TomadaSubsidiosModule } from "./TomadaSubsidiosModule";

@@ -56,7 +56,8 @@ import {
   CornerDownRight,
   CheckCheck,
   ClipboardList,
-  Compass
+  Compass,
+  MessageSquare
 } from "lucide-react";
 import {
   LineChart,
@@ -107,6 +108,7 @@ import { ResolutionsModule } from "./modules/resolutions";
 import { RegulatoryAgendaModule } from "./modules/regulatory-agenda";
 import { PublicationsModule } from "./modules/publications";
 import { UserManagementModule } from "./modules/user-management";
+import { TomadaSubsidiosModule } from "./modules/tomada-subsidios";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { FiscalizacaoPainel } from "./components/FiscalizacaoPainel";
 import { RecursoPainel } from "./components/RecursoPainel";
@@ -601,7 +603,7 @@ export default function App() {
     const saved = localStorage.getItem("adasa-demands");
     return saved ? JSON.parse(saved) : [INITIAL_DEMAND];
   });
-  const [activeTab, setActiveTab] = useState<"home" | "gerencial" | "public_hub" | "edit" | "compare" | "manage" | "analyze" | "templates" | "planning" | "users" | "reg_cadastro" | "reg_agenda" | "reg_painel" | "reg_agenda_painel" | "pub_cadastro" | "pub_painel" | "fisc_operational" | "recurso_painel">(
+  const [activeTab, setActiveTab] = useState<"home" | "gerencial" | "public_hub" | "edit" | "compare" | "manage" | "analyze" | "templates" | "planning" | "users" | "reg_cadastro" | "reg_agenda" | "reg_subsidios" | "reg_painel" | "reg_agenda_painel" | "pub_cadastro" | "pub_painel" | "fisc_operational" | "recurso_painel">(
     "home",
   );
   const [editingTaskIdFromPainel, setEditingTaskIdFromPainel] = useState<number | null>(null);
@@ -622,27 +624,27 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [expandedSidebarSections, setExpandedSidebarSections] = useState<Record<string, boolean>>(() => {
     try {
-      const saved = localStorage.getItem("adasa_sidebar_sections");
+      const saved = localStorage.getItem("adasa_sidebar_sections_v2");
       return saved ? JSON.parse(saved) : {
-        planning: true,
-        regulation: true,
-        fiscalization: true,
-        publications: true,
-        userManagement: true,
+        planning: false,
+        regulation: false,
+        fiscalization: false,
+        publications: false,
+        userManagement: false,
       };
     } catch {
       return {
-        planning: true,
-        regulation: true,
-        fiscalization: true,
-        publications: true,
-        userManagement: true,
+        planning: false,
+        regulation: false,
+        fiscalization: false,
+        publications: false,
+        userManagement: false,
       };
     }
   });
 
   useEffect(() => {
-    localStorage.setItem("adasa_sidebar_sections", JSON.stringify(expandedSidebarSections));
+    localStorage.setItem("adasa_sidebar_sections_v2", JSON.stringify(expandedSidebarSections));
   }, [expandedSidebarSections]);
 
   const toggleSidebarSection = (section: string) => {
@@ -3860,6 +3862,19 @@ const renderSupplyTable = () => {
                             Painel de Resoluções
                           </button>
                         )}
+                        {checkPermission("reg_agenda", "view") && (
+                          <button
+                            onClick={() => {
+                              setIsMyTasksSelected(false);
+                              setIsMobileMenuOpen(false);
+                              handleTabChange("reg_subsidios");
+                            }}
+                            className={cn("w-full text-left justify-start px-4 py-2 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "reg_subsidios" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
+                          >
+                            <MessageSquare size={18} className={activeTab === "reg_subsidios" ? "text-adasa-mid" : "text-white/50"} />
+                            Tomada de Subsídios
+                          </button>
+                        )}
                       </div>
 
                       {/* Subsection: Agenda Regulatória */}
@@ -4068,7 +4083,7 @@ const renderSupplyTable = () => {
                 </AnimatePresence>
               </div>
 
-              {/* Collapsible Section: Gestão de Usuários */}
+              {/* Collapsible Section: Acessos */}
               {currentUser?.roleId === 'admin' && (
                 <div>
                   <button
@@ -4077,7 +4092,7 @@ const renderSupplyTable = () => {
                   >
                     <span className="flex items-center gap-1.5">
                       <Shield size={16} className="text-adasa-light" />
-                      Gestão de Usuários
+                      Acessos
                     </span>
                     {expandedSidebarSections.userManagement ? (
                       <ChevronDown size={16} className="opacity-70" />
@@ -4623,6 +4638,30 @@ const renderSupplyTable = () => {
                         {!isSidebarCollapsed && <span className="hidden md:inline">Painel de Resoluções</span>}
                       </button>
                     )}
+                    {checkPermission("reg_agenda", "view") && (
+                      <button
+                        title={isSidebarCollapsed ? "Participação Social" : undefined}
+                        onClick={() => {
+                          setIsMyTasksSelected(false);
+                          handleTabChange("reg_subsidios");
+                        }}
+                        className={cn(
+                          "w-full text-left justify-start px-4 py-2 rounded-xl flex items-center gap-3 transition-all duration-200 group text-xs font-semibold cursor-pointer",
+                          activeTab === "reg_subsidios"
+                            ? "bg-white/15 text-white shadow-lg border border-white/10 border-l-4 border-l-adasa-light pl-3"
+                            : "text-white/60 hover:text-white hover:bg-white/5 hover:translate-x-0.5",
+                        )}
+                      >
+                        <MessageSquare
+                          size={16}
+                          className={cn(
+                            "flex-shrink-0 transition-colors",
+                            activeTab === "reg_subsidios" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
+                          )}
+                        />
+                        {!isSidebarCollapsed && <span className="hidden md:inline">Participação Social</span>}
+                      </button>
+                    )}
                   </div>
 
                   {/* Subsection: Agenda Regulatória */}
@@ -4943,7 +4982,7 @@ const renderSupplyTable = () => {
             </AnimatePresence>
           </div>
 
-          {/* Collapsible Section: Gestão de Usuários (Admin only) */}
+          {/* Collapsible Section: Acessos (Admin only) */}
           {currentUser?.roleId === 'admin' && (
             <div>
               {!isSidebarCollapsed ? (
@@ -4953,7 +4992,7 @@ const renderSupplyTable = () => {
                 >
                   <span className="flex items-center gap-1.5">
                     <Shield size={14} className="text-adasa-light" />
-                    Gestão Geral
+                    Acessos
                   </span>
                   {expandedSidebarSections.userManagement ? (
                     <ChevronDown size={14} className="opacity-70" />
@@ -5019,7 +5058,7 @@ const renderSupplyTable = () => {
                 : activeTab === "templates"
                 ? "Arquivos Modelo"
                 : activeTab === "users"
-                ? "Gestão de Usuários"
+                ? "Acessos"
                 : activeTab === "planning"
                 ? (activePlanningSubTab === "dashboard" ? "Painel de Atividades" :
                    activePlanningSubTab === "tasks" ? (isMyTasksSelected ? "Minhas Atividades" : "Cadastrar Atividades") : 
@@ -5029,7 +5068,7 @@ const renderSupplyTable = () => {
                    activePlanningSubTab === "responsibles" ? "Cadastrar Responsáveis" :
                    activePlanningSubTab === "models" ? "Cadastrar Modelo de Atividades" :
                    activePlanningSubTab === "radar" ? "Radar de Atividades" : "Importar Atividades")
-                : activeTab === "reg_cadastro" ? "Cadastrar Resoluções" : activeTab === "reg_agenda" ? "Agenda Regulatória" : activeTab === "reg_painel" ? "Painel Estratégico de Resoluções" : activeTab === "reg_agenda_painel" ? "Painel da Agenda Regulatória" : activeTab === "pub_cadastro" ? "Cadastrar Publicações" : activeTab === "pub_painel" ? "Painel de Publicações" : activeTab === "fisc_operational" ? "Painel de Fiscalização" : activeTab === "recurso_painel" ? "Painel de Qualidade do Atendimento" : "Cadastrar Balanço"}
+                : activeTab === "reg_cadastro" ? "Cadastrar Resoluções" : activeTab === "reg_agenda" ? "Agenda Regulatória" : activeTab === "reg_subsidios" ? "Participação Social" : activeTab === "reg_painel" ? "Painel Estratégico de Resoluções" : activeTab === "reg_agenda_painel" ? "Painel da Agenda Regulatória" : activeTab === "pub_cadastro" ? "Cadastrar Publicações" : activeTab === "pub_painel" ? "Painel de Publicações" : activeTab === "fisc_operational" ? "Painel de Fiscalização" : activeTab === "recurso_painel" ? "Painel de Qualidade do Atendimento" : "Cadastrar Balanço"}
             </h1>
             <p className="text-slate-500 text-sm font-medium">
               {activeTab === "home"
@@ -5048,7 +5087,7 @@ const renderSupplyTable = () => {
                           ? "Gerencie as contas de usuários, papéis e níveis de acesso (RBAC)."
                         : activeTab === "planning"
                           ? (isMyTasksSelected ? "Gerencie e acompanhe as atividades atribuídas diretamente ao seu usuário." : "Gerencie o cronograma consolidado, planos, áreas e status de execução.")
-                          : activeTab === "reg_cadastro" ? "Gestão do acervo de normas, atos legais e resoluções aplicados à regulação do saneamento básico e recursos hídricos." : activeTab === "reg_agenda" ? "Cadastro e acompanhamento de metas, temas e ações da agenda regulatória." : activeTab === "reg_painel" ? "Estoque Regulatório da Superintendência de Abastecimento de Água e Esgoto" : activeTab === "reg_agenda_painel" ? "Acompanhamento estratégico, metas, indicadores gráficos e percentual de entregas dos itens da Agenda Regulatória." : activeTab === "pub_cadastro" ? "Gestão do acervo bibliográfico, relatórios anuais de atividades, boletins informativos e artigos de pesquisa científica." : activeTab === "pub_painel" ? "Painel analítico gráfico de publicações, volumes históricos, distribuição de documentos e filtro do acervo próximo." : activeTab === "fisc_operational" ? "Painel estratégico de monitoramento das ações de fiscalização, constatações, não conformidades e termos emitidos." : activeTab === "recurso_painel" ? "Painel estratégico de acompanhamento de demandas de ouvidoria, prazos, andamento e penalidades aplicadas." : "Gerencie os balanços hídricos e cadastre novas informações."}
+                          : activeTab === "reg_cadastro" ? "Gestão do acervo de normas, atos legais e resoluções aplicados à regulação do saneamento básico e recursos hídricos." : activeTab === "reg_agenda" ? "Cadastro e acompanhamento de metas, temas e ações da agenda regulatória." : activeTab === "reg_subsidios" ? "Módulo de participação social e recebimento de contribuições para normas e resoluções." : activeTab === "reg_painel" ? "Estoque Regulatório da Superintendência de Abastecimento de Água e Esgoto" : activeTab === "reg_agenda_painel" ? "Acompanhamento estratégico, metas, indicadores gráficos e percentual de entregas dos itens da Agenda Regulatória." : activeTab === "pub_cadastro" ? "Gestão do acervo bibliográfico, relatórios anuais de atividades, boletins informativos e artigos de pesquisa científica." : activeTab === "pub_painel" ? "Painel analítico gráfico de publicações, volumes históricos, distribuição de documentos e filtro do acervo próximo." : activeTab === "fisc_operational" ? "Painel estratégico de monitoramento das ações de fiscalização, constatações, não conformidades e termos emitidos." : activeTab === "recurso_painel" ? "Painel estratégico de acompanhamento de demandas de ouvidoria, prazos, andamento e penalidades aplicadas." : "Gerencie os balanços hídricos e cadastre novas informações."}
             </p>
           </div>
           <div className="flex flex-col md:flex-row items-center gap-3">
@@ -8882,6 +8921,19 @@ const renderSupplyTable = () => {
               className="w-full"
             >
               <RegulatoryAgendaModule view="agenda" showToast={showToast} currentUser={currentUser} />
+            </motion.div>
+            </RequirePermission>
+          ) : activeTab === "reg_subsidios" ? (
+            <RequirePermission moduleId="reg_agenda" action="view" fallback={<div className="p-8 text-center text-white/50">Acesso negado.</div>}>
+            <motion.div
+              key="reg_subsidios"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="w-full"
+            >
+              <TomadaSubsidiosModule view="cadastro" showToast={showToast} currentUser={currentUser} />
             </motion.div>
             </RequirePermission>
           ) : activeTab === "reg_agenda_painel" ? (

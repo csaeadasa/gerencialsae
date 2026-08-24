@@ -278,3 +278,39 @@ CREATE INDEX IF NOT EXISTS idx_task_areas_area_id ON pl_task_areas(area_id);
 CREATE INDEX IF NOT EXISTS idx_task_categories_category_id ON pl_task_categories(category_id);
 CREATE INDEX IF NOT EXISTS idx_task_responsibles_responsible_id ON pl_task_responsibles(responsible_id);
 CREATE INDEX IF NOT EXISTS idx_model_tasks_model_id ON pl_model_tasks(model_id);
+
+-- Tomada de Subsídios (Module: regulação - Prefix: reg_)
+CREATE TABLE IF NOT EXISTS reg_tomadas (
+  id VARCHAR(255) PRIMARY KEY,
+  numero VARCHAR(255) NOT NULL,
+  title TEXT NOT NULL,
+  objeto TEXT NOT NULL,
+  dataInicio TIMESTAMP NOT NULL,
+  dataFim TIMESTAMP NOT NULL,
+  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS reg_tomada_anexos (
+  id VARCHAR(255) PRIMARY KEY,
+  tomada_id VARCHAR(255) REFERENCES reg_tomadas(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS reg_tomada_articles (
+  id VARCHAR(255) PRIMARY KEY,
+  tomada_id VARCHAR(255) REFERENCES reg_tomadas(id) ON DELETE CASCADE,
+  order_index INTEGER NOT NULL,
+  original_text TEXT NOT NULL,
+  proposed_text TEXT
+);
+
+CREATE TABLE IF NOT EXISTS reg_tomada_contributions (
+  id VARCHAR(255) PRIMARY KEY,
+  article_id VARCHAR(255) REFERENCES reg_tomada_articles(id) ON DELETE CASCADE,
+  author_name VARCHAR(255) NOT NULL,
+  proposed_text TEXT NOT NULL,
+  justification TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
