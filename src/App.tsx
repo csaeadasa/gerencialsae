@@ -358,8 +358,8 @@ try {
         }
         return response;
       } catch (err) {
-        console.error(`[FETCH DEBUG] Fetch Exception: ${url}`, err);
-        throw err;
+        console.warn(`[FETCH DEBUG] Fetch Warning / Network Retry: ${url}`, err);
+        throw new Error("Network error fetching URL: " + url + " - " + err.message);
       }
     };
 
@@ -4121,16 +4121,6 @@ const renderSupplyTable = () => {
                           <Users size={20} className={activeTab === "users" ? "text-adasa-mid" : "text-white/60"} />
                           Usuários e Permissões
                         </button>
-                        <button
-                          onClick={() => {
-                            handleTabChange("departments");
-                            setIsMobileMenuOpen(false);
-                          }}
-                          className={cn("w-full px-5 py-3 rounded-2xl flex items-center gap-4 transition-all text-sm font-semibold", activeTab === "departments" ? "bg-white text-adasa-dark shadow-lg" : "text-white/80 border border-transparent")}
-                        >
-                          <Building2 size={20} className={activeTab === "departments" ? "text-adasa-mid" : "text-white/60"} />
-                          Departamentos
-                        </button>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -5025,7 +5015,7 @@ const renderSupplyTable = () => {
                     className={cn("overflow-hidden space-y-1", isSidebarCollapsed ? "" : "pl-2 border-l border-white/5 ml-3 mt-1")}
                   >
                     <button
-                      title={isSidebarCollapsed ? "Gestão de Usuários" : undefined}
+                      title={isSidebarCollapsed ? "Gestão de Usuários e Permissões" : undefined}
                       onClick={() => handleTabChange("users")}
                       className={cn(
                         "w-full px-4 py-2 rounded-xl flex items-center gap-3 transition-all duration-200 group text-xs font-semibold cursor-pointer",
@@ -5042,25 +5032,6 @@ const renderSupplyTable = () => {
                         )}
                       />
                       {!isSidebarCollapsed && <span className="hidden md:inline">Usuários e Permissões</span>}
-                    </button>
-                    <button
-                      title={isSidebarCollapsed ? "Gestão de Departamentos" : undefined}
-                      onClick={() => handleTabChange("departments")}
-                      className={cn(
-                        "w-full px-4 py-2 rounded-xl flex items-center gap-3 transition-all duration-200 group text-xs font-semibold cursor-pointer",
-                        activeTab === "departments"
-                          ? "bg-white/15 text-white shadow-lg border border-white/10 border-l-4 border-l-adasa-light pl-3"
-                          : "text-white/60 hover:text-white hover:bg-white/5 hover:translate-x-0.5",
-                      )}
-                    >
-                      <Building2
-                        size={16}
-                        className={cn(
-                          "flex-shrink-0 transition-colors",
-                          activeTab === "departments" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
-                        )}
-                      />
-                      {!isSidebarCollapsed && <span className="hidden md:inline">Departamentos</span>}
                     </button>
                   </motion.div>
                 )}
@@ -5087,10 +5058,8 @@ const renderSupplyTable = () => {
                 ? "Painel de Análise do Balanço Hídrico"
                 : activeTab === "templates"
                 ? "Arquivos Modelo"
-                : activeTab === "users"
-                ? "Acessos"
-                : activeTab === "departments"
-                ? "Departamentos"
+                : activeTab === "users" || activeTab === "departments"
+                ? "Usuários e Permissões"
                 : activeTab === "planning"
                 ? (activePlanningSubTab === "dashboard" ? "Painel de Atividades" :
                    activePlanningSubTab === "tasks" ? (isMyTasksSelected ? "Minhas Atividades" : "Cadastrar Atividades") : 
@@ -5115,10 +5084,8 @@ const renderSupplyTable = () => {
                       ? "Visualize de forma isolada as projeções de oferta e demanda ao longo do tempo."
                       : activeTab === "templates"
                         ? "Gerencie e baixe os arquivos modelo para importação no sistema."
-                        : activeTab === "users"
-                          ? "Gerencie as contas de usuários, papéis e níveis de acesso (RBAC)."
-                        : activeTab === "departments"
-                          ? "Gerencie o cadastro de órgãos, agências e departamentos vinculados aos usuários do sistema."
+                        : activeTab === "users" || activeTab === "departments"
+                          ? "Gerencie as contas de usuários, papéis de acesso (RBAC) e departamentos do sistema."
                         : activeTab === "planning"
                           ? (isMyTasksSelected ? "Gerencie e acompanhe as atividades atribuídas diretamente ao seu usuário." : "Gerencie o cronograma consolidado, planos, áreas e status de execução.")
                           : activeTab === "reg_cadastro" ? "Gestão do acervo de normas, atos legais e resoluções aplicados à regulação do saneamento básico e recursos hídricos." : activeTab === "reg_agenda" ? "Cadastro e acompanhamento de metas, temas e ações da agenda regulatória." : activeTab === "reg_subsidios" ? "Módulo de participação social e recebimento de contribuições para normas e resoluções." : activeTab === "reg_painel" ? "Estoque Regulatório da Superintendência de Abastecimento de Água e Esgoto" : activeTab === "reg_agenda_painel" ? "Acompanhamento estratégico, metas, indicadores gráficos e percentual de entregas dos itens da Agenda Regulatória." : activeTab === "pub_cadastro" ? "Gestão do acervo bibliográfico, relatórios anuais de atividades, boletins informativos e artigos de pesquisa científica." : activeTab === "pub_painel" ? "Painel analítico gráfico de publicações, volumes históricos, distribuição de documentos e filtro do acervo próximo." : activeTab === "fisc_operational" ? "Painel estratégico de monitoramento das ações de fiscalização, constatações, não conformidades e termos emitidos." : activeTab === "recurso_painel" ? "Painel estratégico de acompanhamento de demandas de ouvidoria, prazos, andamento e penalidades aplicadas." : "Gerencie os balanços hídricos e cadastre novas informações."}

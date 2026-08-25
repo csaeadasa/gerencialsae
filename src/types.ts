@@ -61,7 +61,7 @@ export interface AppUser {
   name: string;
   email: string;
   roleId: string;
-  agency?: string;
+  
   departmentId?: number;
   department?: Department;
   status: 'active' | 'inactive';

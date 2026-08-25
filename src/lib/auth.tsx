@@ -103,20 +103,9 @@ export const DEFAULT_ROLES: UserRole[] = [
   }
 ];
 
-export const DEFAULT_DEPARTMENTS: Department[] = [
-  { id: 1, sigla: 'ADASA', nome: 'Agência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal' },
-  { id: 2, sigla: 'CAESB', nome: 'Companhia de Saneamento Ambiental do Distrito Federal' },
-  { id: 3, sigla: 'CSAE', nome: 'Superintendência de Abastecimento de Água e Esgoto' },
-  { id: 4, sigla: 'SEDUH', nome: 'Secretaria de Estado de Desenvolvimento Urbano e Habitação' },
-  { id: 5, sigla: 'GDF', nome: 'Governo do Distrito Federal' },
-];
+export const DEFAULT_DEPARTMENTS: Department[] = [];
 
-export const DEFAULT_USERS: AppUser[] = [
-  { id: '1', name: 'Administrador ADASA', email: 'csaeadasa@gmail.com', roleId: 'admin', status: 'active', departmentId: 1, department: DEFAULT_DEPARTMENTS[0] },
-  { id: '2', name: 'Admin', email: 'admin@adasa.gov.br', roleId: 'admin', status: 'active', departmentId: 1, department: DEFAULT_DEPARTMENTS[0] },
-  { id: '3', name: 'Joao Regulador', email: 'joao@adasa.gov.br', roleId: 'regulator', status: 'active', departmentId: 1, department: DEFAULT_DEPARTMENTS[0] },
-  { id: '4', name: 'Maria CAESB', email: 'maria@caesb.gov.br', roleId: 'provider', agency: 'CAESB', status: 'active', departmentId: 2, department: DEFAULT_DEPARTMENTS[1] },
-];
+export const DEFAULT_USERS: AppUser[] = [];
 
 interface AuthContextType {
   currentUser: AppUser | null;
@@ -131,8 +120,10 @@ interface AuthContextType {
   addUser: (user: Omit<AppUser, 'id'>) => Promise<{ success: boolean; data?: AppUser; error?: string }>;
   updateUser: (id: string, updates: Partial<AppUser>) => void;
   deleteUser: (id: string) => void;
-  addRole: (role: Omit<UserRole, 'id'>) => void;
-  updateRole: (id: string, updates: Partial<UserRole>) => void;
+  fetchRoles: () => Promise<void>;
+  addRole: (role: Omit<UserRole, 'id'>) => Promise<{ success: boolean; data?: UserRole; error?: string }>;
+  updateRole: (id: string, updates: Partial<UserRole>) => Promise<{ success: boolean; data?: UserRole; error?: string }>;
+  deleteRole: (id: string) => Promise<{ success: boolean; error?: string }>;
   fetchDepartments: () => Promise<void>;
   addDepartment: (dept: { sigla: string; nome: string }) => Promise<{ success: boolean; data?: Department; error?: string }>;
   updateDepartment: (id: number, dept: { sigla: string; nome: string }) => Promise<{ success: boolean; data?: Department; error?: string }>;
@@ -150,18 +141,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [roles, setRoles] = useState<UserRole[]>(DEFAULT_ROLES);
   const [departments, setDepartments] = useState<Department[]>(DEFAULT_DEPARTMENTS);
 
+  const fetchRoles = async () => {
+    try {
+      const response = await fetch("/api/roles");
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const resData = await response.json();
+        if (resData.success && Array.isArray(resData.data) && resData.data.length > 0) {
+          setRoles(resData.data);
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch roles from database:", err);
+    }
+  };
+
   const fetchDepartments = async () => {
     try {
       const response = await fetch("/api/departments");
       const contentType = response.headers.get("content-type");
       if (contentType && contentType.includes("application/json")) {
         const resData = await response.json();
-        if (resData.success && Array.isArray(resData.data) && resData.data.length > 0) {
+        if (resData.success && Array.isArray(resData.data)) {
           setDepartments(resData.data);
         }
       }
     } catch (err) {
-      console.warn("Could not fetch departments from database, using client defaults:", err);
+      console.warn("Could not fetch departments from database:", err);
     }
   };
 
@@ -181,6 +187,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    fetchRoles();
     fetchDepartments();
     fetchUsers();
   }, []);
@@ -206,8 +213,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         // Fallback for offline/local environment or proxy response
         const cleanEmail = email.trim().toLowerCase();
-        const localUser = users.find(u => u.email.toLowerCase() === cleanEmail) ||
-                          DEFAULT_USERS.find(u => u.email.toLowerCase() === cleanEmail);
+        const localUser = users.find(u => u.email.toLowerCase() === cleanEmail);
         if (localUser) {
           setCurrentUser(localUser);
           localStorage.setItem("adasa-sgi-user", JSON.stringify(localUser));
@@ -218,8 +224,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (err: any) {
       console.error("Login verification error:", err);
       const cleanEmail = email.trim().toLowerCase();
-      const localUser = users.find(u => u.email.toLowerCase() === cleanEmail) ||
-                        DEFAULT_USERS.find(u => u.email.toLowerCase() === cleanEmail);
+      const localUser = users.find(u => u.email.toLowerCase() === cleanEmail);
       if (localUser) {
         setCurrentUser(localUser);
         localStorage.setItem("adasa-sgi-user", JSON.stringify(localUser));
@@ -332,13 +337,82 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const addRole = (roleData: Omit<UserRole, 'id'>) => {
-    const newRole = { ...roleData, id: Date.now().toString() };
-    setRoles(prev => [...prev, newRole]);
+  const addRole = async (roleData: Omit<UserRole, 'id'>): Promise<{ success: boolean; data?: UserRole; error?: string }> => {
+    try {
+      const response = await fetch("/api/roles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(roleData)
+      });
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          await fetchRoles();
+          return { success: true, data: data.data };
+        } else {
+          return { success: false, error: data.error || "Erro ao salvar papel" };
+        }
+      }
+      const newRole = { ...roleData, id: 'role_' + Date.now() };
+      setRoles(prev => [...prev, newRole]);
+      return { success: true, data: newRole };
+    } catch (err: any) {
+      console.error("Erro ao adicionar papel no banco:", err);
+      const newRole = { ...roleData, id: 'role_' + Date.now() };
+      setRoles(prev => [...prev, newRole]);
+      return { success: true, data: newRole };
+    }
   };
 
-  const updateRole = (id: string, updates: Partial<UserRole>) => {
-    setRoles(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+  const updateRole = async (id: string, updates: Partial<UserRole>): Promise<{ success: boolean; data?: UserRole; error?: string }> => {
+    try {
+      const response = await fetch(`/api/roles/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates)
+      });
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          await fetchRoles();
+          return { success: true, data: data.data };
+        } else {
+          return { success: false, error: data.error || "Erro ao atualizar papel" };
+        }
+      }
+      setRoles(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+      return { success: true };
+    } catch (err: any) {
+      console.error("Erro ao atualizar papel no banco:", err);
+      setRoles(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+      return { success: true };
+    }
+  };
+
+  const deleteRole = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`/api/roles/${id}`, {
+        method: "DELETE"
+      });
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await response.json();
+        if (data.success) {
+          await fetchRoles();
+          return { success: true };
+        } else {
+          return { success: false, error: data.error || "Erro ao excluir papel" };
+        }
+      }
+      setRoles(prev => prev.filter(r => r.id !== id));
+      return { success: true };
+    } catch (err: any) {
+      console.error("Erro ao excluir papel:", err);
+      setRoles(prev => prev.filter(r => r.id !== id));
+      return { success: false, error: err.message };
+    }
   };
 
   const addDepartment = async (dept: { sigla: string; nome: string }): Promise<{ success: boolean; data?: Department; error?: string }> => {
@@ -401,15 +475,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const data = await response.json();
         if (data.success) {
           await fetchDepartments();
+          await fetchUsers();
           return { success: true };
+        } else {
+          return { success: false, error: data.error || "Erro ao excluir departamento do banco de dados" };
         }
       }
       setDepartments(prev => prev.filter(d => d.id !== id));
+      await fetchUsers();
       return { success: true };
     } catch (err: any) {
       console.error("Erro ao deletar departamento:", err);
       setDepartments(prev => prev.filter(d => d.id !== id));
-      return { success: true };
+      return { success: false, error: err.message };
     }
   };
 
@@ -418,7 +496,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         currentUser, users, roles, departments,
         login, loginWithCredentials, logout, checkPermission, hasRole,
         addUser, updateUser, deleteUser,
-        addRole, updateRole,
+        fetchRoles, addRole, updateRole, deleteRole,
         fetchDepartments, addDepartment, updateDepartment, deleteDepartment
     }}>
       {children}

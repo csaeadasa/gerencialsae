@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Users, Shield, Plus, Edit, Trash2, Key, Check, Info, AlertCircle, UserPlus, UserCheck, X, Briefcase, Layers, Building2 } from "lucide-react";
+import React, { useState, useEffect, useMemo } from "react";
+import { Users, Shield, Plus, Edit, Trash2, Key, Check, Info, AlertCircle, UserPlus, UserCheck, X, Briefcase, Layers, Building2, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, RotateCcw } from "lucide-react";
 import { AppUser, UserRole, ModuleId, ActionType, Department } from "../types";
 import { useAuth } from "../lib/auth";
 
@@ -26,7 +26,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
   const { 
     users, roles, departments, currentUser, 
     addUser, updateUser, deleteUser, 
-    addRole, updateRole, 
+    addRole, updateRole, deleteRole,
     addDepartment, updateDepartment, deleteDepartment,
     checkPermission 
   } = useAuth();
@@ -40,6 +40,9 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
 
   const [isEditingUser, setIsEditingUser] = useState<Partial<AppUser & { password?: string }> | null>(null);
   const [isEditingRole, setIsEditingRole] = useState<Partial<UserRole> | null>(null);
+  const [isSavingRole, setIsSavingRole] = useState(false);
+  const [roleToDelete, setRoleToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [isDeletingRole, setIsDeletingRole] = useState(false);
   const [isEditingDept, setIsEditingDept] = useState<Partial<Department> | null>(null);
 
   // Responsibles & Areas state for verification
@@ -53,8 +56,12 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
   const [quickDeptNome, setQuickDeptNome] = useState("");
   const [isSavingDept, setIsSavingDept] = useState(false);
 
+  // Department deletion confirmation state
+  const [deptToDelete, setDeptToDelete] = useState<{ id: number; sigla: string; nome: string; userCount: number } | null>(null);
+  const [isDeletingDept, setIsDeletingDept] = useState(false);
+
   // Prompt modal state when user is not a responsible
-  const [responsiblePromptUser, setResponsiblePromptUser] = useState<{ name: string; email: string; agency?: string; department?: Department } | null>(null);
+  const [responsiblePromptUser, setResponsiblePromptUser] = useState<{ name: string; email: string; department?: Department } | null>(null);
 
   // Responsible registration modal state
   const [isResponsibleModalOpen, setIsResponsibleModalOpen] = useState(false);
@@ -64,6 +71,40 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
   const [respFormAreaIds, setRespFormAreaIds] = useState<number[]>([]);
   const [isSavingResp, setIsSavingResp] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "info" | "warning" | "error" } | null>(null);
+
+  // User tab filters and sorting state
+  const [userSearchText, setUserSearchText] = useState("");
+  const [deptSearchText, setDeptSearchText] = useState("");
+  const [deptFilterSelect, setDeptFilterSelect] = useState("all");
+  const [roleFilterSelect, setRoleFilterSelect] = useState("all");
+  const [statusFilterSelect, setStatusFilterSelect] = useState<"all" | "active" | "inactive">("all");
+  const [sortField, setSortField] = useState<"name" | "email" | "role" | "department" | "responsible" | "status">("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (field: "name" | "email" | "role" | "department" | "responsible" | "status") => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  const hasActiveUserFilters = Boolean(
+    userSearchText.trim() || 
+    deptSearchText.trim() || 
+    deptFilterSelect !== "all" || 
+    roleFilterSelect !== "all" || 
+    statusFilterSelect !== "all"
+  );
+
+  const handleClearUserFilters = () => {
+    setUserSearchText("");
+    setDeptSearchText("");
+    setDeptFilterSelect("all");
+    setRoleFilterSelect("all");
+    setStatusFilterSelect("all");
+  };
 
   const showToast = (text: string, type: "success" | "info" | "warning" | "error" = "success") => {
     setToastMessage({ text, type });
@@ -115,6 +156,84 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
     });
   };
 
+  // Filtered and sorted users list
+  const filteredAndSortedUsers = useMemo(() => {
+    return users
+      .filter(u => {
+        // 1. User name or email search
+        if (userSearchText.trim()) {
+          const query = userSearchText.toLowerCase().trim();
+          const matchesName = (u.name || "").toLowerCase().includes(query);
+          const matchesEmail = (u.email || "").toLowerCase().includes(query);
+          if (!matchesName && !matchesEmail) return false;
+        }
+
+        // Department resolution
+        const userDept = u.department || departments.find(d => d.id === u.departmentId);
+
+        // 2. Department text search
+        if (deptSearchText.trim()) {
+          const dQuery = deptSearchText.toLowerCase().trim();
+          const deptSigla = (userDept?.sigla || "").toLowerCase();
+          const deptNome = (userDept?.nome || "").toLowerCase();
+          if (!deptSigla.includes(dQuery) && !deptNome.includes(dQuery)) return false;
+        }
+
+        // 3. Department dropdown filter
+        if (deptFilterSelect !== "all") {
+          if (deptFilterSelect === "none") {
+            if (userDept) return false;
+          } else {
+            const selectedDeptId = Number(deptFilterSelect);
+            const matchesDeptId = userDept?.id === selectedDeptId || u.departmentId === selectedDeptId;
+            const matchesDeptSigla = userDept?.sigla === deptFilterSelect === deptFilterSelect;
+            if (!matchesDeptId && !matchesDeptSigla) return false;
+          }
+        }
+
+        // 4. Role filter
+        if (roleFilterSelect !== "all") {
+          if (String(u.roleId) !== roleFilterSelect) return false;
+        }
+
+        // 5. Status filter
+        if (statusFilterSelect !== "all") {
+          if (u.status !== statusFilterSelect) return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        let comp = 0;
+        if (sortField === "name") {
+          comp = (a.name || "").localeCompare(b.name || "", "pt-BR");
+        } else if (sortField === "email") {
+          comp = (a.email || "").localeCompare(b.email || "", "pt-BR");
+        } else if (sortField === "role") {
+          const roleA = roles.find(r => r.id === a.roleId)?.name || "";
+          const roleB = roles.find(r => r.id === b.roleId)?.name || "";
+          comp = roleA.localeCompare(roleB, "pt-BR");
+        } else if (sortField === "department") {
+          const deptA = (a.department?.sigla || departments.find(d => d.id === a.departmentId)?.sigla || "");
+          const deptB = (b.department?.sigla || departments.find(d => d.id === b.departmentId)?.sigla || "");
+          comp = deptA.localeCompare(deptB, "pt-BR");
+        } else if (sortField === "responsible") {
+          const respA = checkIsResponsible(a.name, a.email) ? 1 : 0;
+          const respB = checkIsResponsible(b.name, b.email) ? 1 : 0;
+          comp = respB - respA; // Registered first by default
+        } else if (sortField === "status") {
+          comp = (a.status || "").localeCompare(b.status || "");
+        }
+
+        return sortDirection === "asc" ? comp : -comp;
+      });
+  }, [
+    users, departments, roles, responsibles, 
+    userSearchText, deptSearchText, deptFilterSelect, 
+    roleFilterSelect, statusFilterSelect, 
+    sortField, sortDirection
+  ]);
+
   const handleSaveUser = async () => {
     if (!isEditingUser?.name?.trim() || !isEditingUser?.email?.trim() || !isEditingUser?.roleId) {
       alert("Preencha todos os campos obrigatórios (Nome, E-mail e Papel).");
@@ -125,13 +244,11 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
     const savedName = isEditingUser.name.trim();
     const savedEmail = isEditingUser.email.trim();
     const selectedDept = departments.find(d => d.id === Number(isEditingUser.departmentId));
-    const savedAgency = selectedDept ? selectedDept.sigla : (isEditingUser.agency?.trim() || "");
 
     const payload = {
       ...isEditingUser,
       name: savedName,
       email: savedEmail,
-      agency: savedAgency,
       departmentId: selectedDept ? selectedDept.id : (isEditingUser.departmentId ? Number(isEditingUser.departmentId) : undefined)
     };
 
@@ -152,7 +269,6 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
         setResponsiblePromptUser({
           name: savedName,
           email: savedEmail,
-          agency: savedAgency,
           department: selectedDept
         });
       } else {
@@ -179,17 +295,16 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
             ...isEditingUser,
             departmentId: res.data.id,
             department: res.data,
-            agency: res.data.sigla
           });
         }
         setQuickDeptSigla("");
         setQuickDeptNome("");
         setIsQuickDeptModalOpen(false);
       } else {
-        alert(res.error || "Erro ao cadastrar departamento");
+        showToast(res.error || "Erro ao cadastrar departamento", "error");
       }
     } catch (err: any) {
-      alert("Erro ao cadastrar departamento: " + err.message);
+      showToast("Erro ao cadastrar departamento: " + err.message, "error");
     } finally {
       setIsSavingDept(false);
     }
@@ -197,41 +312,69 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
 
   const handleSaveDepartment = async () => {
     if (!isEditingDept?.sigla?.trim() || !isEditingDept?.nome?.trim()) {
-      alert("Preencha a sigla e o nome do departamento.");
+      showToast("Preencha a sigla e o nome do departamento.", "warning");
       return;
     }
     try {
       if (isEditingDept.id) {
-        await updateDepartment(isEditingDept.id, {
+        const res = await updateDepartment(isEditingDept.id, {
           sigla: isEditingDept.sigla.trim().toUpperCase(),
           nome: isEditingDept.nome.trim()
         });
-        showToast("Departamento atualizado com sucesso!", "success");
+        if (res.success) {
+          showToast("Departamento atualizado com sucesso!", "success");
+        } else {
+          showToast(res.error || "Erro ao atualizar departamento", "error");
+        }
       } else {
-        await addDepartment({
+        const res = await addDepartment({
           sigla: isEditingDept.sigla.trim().toUpperCase(),
           nome: isEditingDept.nome.trim()
         });
-        showToast("Departamento cadastrado com sucesso!", "success");
+        if (res.success) {
+          showToast("Departamento cadastrado com sucesso!", "success");
+        } else {
+          showToast(res.error || "Erro ao cadastrar departamento", "error");
+        }
       }
       setIsEditingDept(null);
     } catch (err: any) {
-      alert("Erro ao salvar departamento: " + err.message);
+      showToast("Erro ao salvar departamento: " + err.message, "error");
     }
   };
 
-  const handleDeleteDepartment = async (id: number, sigla: string) => {
-    if (confirm(`Tem certeza que deseja excluir o departamento ${sigla}?`)) {
-      await deleteDepartment(id);
-      showToast("Departamento removido com sucesso!", "success");
+  const handleRequestDeleteDepartment = (dept: Department, userCount: number) => {
+    setDeptToDelete({
+      id: dept.id,
+      sigla: dept.sigla,
+      nome: dept.nome,
+      userCount
+    });
+  };
+
+  const handleConfirmDeleteDepartment = async () => {
+    if (!deptToDelete) return;
+    setIsDeletingDept(true);
+    try {
+      const res = await deleteDepartment(deptToDelete.id);
+      if (res.success) {
+        showToast(`Departamento "${deptToDelete.sigla}" excluído com sucesso!`, "success");
+        setDeptToDelete(null);
+      } else {
+        showToast(res.error || "Erro ao excluir departamento do banco de dados.", "error");
+      }
+    } catch (err: any) {
+      showToast("Erro ao excluir departamento: " + err.message, "error");
+    } finally {
+      setIsDeletingDept(false);
     }
   };
 
   // Open the responsible modal pre-filled with the user's data
-  const handleOpenResponsibleModalForUser = (user: { name: string; email: string; agency?: string; department?: Department }) => {
+  const handleOpenResponsibleModalForUser = (user: { name: string; email: string; department?: Department }) => {
     setRespFormName(user.name);
     setRespFormEmail(user.email);
-    setRespFormRole(user.department ? `${user.department.sigla} - ${user.department.nome}` : (user.agency || ""));
+    setRespFormRole(user.department ? `${user.department.sigla} - ${user.department.nome}` : "");
     setRespFormAreaIds([]);
     setResponsiblePromptUser(null);
     setIsResponsibleModalOpen(true);
@@ -356,17 +499,64 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
 
   const allActions: ActionType[] = ['view', 'create', 'edit', 'delete'];
 
-  const handleSaveRole = () => {
-    if (!isEditingRole?.name) {
-      alert("Preencha o nome do papel");
+  const handleSaveRole = async () => {
+    if (!isEditingRole?.name?.trim()) {
+      showToast("Preencha o nome do papel", "warning");
       return;
     }
-    if (isEditingRole.id) {
-      updateRole(isEditingRole.id, isEditingRole);
-    } else {
-      addRole(isEditingRole as Omit<UserRole, 'id'>);
+    setIsSavingRole(true);
+    try {
+      if (isEditingRole.id) {
+        const res = await updateRole(isEditingRole.id, {
+          name: isEditingRole.name.trim(),
+          description: isEditingRole.description?.trim() || "",
+          permissions: isEditingRole.permissions || []
+        });
+        if (res.success) {
+          showToast(`Papel "${isEditingRole.name}" atualizado com sucesso!`, "success");
+          setIsEditingRole(null);
+        } else {
+          showToast(res.error || "Erro ao atualizar papel", "error");
+        }
+      } else {
+        const res = await addRole({
+          name: isEditingRole.name.trim(),
+          description: isEditingRole.description?.trim() || "",
+          permissions: isEditingRole.permissions || []
+        });
+        if (res.success) {
+          showToast(`Papel "${isEditingRole.name}" criado com sucesso!`, "success");
+          setIsEditingRole(null);
+        } else {
+          showToast(res.error || "Erro ao cadastrar papel", "error");
+        }
+      }
+    } catch (err: any) {
+      showToast("Erro ao salvar papel: " + err.message, "error");
+    } finally {
+      setIsSavingRole(false);
     }
-    setIsEditingRole(null);
+  };
+
+  const handleConfirmDeleteRole = async () => {
+    if (!roleToDelete) return;
+    setIsDeletingRole(true);
+    try {
+      const res = await deleteRole(roleToDelete.id);
+      if (res.success) {
+        showToast(`Papel "${roleToDelete.name}" excluído com sucesso!`, "success");
+        if (isEditingRole?.id === roleToDelete.id) {
+          setIsEditingRole(null);
+        }
+        setRoleToDelete(null);
+      } else {
+        showToast(res.error || "Erro ao excluir papel do banco de dados.", "error");
+      }
+    } catch (err: any) {
+      showToast("Erro ao excluir papel: " + err.message, "error");
+    } finally {
+      setIsDeletingRole(false);
+    }
   };
 
   const togglePermission = (moduleId: ModuleId, action: ActionType) => {
@@ -434,94 +624,312 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
       </div>
 
       {activeTab === "users" && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-4 flex items-center justify-between bg-slate-50 border-b border-slate-100">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-150">
+          <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50 border-b border-slate-100">
             <div>
-              <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider">Usuários do Sistema</h3>
+              <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                <Users size={16} className="text-indigo-600" />
+                Usuários do Sistema
+              </h3>
               <p className="text-xs text-slate-400 font-medium mt-0.5">Gerenciamento de contas de acesso e vínculo com os responsáveis de atividades e departamentos.</p>
             </div>
-            {canCreate && (
-              <button onClick={() => setIsEditingUser({ status: 'active', roleId: roles[0]?.id, departmentId: departments[0]?.id })} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition shadow-sm">
-                <Plus size={14} /> Novo Usuário
+            <div className="flex items-center gap-2">
+              {canCreate && (
+                <button onClick={() => setIsEditingUser({ status: 'active', roleId: roles[0]?.id, departmentId: undefined })} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition shadow-sm shrink-0">
+                  <Plus size={14} /> Novo Usuário
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Filters Toolbar */}
+          <div className="p-4 bg-slate-50/60 border-b border-slate-200/80 flex flex-wrap items-center gap-3">
+            {/* User text search */}
+            <div className="relative flex-1 min-w-[220px]">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={userSearchText}
+                onChange={e => setUserSearchText(e.target.value)}
+                placeholder="Filtrar por usuário (nome ou e-mail)..."
+                className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
+              />
+              {userSearchText && (
+                <button
+                  type="button"
+                  onClick={() => setUserSearchText("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                  title="Limpar busca de usuário"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            {/* Department text search */}
+            <div className="relative flex-1 min-w-[200px]">
+              <Building2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={deptSearchText}
+                onChange={e => setDeptSearchText(e.target.value)}
+                placeholder="Filtrar por departamento (sigla ou nome)..."
+                className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
+              />
+              {deptSearchText && (
+                <button
+                  type="button"
+                  onClick={() => setDeptSearchText("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                  title="Limpar busca de departamento"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            {/* Department dropdown selector */}
+            <div className="relative shrink-0 min-w-[170px]">
+              <select
+                value={deptFilterSelect}
+                onChange={e => setDeptFilterSelect(e.target.value)}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs cursor-pointer"
+              >
+                <option value="all">Todos os Departamentos</option>
+                <option value="none">Sem Departamento</option>
+                {departments.map(d => (
+                  <option key={d.id} value={String(d.id)}>
+                    {d.sigla} - {d.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Role dropdown filter */}
+            <div className="relative shrink-0 min-w-[140px]">
+              <select
+                value={roleFilterSelect}
+                onChange={e => setRoleFilterSelect(e.target.value)}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs cursor-pointer"
+              >
+                <option value="all">Papel: Todos</option>
+                {roles.map(r => (
+                  <option key={r.id} value={String(r.id)}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status dropdown filter */}
+            <div className="relative shrink-0 min-w-[130px]">
+              <select
+                value={statusFilterSelect}
+                onChange={e => setStatusFilterSelect(e.target.value as any)}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs cursor-pointer"
+              >
+                <option value="all">Status: Todos</option>
+                <option value="active">Apenas Ativos</option>
+                <option value="inactive">Apenas Inativos</option>
+              </select>
+            </div>
+
+            {/* Clear filters action */}
+            {hasActiveUserFilters && (
+              <button
+                type="button"
+                onClick={handleClearUserFilters}
+                className="px-3 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded-xl flex items-center gap-1.5 transition shrink-0"
+                title="Limpar todos os filtros aplicados"
+              >
+                <RotateCcw size={12} />
+                Limpar Filtros
               </button>
             )}
+
+            {/* Results count pill */}
+            <div className="ml-auto flex items-center">
+              <span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
+                Exibindo <strong className="text-slate-800 font-black">{filteredAndSortedUsers.length}</strong> de <strong className="text-slate-800 font-black">{users.length}</strong> usuários
+              </span>
+            </div>
           </div>
           
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-500 text-xs font-bold border-b border-slate-200">
+              <thead className="bg-slate-50 text-slate-600 text-xs font-bold border-b border-slate-200 select-none">
                 <tr>
-                  <th className="px-4 py-3">Nome</th>
-                  <th className="px-4 py-3">E-mail</th>
-                  <th className="px-4 py-3">Papel</th>
-                  <th className="px-4 py-3">Departamento</th>
-                  <th className="px-4 py-3">Responsável (Atividades)</th>
-                  <th className="px-4 py-3">Status</th>
+                  <th 
+                    onClick={() => handleSort("name")} 
+                    className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors group"
+                    title="Clique para ordenar por Nome"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Nome</span>
+                      {sortField === "name" ? (
+                        sortDirection === "asc" ? <ArrowUp size={13} className="text-indigo-600 font-bold" /> : <ArrowDown size={13} className="text-indigo-600 font-bold" />
+                      ) : (
+                        <ArrowUpDown size={12} className="text-slate-300 group-hover:text-slate-500 transition-colors" />
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort("email")} 
+                    className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors group"
+                    title="Clique para ordenar por E-mail"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>E-mail</span>
+                      {sortField === "email" ? (
+                        sortDirection === "asc" ? <ArrowUp size={13} className="text-indigo-600 font-bold" /> : <ArrowDown size={13} className="text-indigo-600 font-bold" />
+                      ) : (
+                        <ArrowUpDown size={12} className="text-slate-300 group-hover:text-slate-500 transition-colors" />
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort("role")} 
+                    className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors group"
+                    title="Clique para ordenar por Papel"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Papel</span>
+                      {sortField === "role" ? (
+                        sortDirection === "asc" ? <ArrowUp size={13} className="text-indigo-600 font-bold" /> : <ArrowDown size={13} className="text-indigo-600 font-bold" />
+                      ) : (
+                        <ArrowUpDown size={12} className="text-slate-300 group-hover:text-slate-500 transition-colors" />
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort("department")} 
+                    className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors group"
+                    title="Clique para ordenar por Departamento"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Departamento</span>
+                      {sortField === "department" ? (
+                        sortDirection === "asc" ? <ArrowUp size={13} className="text-indigo-600 font-bold" /> : <ArrowDown size={13} className="text-indigo-600 font-bold" />
+                      ) : (
+                        <ArrowUpDown size={12} className="text-slate-300 group-hover:text-slate-500 transition-colors" />
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort("responsible")} 
+                    className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors group"
+                    title="Clique para ordenar por Vínculo de Responsável"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Responsável (Atividades)</span>
+                      {sortField === "responsible" ? (
+                        sortDirection === "asc" ? <ArrowUp size={13} className="text-indigo-600 font-bold" /> : <ArrowDown size={13} className="text-indigo-600 font-bold" />
+                      ) : (
+                        <ArrowUpDown size={12} className="text-slate-300 group-hover:text-slate-500 transition-colors" />
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort("status")} 
+                    className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors group"
+                    title="Clique para ordenar por Status"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Status</span>
+                      {sortField === "status" ? (
+                        sortDirection === "asc" ? <ArrowUp size={13} className="text-indigo-600 font-bold" /> : <ArrowDown size={13} className="text-indigo-600 font-bold" />
+                      ) : (
+                        <ArrowUpDown size={12} className="text-slate-300 group-hover:text-slate-500 transition-colors" />
+                      )}
+                    </div>
+                  </th>
                   <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {users.map(u => {
-                  const isResp = checkIsResponsible(u.name, u.email);
-                  const userDept = u.department || departments.find(d => d.id === u.departmentId || d.sigla === u.agency);
-                  return (
-                    <tr key={u.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3 font-medium">
-                        {u.name} {u.id === currentUser?.id && <span className="ml-2 text-[9px] bg-indigo-100 text-indigo-600 py-0.5 px-1.5 rounded-full uppercase font-black">Você</span>}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">{u.email}</td>
-                      <td className="px-4 py-3"><span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold border border-slate-200">{roles.find(r => r.id === u.roleId)?.name || 'Desconhecido'}</span></td>
-                      <td className="px-4 py-3">
-                        {userDept ? (
-                          <span className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1 rounded-lg text-xs font-bold" title={userDept.nome}>
-                            <Building2 size={12} className="text-indigo-500" />
-                            {userDept.sigla}
-                          </span>
-                        ) : u.agency ? (
-                          <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs font-semibold">
-                            {u.agency}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-xs">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {isResp ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-                            <Check size={11} className="text-emerald-600" /> Cadastrado
-                          </span>
-                        ) : (
+                {filteredAndSortedUsers.length === 0 ? (
+                  <tr className="bg-slate-50/40">
+                    <td colSpan={7} className="px-4 py-12 text-center text-slate-500">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">
+                          <Search size={22} />
+                        </div>
+                        <p className="text-sm font-bold text-slate-700 mt-1">Nenhum usuário encontrado</p>
+                        <p className="text-xs text-slate-400 max-w-sm">
+                          Não foram encontrados registros que correspondam aos filtros de busca informados.
+                        </p>
+                        {hasActiveUserFilters && (
                           <button
-                            onClick={() => handleOpenResponsibleModalForUser({ name: u.name, email: u.email, agency: u.agency, department: userDept })}
-                            className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-full transition-colors"
-                            title="Cadastrar como responsável de atividades"
+                            type="button"
+                            onClick={handleClearUserFilters}
+                            className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition shadow-2xs"
                           >
-                            <UserPlus size={11} /> + Vincular Responsável
+                            <RotateCcw size={12} />
+                            Limpar filtros aplicados
                           </button>
                         )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${u.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                          {u.status === 'active' ? 'Ativo' : 'Inativo'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-2">
-                          {canEdit && (
-                            <button onClick={() => setIsEditingUser({ ...u, departmentId: u.departmentId || userDept?.id })} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition" title="Editar Usuário">
-                              <Edit size={14} />
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredAndSortedUsers.map(u => {
+                    const isResp = checkIsResponsible(u.name, u.email);
+                    const userDept = u.department || departments.find(d => d.id === u.departmentId);
+                    return (
+                      <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3 font-medium">
+                          {u.name} {u.id === currentUser?.id && <span className="ml-2 text-[9px] bg-indigo-100 text-indigo-600 py-0.5 px-1.5 rounded-full uppercase font-black">Você</span>}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">{u.email}</td>
+                        <td className="px-4 py-3"><span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold border border-slate-200">{roles.find(r => r.id === u.roleId)?.name || 'Desconhecido'}</span></td>
+                        <td className="px-4 py-3">
+                          {userDept ? (
+                            <span className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1 rounded-lg text-xs font-bold" title={userDept.nome}>
+                              <Building2 size={12} className="text-indigo-500" />
+                              {userDept.sigla}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {isResp ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+                              <Check size={11} className="text-emerald-600" /> Cadastrado
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleOpenResponsibleModalForUser({ name: u.name, email: u.email,  department: userDept })}
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-full transition-colors"
+                              title="Cadastrar como responsável de atividades"
+                            >
+                              <UserPlus size={11} /> + Vincular Responsável
                             </button>
                           )}
-                          {canDelete && u.id !== currentUser?.id && (
-                            <button onClick={() => deleteUser(u.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition" title="Excluir Usuário">
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${u.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                            {u.status === 'active' ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex justify-end gap-2">
+                            {canEdit && (
+                              <button onClick={() => setIsEditingUser({ ...u, departmentId: u.departmentId || userDept?.id })} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition" title="Editar Usuário">
+                                <Edit size={14} />
+                              </button>
+                            )}
+                            {canDelete && u.id !== currentUser?.id && (
+                              <button onClick={() => deleteUser(u.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition" title="Excluir Usuário">
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -568,7 +976,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
                   </tr>
                 ) : (
                   departments.map(d => {
-                    const userCount = users.filter(u => u.departmentId === d.id || u.agency === d.sigla).length;
+                    const userCount = users.filter(u => u.departmentId === d.id === d.sigla).length;
                     return (
                       <tr key={d.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-4 py-3 font-mono text-xs text-slate-400">#{d.id}</td>
@@ -592,7 +1000,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
                               </button>
                             )}
                             {canDelete && (
-                              <button onClick={() => handleDeleteDepartment(d.id, d.sigla)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition" title="Excluir Departamento">
+                              <button onClick={() => handleRequestDeleteDepartment(d, userCount)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition" title="Excluir Departamento">
                                 <Trash2 size={14} />
                               </button>
                             )}
@@ -620,15 +1028,44 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
                )}
              </div>
              <div className="divide-y divide-slate-100">
-               {roles.map(r => (
-                 <div key={r.id} className="p-4 hover:bg-slate-50 transition cursor-pointer" onClick={() => canEdit && setIsEditingRole(r)}>
-                   <div className="flex items-center justify-between">
-                     <span className="font-bold text-slate-700">{r.name}</span>
-                     {r.id === 'admin' && <Shield size={14} className="text-amber-500" />}
+               {roles.map(r => {
+                 const usersWithThisRole = users.filter(u => u.roleId === r.id).length;
+                 return (
+                   <div 
+                     key={r.id} 
+                     className={`p-4 transition cursor-pointer flex items-center justify-between group ${isEditingRole?.id === r.id ? 'bg-indigo-50/70' : 'hover:bg-slate-50'}`} 
+                     onClick={() => canEdit && setIsEditingRole(r)}
+                   >
+                     <div className="flex-1 min-w-0 pr-2">
+                       <div className="flex items-center gap-2">
+                         <span className="font-bold text-slate-700 text-sm truncate">{r.name}</span>
+                         {r.id === 'admin' && <Shield size={14} className="text-amber-500 shrink-0" title="Papel Administrador (Sistema)" />}
+                       </div>
+                       <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{r.description || 'Sem descrição'}</p>
+                       <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
+                         {usersWithThisRole} {usersWithThisRole === 1 ? 'usuário' : 'usuários'}
+                       </span>
+                     </div>
+                     {canDelete && r.id !== 'admin' && (
+                       <button
+                         type="button"
+                         onClick={(e) => {
+                           e.stopPropagation();
+                           if (usersWithThisRole > 0) {
+                             showToast(`Não é possível excluir: existem ${usersWithThisRole} usuário(s) com este papel.`, "warning");
+                             return;
+                           }
+                           setRoleToDelete({ id: r.id, name: r.name });
+                         }}
+                         className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition opacity-0 group-hover:opacity-100 shrink-0"
+                         title="Excluir Papel"
+                       >
+                         <Trash2 size={15} />
+                       </button>
+                     )}
                    </div>
-                   <p className="text-xs text-slate-500 mt-1 line-clamp-1">{r.description}</p>
-                 </div>
-               ))}
+                 );
+               })}
              </div>
           </div>
           
@@ -644,7 +1081,9 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
                    <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider">{isEditingRole.id ? 'Editar Papel' : 'Novo Papel'}</h3>
                    <div className="flex gap-2">
                      <button onClick={() => setIsEditingRole(null)} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded-lg transition">Cancelar</button>
-                     <button onClick={handleSaveRole} className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition">Salvar</button>
+                     <button onClick={handleSaveRole} disabled={isSavingRole} className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition disabled:opacity-50">
+                       {isSavingRole ? 'Salvando...' : 'Salvar'}
+                     </button>
                    </div>
                  </div>
                  <div className="p-5 space-y-4">
@@ -764,7 +1203,6 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
                        ...isEditingUser,
                        departmentId: deptId,
                        department: dept,
-                       agency: dept ? dept.sigla : ''
                      });
                    }}
                    className="w-full p-2.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-500 bg-white"
@@ -894,6 +1332,67 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
         </div>
       )}
 
+      {/* Delete Department Confirmation Modal */}
+      {deptToDelete && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 animate-in zoom-in-95">
+            <div className="p-6">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center mb-4 shadow-sm">
+                <Trash2 size={24} />
+              </div>
+              <h3 className="text-lg font-black text-slate-800 tracking-tight">
+                Excluir Departamento?
+              </h3>
+              <p className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">
+                Tem certeza que deseja remover o departamento <strong className="text-slate-800 font-bold">{deptToDelete.sigla}</strong> ({deptToDelete.nome})?
+              </p>
+
+              {deptToDelete.userCount > 0 ? (
+                <div className="mt-4 p-3.5 bg-amber-50 border border-amber-200/80 rounded-2xl text-xs text-amber-900 flex items-start gap-2.5">
+                  <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Atenção aos usuários vinculados:</span>
+                    <p className="mt-0.5 text-amber-800">
+                      Existem <strong>{deptToDelete.userCount}</strong> usuário(s) associado(s) a este departamento. Ao excluir, a associação ao departamento desses usuários será desfeita com segurança.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs text-slate-600 flex items-start gap-2">
+                  <Info size={16} className="text-slate-500 shrink-0 mt-0.5" />
+                  <p>Nenhum usuário está atualmente associado a este departamento.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                disabled={isDeletingDept}
+                onClick={() => setDeptToDelete(null)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingDept}
+                onClick={handleConfirmDeleteDepartment}
+                className="px-5 py-2.5 text-xs font-black uppercase tracking-wider bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl transition shadow-md shadow-rose-600/20 flex items-center gap-2"
+              >
+                {isDeletingDept ? (
+                  "Excluindo..."
+                ) : (
+                  <>
+                    <Trash2 size={14} /> Confirmar Exclusão
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Prompt Modal: Not yet registered as Responsible */}
       {responsiblePromptUser && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -928,7 +1427,6 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
                 <div className="text-xs text-slate-700 space-y-1">
                   <div><strong>Nome:</strong> {responsiblePromptUser.name}</div>
                   <div><strong>E-mail:</strong> {responsiblePromptUser.email}</div>
-                  {responsiblePromptUser.agency && <div><strong>Agência / Órgão:</strong> {responsiblePromptUser.agency}</div>}
                 </div>
               </div>
             </div>
@@ -1086,6 +1584,38 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+    {/* Role Deletion Confirmation Modal */}
+      {roleToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
+            <div className="p-6 text-center">
+              <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+                <AlertCircle size={24} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">Excluir Papel?</h3>
+              <p className="text-sm text-slate-500 mb-6">
+                Tem certeza que deseja excluir o papel <strong>{roleToDelete.name}</strong>? Esta ação não pode ser desfeita.
+              </p>
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setRoleToDelete(null)}
+                  disabled={isDeletingRole}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmDeleteRole}
+                  disabled={isDeletingRole}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isDeletingRole ? "Excluindo..." : "Excluir"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

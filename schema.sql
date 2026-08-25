@@ -174,6 +174,21 @@ CREATE TABLE IF NOT EXISTS pl_task_categories (
   PRIMARY KEY (task_id, category_id)
 );
 
+CREATE TABLE IF NOT EXISTS au_departments (
+  id SERIAL PRIMARY KEY,
+  sigla VARCHAR(50) NOT NULL,
+  nome VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS au_roles (
+  id VARCHAR(100) PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  permissions JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS au_users (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
@@ -181,7 +196,8 @@ CREATE TABLE IF NOT EXISTS au_users (
   password VARCHAR(255) NOT NULL,
   role_id VARCHAR(100) DEFAULT 'provider',
   status VARCHAR(50) DEFAULT 'active',
-  agency VARCHAR(255)
+  
+  department_id INTEGER REFERENCES au_departments(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS pl_responsibles (

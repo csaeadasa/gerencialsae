@@ -59,13 +59,16 @@ import {
   ClipboardList,
   Printer,
   FileSpreadsheet,
-  Download
+  Download,
+  UserPlus,
+  UserCheck,
+  Shield
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { FiscalizacaoEditor } from './FiscalizacaoEditor';
 import { RecursoEditor } from './RecursoEditor';
 import { RecursoRevisaoEditor } from './RecursoRevisaoEditor';
-import { Task, Plan, Area, Category, Responsible } from "../types";
+import { Task, Plan, Area, Category, Responsible, AppUser } from "../types";
 import { cn } from "../lib/utils";
 import { useAuth } from "../lib/auth";
 import { createFiscalizacaoChecklist, ensureFiscalizacaoChecklist, FISCALIZACAO_ETAPAS, FISCALIZACAO_ETAPA_INICIAL } from "../lib/fiscalizacao";
@@ -419,7 +422,7 @@ export function PlanningTab({
   editingTaskIdFromPainel,
   setEditingTaskIdFromPainel
 }: PlanningTabProps) {
-  const { currentUser } = useAuth();
+  const { currentUser, users, roles, departments, addUser } = useAuth();
 
   const [hasEvaluatedAlerts, setHasEvaluatedAlerts] = useState(false);
   useEffect(() => {
@@ -797,6 +800,9 @@ export function PlanningTab({
   const [newLinkUrl, setNewLinkUrl] = useState("");
   const [newLinkTitle, setNewLinkTitle] = useState("");
   const [isRegModalOpen, setIsRegModalOpen] = useState(false);
+  const [promptCreateUserForResp, setPromptCreateUserForResp] = useState<{ name: string; email: string; role?: string } | null>(null);
+  const [isCreatingUserForResp, setIsCreatingUserForResp] = useState<Partial<AppUser & { password?: string }> | null>(null);
+  const [isSavingUserFromModal, setIsSavingUserFromModal] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [editingTask, setEditingTask] = useState<Partial<Task>>({});
   const [editTaskParentSearch, setEditTaskParentSearch] = useState("");
@@ -1346,8 +1352,13 @@ export function PlanningTab({
       showToast("Validação", "Nome do responsável é obrigatório.", "warning");
       return;
     }
+    const currentName = regName.trim();
+    const currentEmail = regEmail.trim();
+    const currentRole = regRole.trim();
+    const currentAreaIds = [...regAreaIds];
+    const isEdit = editingRegId !== null;
+
     try {
-      const isEdit = editingRegId !== null;
       const url = isEdit ? `/api/responsibles/${editingRegId}` : "/api/responsibles";
       const method = isEdit ? "PUT" : "POST";
       const userSignature = currentUser?.name || currentUser?.email || "SGI Pro";
@@ -1355,26 +1366,17 @@ export function PlanningTab({
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          name: regName, 
-          email: regEmail, 
-          role: regRole, 
-          areaIds: regAreaIds, 
+          name: currentName, 
+          email: currentEmail, 
+          role: currentRole, 
+          areaIds: currentAreaIds, 
           createdBy: userSignature,
           updatedBy: userSignature 
         })
       });
       const data = await res.json();
       if (data.success) {
-        if (!isEdit && data.generatedPassword) {
-          setConfirmState({
-            title: "Usuário Criado para o Responsável",
-            message: `O responsável foi cadastrado e integrado com sucesso!\n\nFoi criado um usuário vinculado:\n• Usuário/E-mail: ${regEmail}\n• Senha Padrão de Acesso: ${data.generatedPassword}\n\nPor favor, anote a senha acima para que o responsável consiga realizar o login no sistema.`,
-            type: "alert"
-          });
-          showToast("Sucesso", `Responsável criado! Senha gerada: ${data.generatedPassword}`, "success");
-        } else {
-          showToast("Sucesso", isEdit ? "Responsável atualizado." : "Responsável criado com sucesso.", "success");
-        }
+        showToast("Sucesso", isEdit ? "Responsável atualizado com sucesso." : "Responsável criado com sucesso.", "success");
         setRegName("");
         setRegEmail("");
         setRegRole("");
@@ -1383,11 +1385,87 @@ export function PlanningTab({
         setIsRegModalOpen(false);
         await loadRegistriesOnly();
         await reloadTasks();
+
+        // Check if responsible is already a user
+        if (!isEdit) {
+          const isAlreadyUser = users.some(u => 
+            (currentEmail && u.email && u.email.toLowerCase().trim() === currentEmail.toLowerCase().trim()) ||
+            (u.name && currentName && u.name.toLowerCase().trim() === currentName.toLowerCase().trim())
+          );
+
+          if (!isAlreadyUser) {
+            // Prompt if admin wants to create this responsible as a user
+            setPromptCreateUserForResp({
+              name: currentName,
+              email: currentEmail,
+              role: currentRole
+            });
+          }
+        }
       } else {
         showToast("Erro", data.error || "Erro obtido do servidor ao salvar Responsável.", "error");
       }
     } catch (err) {
       showToast("Erro", "Erro ao salvar responsável.", "error");
+    }
+  };
+
+  // Open user creation modal pre-filled with responsible data
+  const handleOpenUserCreationFromPrompt = () => {
+    if (!promptCreateUserForResp) return;
+    const targetDept = departments.find(d => 
+      promptCreateUserForResp.role && (
+        promptCreateUserForResp.role.toLowerCase().includes(d.sigla.toLowerCase()) ||
+        promptCreateUserForResp.role.toLowerCase().includes(d.nome.toLowerCase())
+      )
+    );
+
+    setIsCreatingUserForResp({
+      name: promptCreateUserForResp.name,
+      email: promptCreateUserForResp.email || "",
+      password: "",
+      roleId: roles.find(r => r.id === "provider")?.id || roles[0]?.id || "provider",
+      departmentId: targetDept?.id,
+      department: targetDept,
+      status: "active"
+    });
+    setPromptCreateUserForResp(null);
+  };
+
+  // Save new user from the prompt/modal
+  const handleSaveUserFromModal = async () => {
+    if (!isCreatingUserForResp?.name?.trim()) {
+      showToast("Validação", "Nome do usuário é obrigatório.", "warning");
+      return;
+    }
+    if (!isCreatingUserForResp?.email?.trim()) {
+      showToast("Validação", "E-mail / Login do usuário é obrigatório.", "warning");
+      return;
+    }
+
+    setIsSavingUserFromModal(true);
+    try {
+      const payload: any = {
+        name: isCreatingUserForResp.name.trim(),
+        email: isCreatingUserForResp.email.trim(),
+        password: isCreatingUserForResp.password?.trim() || "1234",
+        roleId: isCreatingUserForResp.roleId || "provider",
+        status: isCreatingUserForResp.status || "active",
+        departmentId: isCreatingUserForResp.departmentId || null,
+      };
+
+      const res = await addUser(payload);
+      if (res && res.success) {
+        showToast("Sucesso", `Usuário "${isCreatingUserForResp.name}" criado com sucesso e vinculado!`, "success");
+        setIsCreatingUserForResp(null);
+        await loadRegistriesOnly();
+      } else {
+        showToast("Erro", res?.error || "Erro ao cadastrar usuário.", "error");
+      }
+    } catch (err: any) {
+      showToast("Erro", "Erro ao cadastrar usuário: " + err.message, "error");
+    } finally {
+      setIsSavingUserFromModal(false);
     }
   };
 
@@ -4235,6 +4313,189 @@ export function PlanningTab({
                   <button type="submit" className="w-full py-3.5 mt-2 font-black text-xs text-white bg-adasa-mid hover:bg-adasa-dark rounded-xl transition shadow-md">{editingRegId !== null ? "Salvar Alterações" : "Cadastrar Responsável"}</button>
                 </form>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Prompt to create User for Responsible */}
+        {promptCreateUserForResp && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative animate-in zoom-in-95 border border-slate-100">
+              <button 
+                onClick={() => setPromptCreateUserForResp(null)}
+                className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100 transition-colors"
+                title="Fechar"
+              >
+                <X size={18} />
+              </button>
+
+              <div className="flex items-center gap-3.5 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 shadow-sm">
+                  <UserPlus size={22} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Criar Conta de Usuário?</h3>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">Vínculo de acesso ao sistema</p>
+                </div>
+              </div>
+
+              <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 mb-5 text-xs text-slate-600 space-y-2">
+                <p>
+                  O responsável <strong className="text-slate-800 font-black">{promptCreateUserForResp.name}</strong> foi cadastrado com sucesso nas Atividades, mas <strong>ainda não possui um usuário de acesso</strong> ao sistema.
+                </p>
+                <p className="text-slate-500">
+                  Deseja abrir a tela de cadastro para criar um login e senha para ele agora?
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setPromptCreateUserForResp(null)}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                >
+                  Não agora
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenUserCreationFromPrompt}
+                  className="px-5 py-2.5 text-xs font-black uppercase tracking-wider bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition shadow-md shadow-indigo-600/20 flex items-center gap-2"
+                >
+                  <UserPlus size={15} /> Sim, Criar Usuário
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: User Registration from Responsible */}
+        {isCreatingUserForResp && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 border border-slate-100">
+              <div className="p-5 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                    <UserPlus size={16} />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-800 text-sm uppercase tracking-wider">Novo Usuário</h3>
+                    <p className="text-[10px] text-slate-400 font-medium">Vinculado ao responsável criado</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsCreatingUserForResp(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200/50 transition">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Nome Completo</label>
+                  <input
+                    type="text"
+                    required
+                    value={isCreatingUserForResp.name || ''}
+                    onChange={e => setIsCreatingUserForResp({ ...isCreatingUserForResp, name: e.target.value })}
+                    placeholder="Nome completo"
+                    className="w-full p-3 text-xs font-semibold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">E-mail / Login</label>
+                  <input
+                    type="email"
+                    required
+                    value={isCreatingUserForResp.email || ''}
+                    onChange={e => setIsCreatingUserForResp({ ...isCreatingUserForResp, email: e.target.value })}
+                    placeholder="email@adasa.df.gov.br"
+                    className="w-full p-3 text-xs font-semibold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Senha de Acesso</label>
+                  <input
+                    type="password"
+                    value={isCreatingUserForResp.password || ''}
+                    onChange={e => setIsCreatingUserForResp({ ...isCreatingUserForResp, password: e.target.value })}
+                    placeholder="Senha do usuário (Padrão: 1234)"
+                    className="w-full p-3 text-xs font-semibold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 transition-colors"
+                  />
+                  <p className="text-[10px] text-slate-400">Deixe em branco para usar a senha padrão: 1234</p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Papel / Perfil de Acesso</label>
+                  <select
+                    value={isCreatingUserForResp.roleId || ''}
+                    onChange={e => setIsCreatingUserForResp({ ...isCreatingUserForResp, roleId: e.target.value })}
+                    className="w-full p-3 text-xs font-semibold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 bg-white"
+                  >
+                    {roles.map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Departamento / Agência (Opcional)</label>
+                  <select
+                    value={isCreatingUserForResp.departmentId || ''}
+                    onChange={e => {
+                      const deptId = e.target.value ? Number(e.target.value) : undefined;
+                      const dept = departments.find(d => d.id === deptId);
+                      setIsCreatingUserForResp({
+                        ...isCreatingUserForResp,
+                        departmentId: deptId,
+                        department: dept,
+                      });
+                    }}
+                    className="w-full p-3 text-xs font-semibold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 bg-white"
+                  >
+                    <option value="">Selecione um departamento...</option>
+                    {departments.map(d => (
+                      <option key={d.id} value={d.id}>
+                        {d.sigla} - {d.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Status da Conta</label>
+                  <select
+                    value={isCreatingUserForResp.status || 'active'}
+                    onChange={e => setIsCreatingUserForResp({ ...isCreatingUserForResp, status: e.target.value as any })}
+                    className="w-full p-3 text-xs font-semibold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 bg-white"
+                  >
+                    <option value="active">Ativo (Permite Login)</option>
+                    <option value="inactive">Inativo (Bloqueado)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingUserForResp(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded-xl transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingUserFromModal}
+                  onClick={handleSaveUserFromModal}
+                  className="px-5 py-2 text-xs font-black uppercase tracking-wider bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSavingUserFromModal ? (
+                    <RefreshCw size={14} className="animate-spin" />
+                  ) : (
+                    <UserCheck size={14} />
+                  )}
+                  Salvar Usuário
+                </button>
+              </div>
             </div>
           </div>
         )}

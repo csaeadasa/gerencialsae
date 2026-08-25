@@ -98,6 +98,7 @@ interface TechnicalAnalysisArticleProps {
   contributions: Contribution[];
   handleUpdateAnalysis: (contributionId: string | number, decision: string, complexity: string, technicalJustification: string) => void;
   handleUpdateFinalAnalysis: (articleId: string | number, finalText: string, finalJustification: string) => void;
+  handleDeleteArticle?: (articleId: string | number, hasContributions: boolean) => void;
 }
 
 interface ContributionAnalysisItemProps {
@@ -297,7 +298,7 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
   );
 };
 
-const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ article, tipoResolucao, contributions, handleUpdateAnalysis, handleUpdateFinalAnalysis }) => {
+const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ article, tipoResolucao, contributions, handleUpdateAnalysis, handleUpdateFinalAnalysis, handleDeleteArticle }) => {
   const [finalText, setFinalText] = useState(article.finalText || "");
   const [finalJustification, setFinalJustification] = useState(article.finalJustification || "");
   const [isEditing, setIsEditing] = useState(false);
@@ -376,6 +377,17 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
             </div>
           </div>
         </div>
+        {handleDeleteArticle && (
+          <div className="shrink-0 flex self-start mt-2 md:mt-0">
+            <button
+              onClick={() => handleDeleteArticle(article.id, contributions.length > 0)}
+              className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition-colors flex items-center gap-1.5 border border-transparent hover:border-rose-200 shadow-sm"
+              title="Excluir dispositivo e contribuições associadas"
+            >
+              <Trash2 size={16} /> <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:block">Excluir</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Lista de Contribuições */}
@@ -522,10 +534,15 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
   const [activeView, setActiveView] = useState<"list" | "create_step1" | "create_step2" | "public_view" | "public_contribute" | "public_contributions" | "technical_analysis">("list");
   const [publicTab, setPublicTab] = useState<"contribuir" | "ver">("contribuir");
-  const [analysisTab, setAnalysisTab] = useState<"contribuicoes" | "painel" | "minuta">("contribuicoes");
+  const [analysisTab, setAnalysisTab] = useState<"contribuicoes" | "painel" | "minuta" | "minuta_completa">("contribuicoes");
   const [expandedRowArtId, setExpandedRowArtId] = useState<string | number | null>(null);
   const [selectedTomada, setSelectedTomada] = useState<TomadaSubsidio | null>(null);
   const [participantRankingViewMode, setParticipantRankingViewMode] = useState<"chart" | "bento">("bento");
+
+  const [minutaCompletaOriginalText, setMinutaCompletaOriginalText] = useState("");
+  const [isExtractingCompleta, setIsExtractingCompleta] = useState(false);
+  const [minutaCompletaDiffHtml, setMinutaCompletaDiffHtml] = useState<{__html: string} | undefined>(undefined);
+
 
   // Minuta da Norma State
   const minutaModel = selectedTomada?.tipoResolucao === "alteracao" ? "alteracao" : "nova";
@@ -571,6 +588,127 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     anexos: []
   });
   const [previewArticles, setPreviewArticles] = useState<Article[]>();
+  
+  const [extractedArticles, setExtractedArticles] = useState<string[]>([]);
+  const [selectedExtractedArticles, setSelectedExtractedArticles] = useState<boolean[]>([]);
+  const [isExtractingText, setIsExtractingText] = useState(false);
+
+  useEffect(() => {
+    if (!minutaCompletaOriginalText || !selectedTomada) {
+      setMinutaCompletaDiffHtml(undefined);
+      return;
+    }
+
+    const currentTomadaArticles = articles.filter(a => String(a.tomadaId) === String(selectedTomada.id));
+
+    let modifiedText = minutaCompletaOriginalText;
+    
+    // Replace each original article with the final text
+    currentTomadaArticles.forEach(art => {
+      const orig = art.originalText;
+      const final = art.finalText || art.proposedText;
+      if (orig && orig.trim() && final && final.trim()) {
+        try {
+          const escapedOrig = orig.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regexPattern = escapedOrig.replace(/\s+/g, '\\s+');
+          const regex = new RegExp(regexPattern, 'gi');
+          modifiedText = modifiedText.replace(regex, final);
+        } catch (e) {
+          modifiedText = modifiedText.replace(orig, final);
+        }
+      }
+    });
+
+    const escapeHtml = (text: string) => {
+      return text.replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+    };
+
+    const d = diff.diffWordsWithSpace(minutaCompletaOriginalText, modifiedText);
+    const html = d.map(part => {
+      const val = escapeHtml(part.value);
+      if (part.added) return `<span class="bg-emerald-200 text-emerald-900 font-bold px-1 rounded">${val}</span>`;
+      if (part.removed) return `<del class="bg-rose-200 text-rose-900 opacity-80 px-1 rounded">${val}</del>`;
+      return `<span>${val}</span>`;
+    }).join("");
+
+    setMinutaCompletaDiffHtml({ __html: html.replace(/\n/g, "<br/>") });
+  }, [minutaCompletaOriginalText, activeView, selectedTomada, articles]);
+
+  const handleExtractCompletaText = async (file: File) => {
+    setIsExtractingCompleta(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      
+      const res = await fetch("/api/extract-text", {
+        method: "POST",
+        body: formData
+      });
+      
+      const data = await res.json();
+      if (data.success && data.text) {
+        setMinutaCompletaOriginalText(data.text);
+        showToast("Leitura Concluída", "O texto atual da Resolução foi carregado com sucesso.", "success");
+      } else {
+        showToast("Erro de Leitura", data.error || "Não foi possível ler o arquivo.", "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Erro", "Falha na comunicação com o servidor.", "error");
+    } finally {
+      setIsExtractingCompleta(false);
+    }
+  };
+  const handleExtractText = async (file: File) => {
+    setIsExtractingText(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      
+      const res = await fetch("/api/extract-text", {
+        method: "POST",
+        body: formData
+      });
+      
+      const data = await res.json();
+      if (data.success && data.text) {
+        const text = data.text as string;
+        
+        // Regex to identify articles (Art. 1, Art 1º, etc.)
+        const articleRegex = /(?:^|\n)(Art\.\s*[\d]+[ºo]?\.*?[\s\S]*?)(?=\nArt\.\s*[\d]+[ºo]?\.?|$)/gi;
+        const matches = [...text.matchAll(articleRegex)];
+        
+        if (matches.length > 0) {
+          const articles = matches.map(m => m[1].trim());
+          setExtractedArticles(articles);
+          setSelectedExtractedArticles(articles.map(() => true)); // Select all by default
+          showToast("Extração Concluída", `Foram identificados ${articles.length} artigos no documento.`, "success");
+        } else {
+          showToast("Nenhum Artigo", "Nenhum artigo encontrado no documento. O texto completo foi carregado.", "info");
+          setFormData(prev => ({ ...prev, rawText: text }));
+        }
+      } else {
+        showToast("Erro na Extração", data.error || "Erro ao extrair texto", "error");
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("Erro", "Erro ao processar documento", "error");
+    } finally {
+      setIsExtractingText(false);
+    }
+  };
+
+  const handleLoadSelectedArticles = () => {
+    const selectedText = extractedArticles.filter((_, i) => selectedExtractedArticles[i]).join("\n\n");
+    setFormData(prev => ({ ...prev, rawText: prev.rawText ? prev.rawText + "\n\n" + selectedText : selectedText }));
+    setExtractedArticles([]);
+    setSelectedExtractedArticles([]);
+    showToast("Sucesso", "Artigos carregados na minuta.", "success");
+  };
 
   useEffect(() => {
     fetchTomadas();
@@ -760,6 +898,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
   // Delete Confirmation Modal State (Safe for Sandboxed iFrames)
   const [deletingTomada, setDeletingTomada] = useState<TomadaSubsidio | null>(null);
+  const [deletingArticle, setDeletingArticle] = useState<{ id: string | number, hasContributions: boolean } | null>(null);
+  const [deletingContribution, setDeletingContribution] = useState<{ contribId: string | number, articleId: string | number } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Filter & Sort State
@@ -915,6 +1055,41 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     }
 
     return newArticles;
+  };
+
+  const movePreviewArticle = (index: number, direction: number) => {
+    if (!previewArticles) return;
+    const newArts = [...previewArticles];
+    if (index + direction >= 0 && index + direction < newArts.length) {
+      const temp = newArts[index];
+      newArts[index] = newArts[index + direction];
+      newArts[index + direction] = temp;
+      newArts.forEach((art, idx) => { art.order = idx + 1; });
+      setPreviewArticles(newArts);
+    }
+  };
+
+  const insertPreviewArticle = (index: number) => {
+    if (!previewArticles) return;
+    const newArts = [...previewArticles];
+    const newArticle = {
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+      tomadaId: 0,
+      originalText: "",
+      proposedText: "",
+      order: index + 2,
+    };
+    newArts.splice(index + 1, 0, newArticle as any);
+    newArts.forEach((art, idx) => { art.order = idx + 1; });
+    setPreviewArticles(newArts);
+  };
+  
+  const removePreviewArticle = (index: number) => {
+    if (!previewArticles) return;
+    const newArts = [...previewArticles];
+    newArts.splice(index, 1);
+    newArts.forEach((art, idx) => { art.order = idx + 1; });
+    setPreviewArticles(newArts);
   };
 
   const handleRepeatProposedAsOriginal = () => {
@@ -1172,17 +1347,20 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     setJustification(contrib.justification || "");
   };
 
-  const handleDeleteUserContribution = async (contribId: string | number, articleId: string | number) => {
-    if (!window.confirm("Deseja realmente excluir sua proposta de contribuição para este dispositivo?")) {
-      return;
-    }
+  const handleDeleteUserContribution = (contribId: string | number, articleId: string | number) => {
+    setDeletingContribution({ contribId, articleId });
+  };
+
+  const handleConfirmDeleteContribution = async () => {
+    if (!deletingContribution) return;
+    setIsDeleting(true);
     try {
-      const res = await fetch(`/api/reg/contributions/${contribId}`, {
+      const res = await fetch(`/api/reg/contributions/${deletingContribution.contribId}`, {
         method: "DELETE"
       });
       if (res.ok) {
-        setContributions(prev => prev.filter(c => String(c.id) !== String(contribId)));
-        const sArtId = String(articleId);
+        setContributions(prev => prev.filter(c => String(c.id) !== String(deletingContribution.contribId)));
+        const sArtId = String(deletingContribution.articleId);
         setSessionContribArticleIds(prev => {
           const next = prev.filter(id => id !== sArtId);
           try { localStorage.setItem("sgi_session_contributions", JSON.stringify(next)); } catch {}
@@ -1193,8 +1371,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           setContributingArticleId(null);
           setEditingContributionId(null);
         }
-
         showToast("Sucesso", "Proposta de contribuição excluída com sucesso.", "info");
+        setDeletingContribution(null);
         if (selectedTomada) {
           await fetchTomadaDetails(String(selectedTomada.id));
         }
@@ -1204,6 +1382,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     } catch (err) {
       console.error(err);
       showToast("Erro", "Erro ao conectar ao servidor.", "error");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -1347,6 +1527,33 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     } catch (e) {
       console.error(e);
       showToast("Erro", "Erro ao conectar com o servidor.", "error");
+    }
+  };
+
+  const handleDeleteAnalysisArticle = (articleId: string | number, hasContributions: boolean) => {
+    setDeletingArticle({ id: articleId, hasContributions });
+  };
+
+  const handleConfirmDeleteArticle = async () => {
+    if (!deletingArticle) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/reg/articles/${deletingArticle.id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        setArticles(prev => prev.filter(a => String(a.id) !== String(deletingArticle.id)));
+        setContributions(prev => prev.filter(c => String(c.articleId) !== String(deletingArticle.id)));
+        showToast("Sucesso", "Dispositivo excluído com sucesso.", "success");
+        setDeletingArticle(null);
+      } else {
+        showToast("Erro", "Falha ao excluir o dispositivo.", "error");
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("Erro", "Erro ao conectar com o servidor.", "error");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -1664,8 +1871,73 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
             )}
           </div>
           <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Importar de Arquivo (Word/PDF)</label>
+            <p className="text-xs text-slate-400 mb-2">Selecione um arquivo Word ou PDF para extrair os artigos automaticamente antes de carregar na minuta.</p>
+            <div className="flex items-center gap-3 mb-4">
+              <input 
+                type="file" 
+                accept=".docx,.pdf"
+                className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-700 transition-all text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                onChange={e => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    handleExtractText(e.target.files[0]);
+                    e.target.value = ''; // Reset input
+                  }
+                }}
+              />
+              {isExtractingText && <span className="text-xs text-indigo-600 font-bold animate-pulse flex items-center gap-2"><div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div> Extraindo...</span>}
+            </div>
+
+            {extractedArticles.length > 0 && (
+              <div className="mb-6 p-4 bg-white border border-indigo-100 rounded-xl shadow-sm">
+                <div className="flex items-center justify-between mb-3 border-b border-indigo-50 pb-2">
+                  <h4 className="text-sm font-bold text-indigo-900 flex items-center gap-2">
+                    <FileText size={16} className="text-indigo-600"/> Artigos Identificados ({extractedArticles.length})
+                  </h4>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-600 cursor-pointer"
+                        checked={selectedExtractedArticles.every(Boolean)}
+                        onChange={e => setSelectedExtractedArticles(extractedArticles.map(() => e.target.checked))}
+                      />
+                      Selecionar Todos
+                    </label>
+                    <button 
+                      onClick={handleLoadSelectedArticles}
+                      disabled={!selectedExtractedArticles.some(Boolean)}
+                      className="px-4 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Carregar Selecionados
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-64 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                  {extractedArticles.map((article, i) => (
+                    <label key={i} className="flex items-start gap-3 p-3 bg-slate-50 hover:bg-indigo-50/50 rounded-lg border border-slate-200 cursor-pointer transition-colors">
+                      <input 
+                        type="checkbox" 
+                        className="mt-1 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-600 cursor-pointer"
+                        checked={selectedExtractedArticles[i] || false}
+                        onChange={e => {
+                          const newSelected = [...selectedExtractedArticles];
+                          newSelected[i] = e.target.checked;
+                          setSelectedExtractedArticles(newSelected);
+                        }}
+                      />
+                      <div className="text-xs text-slate-700 line-clamp-3 leading-relaxed">
+                        <span className="font-bold text-slate-900 mr-2">{article.split('\n')[0]}</span>
+                        {article.substring(article.indexOf('\n') + 1)}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Minuta da Resolução (Cole o texto completo)</label>
-            <p className="text-xs text-slate-400 mb-2">Cole o texto do SEI ou do Word. O sistema identificará os artigos automaticamente.</p>
+            <p className="text-xs text-slate-400 mb-2">Cole o texto do SEI ou do Word, ou carregue do arquivo acima. O sistema identificará os artigos automaticamente.</p>
             <textarea 
               rows={15}
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-700 transition-all whitespace-pre-wrap"
@@ -1758,7 +2030,12 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               )}
             </div>
             
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 pb-4">
+              <div className="flex justify-center opacity-0 hover:opacity-100 transition-opacity">
+                <button type="button" onClick={() => insertPreviewArticle(-1)} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 rounded-lg transition-all shadow-sm bg-white">
+                  <Plus size={13} /> Inserir Dispositivo no Topo
+                </button>
+              </div>
               {(previewArticles || []).map((art, i) => {
                 const isMissingOriginal = isAlteracao && (!art.originalText || !art.originalText.trim());
 
@@ -1770,9 +2047,22 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       isMissingOriginal ? "bg-amber-50/30 border-amber-300 ring-1 ring-amber-200" : "bg-slate-50 border-slate-200"
                     )}
                   >
-                    <div className="absolute -left-3 top-4 bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                    <div className="absolute -left-3 top-4 bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full z-10 shadow-sm">
                       #{i+1}
                     </div>
+                    
+                    <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-100 p-0.5">
+                      <button type="button" onClick={() => movePreviewArticle(i, -1)} disabled={i === 0} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md disabled:opacity-30 disabled:hover:bg-transparent" title="Mover para cima">
+                        <ArrowUp size={14} />
+                      </button>
+                      <button type="button" onClick={() => movePreviewArticle(i, 1)} disabled={i === (previewArticles?.length || 0) - 1} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md disabled:opacity-30 disabled:hover:bg-transparent" title="Mover para baixo">
+                        <ArrowDown size={14} />
+                      </button>
+                      <button type="button" onClick={() => removePreviewArticle(i)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md" title="Excluir dispositivo">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+
                     <div className={cn("grid gap-4", isAlteracao ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
                       {isAlteracao && (
                         <div>
@@ -1833,6 +2123,13 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         />
                       </div>
                     </div>
+
+                    <div className="mt-4 pt-4 border-t border-slate-200/60 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button type="button" onClick={() => insertPreviewArticle(i)} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 rounded-lg transition-all shadow-sm bg-white">
+                        <Plus size={13} /> Inserir Dispositivo Aqui
+                      </button>
+                    </div>
+
                   </div>
                 );
               })}
@@ -3008,15 +3305,26 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                   </button>
                 )}
                 {canViewMinuta && (
-                  <button 
-                    onClick={() => setAnalysisTab("minuta")}
-                    className={cn(
-                      "px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 outline-none",
-                      analysisTab === "minuta" ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >
-                    <ScrollText size={14} /> Minuta da Norma
-                  </button>
+                  <>
+                    <button 
+                      onClick={() => setAnalysisTab("minuta")}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 outline-none",
+                        analysisTab === "minuta" ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-700"
+                      )}
+                    >
+                      <ScrollText size={14} /> Minuta para Publicação
+                    </button>
+                    <button 
+                      onClick={() => setAnalysisTab("minuta_completa")}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 outline-none",
+                        analysisTab === "minuta_completa" ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-700"
+                      )}
+                    >
+                      <Sparkles size={14} /> Minuta Completa com Alterações
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -3118,6 +3426,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             contributions={artsContribs}
                             handleUpdateAnalysis={handleUpdateAnalysis}
                             handleUpdateFinalAnalysis={handleUpdateFinalAnalysis}
+                            handleDeleteArticle={handleDeleteAnalysisArticle}
                           />
                         </div>
                       );
@@ -3991,6 +4300,94 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 </div>
               );
             })()}
+
+            {analysisTab === "minuta_completa" && (
+              <div className="space-y-6">
+                <div className="flex flex-col lg:flex-row justify-between items-start gap-4 mb-4">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800">Minuta Completa com Alterações</h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Carregue o texto atual (original) da Resolução em formato Word para comparar automaticamente com as alterações cadastradas.
+                    </p>
+                  </div>
+                </div>
+
+                {!minutaCompletaOriginalText ? (
+                  <div className="bg-slate-50 border border-slate-200 border-dashed rounded-2xl p-10 text-center">
+                    <div className="inline-flex items-center justify-center w-12 h-12 bg-white rounded-full shadow-sm mb-4">
+                      <FileText size={20} className="text-slate-400" />
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-700 mb-2">Carregar Texto Atual</h4>
+                    <p className="text-xs text-slate-500 mb-6 max-w-sm mx-auto">
+                      Faça o upload do arquivo Word (.docx) contendo o texto completo e atual da Resolução para visualizarmos as modificações finais.
+                    </p>
+                    <label className={cn(
+                      "inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                      isExtractingCompleta 
+                        ? "bg-slate-100 text-slate-400 cursor-not-allowed" 
+                        : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
+                    )}>
+                      {isExtractingCompleta ? (
+                        <><RefreshCw size={14} className="animate-spin" /> Carregando...</>
+                      ) : (
+                        <><Upload size={14} /> Selecionar Arquivo (.docx)</>
+                      )}
+                      <input 
+                        type="file" 
+                        accept=".docx" 
+                        className="hidden" 
+                        disabled={isExtractingCompleta}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleExtractCompletaText(file);
+                        }} 
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 block"></span> Texto Adicionado
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-100">
+                          <span className="w-2 h-2 rounded-full bg-rose-500 block"></span> Texto Removido
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setMinutaCompletaOriginalText("");
+                          setMinutaCompletaDiffHtml(undefined);
+                        }}
+                        className="text-[10px] text-slate-500 hover:text-slate-700 font-bold underline"
+                      >
+                        Carregar outro documento
+                      </button>
+                    </div>
+
+                    <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
+                      {minutaCompletaDiffHtml ? (
+                        <div 
+                          className="prose prose-sm max-w-none prose-p:leading-relaxed text-slate-800 font-serif outline-none focus:ring-2 focus:ring-indigo-100 hover:bg-slate-50 transition-colors p-4 -mx-4 rounded-xl cursor-text"
+                          contentEditable={true}
+                          suppressContentEditableWarning={true}
+                          onBlur={(e) => {
+                            setMinutaCompletaDiffHtml({ __html: e.currentTarget.innerHTML });
+                          }}
+                          dangerouslySetInnerHTML={minutaCompletaDiffHtml}
+                        />
+                      ) : (
+                        <div className="text-center py-10">
+                          <RefreshCw size={24} className="text-indigo-400 animate-spin mx-auto mb-3" />
+                          <p className="text-xs font-bold text-slate-500">Comparando alterações...</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -4602,6 +4999,95 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               >
                 <Trash2 size={15} />
                 {isDeleting ? "Excluindo..." : "Sim, Excluir Registro"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Exclusão de Dispositivo */}
+      {deletingArticle && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-rose-100 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={24} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black text-slate-900">
+                  Excluir Dispositivo?
+                </h3>
+                {deletingArticle.hasContributions ? (
+                  <p className="text-xs text-rose-600 font-bold leading-relaxed pt-1">
+                    Atenção: Este dispositivo possui contribuições associadas. <br/><br/>
+                    Excluir este dispositivo removerá TODAS as contribuições ligadas a ele permanentemente. Essa ação não pode ser desfeita.
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Deseja realmente excluir este dispositivo? Essa ação não pode ser desfeita.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeletingArticle(null)}
+                className="text-slate-500 hover:bg-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDeleteArticle}
+                className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-rose-600/20 disabled:opacity-50"
+              >
+                <Trash2 size={15} />
+                {isDeleting ? "Excluindo..." : "Sim, Excluir"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Exclusão de Contribuição */}
+      {deletingContribution && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-rose-100 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={24} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black text-slate-900">
+                  Excluir Proposta?
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Deseja realmente excluir sua proposta de contribuição para este dispositivo? Essa ação não pode ser desfeita.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeletingContribution(null)}
+                className="text-slate-500 hover:bg-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDeleteContribution}
+                className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-rose-600/20 disabled:opacity-50"
+              >
+                <Trash2 size={15} />
+                {isDeleting ? "Excluindo..." : "Sim, Excluir"}
               </button>
             </div>
           </div>

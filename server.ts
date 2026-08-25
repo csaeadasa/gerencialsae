@@ -8,6 +8,9 @@ import { parse } from "csv-parse/sync";
 import cron from "node-cron";
 import { hashPassword, PASSWORD_HASH_PREFIX, verifyPassword } from "./server/core/security/password.js";
 import { GoogleGenAI, Type } from "@google/genai";
+import { execFile } from "child_process";
+import { promisify } from "util";
+const execFileAsync = promisify(execFile);
 
 export const app = express();
 let dbPool: Pool | null = null;
@@ -463,6 +466,134 @@ async function runStartupMigration() {
       `);
 
       await client.query(`
+        CREATE TABLE IF NOT EXISTS au_roles (
+          id VARCHAR(100) PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          permissions JSONB NOT NULL DEFAULT '[]'::jsonb,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      // Seed standard system roles if table is newly created or empty
+      try {
+        const rolesCount = await client.query("SELECT COUNT(*) FROM au_roles");
+        if (parseInt(rolesCount.rows[0].count) === 0) {
+          const defaultRolesSeed = [
+            {
+              id: 'admin',
+              name: 'Administrador',
+              description: 'Acesso total ao sistema, todas as ações permitidas',
+              permissions: [
+                { moduleId: 'planning_my_tasks', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'planning_dashboard', actions: ['view'] },
+                { moduleId: 'planning_tasks', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'planning_plans', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'planning_areas', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'planning_categories', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'planning_responsibles', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'planning_import', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'planning_models', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'planning_radar', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'water_balances', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'systems', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'supply_sources', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'demands', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'explore', actions: ['view'] },
+                { moduleId: 'analyze', actions: ['view'] },
+                { moduleId: 'compare', actions: ['view'] },
+                { moduleId: 'templates', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'reg_cadastro', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'reg_painel', actions: ['view'] },
+                { moduleId: 'reg_agenda', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'reg_agenda_painel', actions: ['view'] },
+                { moduleId: 'reg_subsidios', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'reg_subsidios_painel', actions: ['view'] },
+                { moduleId: 'reg_subsidios_portal', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'reg_subsidios_analise', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'reg_subsidios_minuta', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'pub_cadastro', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'pub_painel', actions: ['view'] },
+                { moduleId: 'dashboard', actions: ['view'] },
+                { moduleId: 'public_hub', actions: ['view'] },
+                { moduleId: 'geo', actions: ['view'] },
+                { moduleId: 'users', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'fisc_operational', actions: ['view', 'create', 'edit', 'delete'] },
+                { moduleId: 'recurso_painel', actions: ['view', 'create', 'edit', 'delete'] }
+              ]
+            },
+            {
+              id: 'regulator',
+              name: 'Regulador',
+              description: 'Acesso de auditoria, edição e alteração técnica, com restrições de exclusão.',
+              permissions: [
+                { moduleId: 'planning_my_tasks', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'planning_dashboard', actions: ['view'] },
+                { moduleId: 'planning_tasks', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'planning_plans', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'planning_areas', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'planning_categories', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'planning_responsibles', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'planning_import', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'planning_models', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'planning_radar', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'water_balances', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'systems', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'supply_sources', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'demands', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'explore', actions: ['view'] },
+                { moduleId: 'analyze', actions: ['view'] },
+                { moduleId: 'compare', actions: ['view'] },
+                { moduleId: 'templates', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'reg_cadastro', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'reg_painel', actions: ['view'] },
+                { moduleId: 'reg_agenda', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'reg_agenda_painel', actions: ['view'] },
+                { moduleId: 'reg_subsidios', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'reg_subsidios_painel', actions: ['view'] },
+                { moduleId: 'reg_subsidios_portal', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'reg_subsidios_analise', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'reg_subsidios_minuta', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'pub_cadastro', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'pub_painel', actions: ['view'] },
+                { moduleId: 'dashboard', actions: ['view'] },
+                { moduleId: 'public_hub', actions: ['view'] },
+                { moduleId: 'geo', actions: ['view'] },
+                { moduleId: 'users', actions: ['view'] },
+                { moduleId: 'fisc_operational', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'recurso_painel', actions: ['view', 'create', 'edit'] }
+              ]
+            },
+            {
+              id: 'provider',
+              name: 'Prestador',
+              description: 'Acesso restrito às suas próprias funcionalidades e envio de dados.',
+              permissions: [
+                { moduleId: 'water_balances', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'systems', actions: ['view'] },
+                { moduleId: 'supply_sources', actions: ['view'] },
+                { moduleId: 'demands', actions: ['view'] },
+                { moduleId: 'explore', actions: ['view'] },
+                { moduleId: 'compare', actions: ['view'] },
+                { moduleId: 'dashboard', actions: ['view'] },
+                { moduleId: 'public_hub', actions: ['view'] }
+              ]
+            }
+          ];
+
+          for (const r of defaultRolesSeed) {
+            await client.query(
+              "INSERT INTO au_roles (id, name, description, permissions) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING",
+              [r.id, r.name, r.description, JSON.stringify(r.permissions)]
+            );
+          }
+        }
+      } catch (e) {
+        console.error("Erro ao inicializar papéis padrão na au_roles:", e);
+      }
+
+      await client.query(`
         CREATE TABLE IF NOT EXISTS au_users (
           id SERIAL PRIMARY KEY,
           name VARCHAR(255) NOT NULL,
@@ -470,7 +601,7 @@ async function runStartupMigration() {
           password VARCHAR(255) NOT NULL,
           role_id VARCHAR(100) DEFAULT 'provider',
           status VARCHAR(50) DEFAULT 'active',
-          agency VARCHAR(255),
+          
           department_id INTEGER REFERENCES au_departments(id) ON DELETE SET NULL
         );
       `);
@@ -480,50 +611,17 @@ async function runStartupMigration() {
       } catch (err) {
         // ignore if already exists
       }
-
-      const defaultDepartments = [
-        { sigla: 'ADASA', nome: 'Agência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal' },
-        { sigla: 'CAESB', nome: 'Companhia de Saneamento Ambiental do Distrito Federal' },
-        { sigla: 'CSAE', nome: 'Superintendência de Abastecimento de Água e Esgoto' },
-        { sigla: 'SEDUH', nome: 'Secretaria de Estado de Desenvolvimento Urbano e Habitação' },
-        { sigla: 'GDF', nome: 'Governo do Distrito Federal' }
-      ];
-
-      for (const dept of defaultDepartments) {
-        const dExists = await client.query("SELECT id FROM au_departments WHERE LOWER(sigla) = LOWER($1)", [dept.sigla]);
-        if (dExists.rows.length === 0) {
-          await client.query("INSERT INTO au_departments (sigla, nome) VALUES ($1, $2)", [dept.sigla, dept.nome]);
-        }
-      }
-
-      // Sync existing users department_id from agency
+      // Remove mock/test users if present in the database
       try {
         await client.query(`
-          UPDATE au_users u 
-          SET department_id = d.id 
-          FROM au_departments d 
-          WHERE u.department_id IS NULL AND u.agency IS NOT NULL AND (LOWER(TRIM(u.agency)) = LOWER(TRIM(d.sigla)) OR LOWER(TRIM(u.agency)) = LOWER(TRIM(d.nome)));
+          DELETE FROM au_users 
+          WHERE LOWER(email) IN ('admin@adasa.gov.br', 'joao@adasa.gov.br', 'maria@caesb.gov.br')
+             OR name IN ('Admin', 'Joao Regulador', 'Maria CAESB');
         `);
       } catch (err) {
         // ignore
       }
 
-      const defaultAdminUsers = [
-        { name: 'Administrador ADASA', email: 'csaeadasa@gmail.com', role: 'admin', agency: null },
-        { name: 'Admin', email: 'admin@adasa.gov.br', role: 'admin', agency: null },
-        { name: 'Joao Regulador', email: 'joao@adasa.gov.br', role: 'regulator', agency: null },
-        { name: 'Maria CAESB', email: 'maria@caesb.gov.br', role: 'provider', agency: 'CAESB' }
-      ];
-
-      for (const u of defaultAdminUsers) {
-        const uExists = await client.query("SELECT id FROM au_users WHERE LOWER(email) = LOWER($1)", [u.email]);
-        if (uExists.rows.length === 0) {
-          await client.query(
-            "INSERT INTO au_users (name, email, password, role_id, status, agency) VALUES ($1, $2, $3, $4, 'active', $5)",
-            [u.name, u.email, await hashPassword("1234"), u.role, u.agency]
-          );
-        }
-      }
 
       await client.query(`
         CREATE TABLE IF NOT EXISTS pl_responsibles (
@@ -539,57 +637,6 @@ async function runStartupMigration() {
         await client.query("ALTER TABLE pl_responsibles ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES au_users(id) ON DELETE SET NULL;");
       } catch (err) {
         // ignore if already exists or schema issue
-      }
-
-      // Sync responsibles into users table as requested
-      try {
-        const respsRes = await client.query("SELECT id, name, user_id FROM pl_responsibles");
-        for (const resp of respsRes.rows) {
-          let uId = resp.user_id;
-          if (!uId) {
-            const nameClean = (resp.name || "").trim();
-            if (nameClean) {
-              let firstPart = nameClean.split(/\s+/)[0];
-              let firstNormalized = firstPart.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
-              if (!firstNormalized) {
-                firstNormalized = "responsavel";
-              }
-              let emailAddress = `${firstNormalized}@adasa.df.gov.br`;
-
-              // Check if user already exists with the exact name
-              const checkByName = await client.query("SELECT id FROM au_users WHERE LOWER(name) = LOWER($1)", [nameClean]);
-              if (checkByName.rows.length > 0) {
-                uId = checkByName.rows[0].id;
-                await client.query("UPDATE pl_responsibles SET user_id = $1 WHERE id = $2", [uId, resp.id]);
-                console.log(`[SYNC] Linked existing user for responsible "${nameClean}" via name match`);
-              } else {
-                // Ensure unique email
-                let suffix = 1;
-                let uniqueEmail = emailAddress;
-                while (true) {
-                  const checkExist = await client.query("SELECT id FROM au_users WHERE LOWER(email) = LOWER($1)", [uniqueEmail]);
-                  if (checkExist.rows.length === 0) {
-                    break;
-                  }
-                  suffix++;
-                  uniqueEmail = `${firstNormalized}${suffix}@adasa.df.gov.br`;
-                }
-                emailAddress = uniqueEmail;
-
-                // Register user
-                const insertUserRes = await client.query(
-                  "INSERT INTO au_users (name, email, password, role_id, status, agency) VALUES ($1, $2, $3, 'regulator', 'active', 'Adasa') RETURNING id",
-                  [nameClean, emailAddress, await hashPassword("1234")]
-                );
-                uId = insertUserRes.rows[0].id;
-                await client.query("UPDATE pl_responsibles SET user_id = $1 WHERE id = $2", [uId, resp.id]);
-                console.log(`[SYNC] Registered user for responsible: "${nameClean}" -> "${emailAddress}"`);
-              }
-            }
-          }
-        }
-      } catch (syncErr) {
-        console.error("Error syncing responsibles to users:", syncErr);
       }
       
       await client.query(`
@@ -1042,7 +1089,7 @@ async function runStartupMigration() {
                 uid = checkEmail.rows[0].id;
               } else {
                 const insUser = await client.query(
-                  "INSERT INTO au_users (name, email, password, role_id, status, agency) VALUES ($1, $2, $3, 'provider', 'active', 'Participação Social') RETURNING id",
+                  "INSERT INTO au_users (name, email, password, role_id, status) VALUES ($1, $2, $3, 'provider', 'active') RETURNING id",
                   [authorName, fakeEmail, await hashPassword("1234")]
                 );
                 uid = insUser.rows[0].id;
@@ -1438,6 +1485,91 @@ export async function startServer(isVercel = false) {
     } catch (e) {
       console.error(e);
       res.status(500).json({ success: false, error: "Erro no upload" });
+    }
+  });
+
+  app.post("/api/extract-text", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, error: "Nenhum arquivo enviado" });
+      }
+      
+      const file = req.file;
+      const ext = path.extname(file.originalname).toLowerCase();
+      let extractedText = "";
+
+      if (ext === '.pdf') {
+        const cmd = process.execPath;
+        const args = [path.resolve(process.cwd(), "parse-pdf.cjs"), file.path];
+        console.log("Executing:", cmd, args.join(" "));
+        const { stdout, stderr } = await execFileAsync(cmd, args, { maxBuffer: 1024 * 1024 * 50 });
+        console.log("parse-pdf.cjs stdout:", stdout);
+        if (stderr) console.error("parse-pdf.cjs stderr:", stderr);
+        const data = JSON.parse(stdout);
+        if (!data.success) throw new Error(data.error);
+        extractedText = data.text;
+      } else if (ext === '.docx') {
+        const mammothModule = await import('mammoth');
+        const mammoth = mammothModule.default || mammothModule;
+        const result = await (mammoth as any).convertToHtml({ path: file.path });
+        let html = result.value;
+
+        // Custom HTML to text parser to preserve Roman numerals and letter lists
+        function toRoman(num) {
+          const lookup = {M:1000,CM:900,D:500,CD:400,C:100,XC:90,L:50,XL:40,X:10,IX:9,V:5,IV:4,I:1};
+          let roman = '';
+          for (let i in lookup) {
+            while (num >= lookup[i]) {
+              roman += i;
+              num -= lookup[i];
+            }
+          }
+          return roman;
+        }
+
+        html = html.replace(/<br\s*\/?>/gi, '\n');
+        html = html.replace(/<\/p>/gi, '\n\n');
+
+        html = html.replace(/<ol>([\s\S]*?)<\/ol>/gi, (match, inner) => {
+            let i = 1;
+            return inner.replace(/<li>([\s\S]*?)<\/li>/gi, (m, liText) => {
+                const num = toRoman(i++);
+                let cleanText = liText.replace(/<\/?p>/gi, '').trim();
+                return `${num} - ${cleanText}\n\n`;
+            }) + '\n';
+        });
+
+        html = html.replace(/<ul>([\s\S]*?)<\/ul>/gi, (match, inner) => {
+            let letters = 'abcdefghijklmnopqrstuvwxyz';
+            let i = 0;
+            return inner.replace(/<li>([\s\S]*?)<\/li>/gi, (m, liText) => {
+                const letter = letters[i++] || '-';
+                let cleanText = liText.replace(/<\/?p>/gi, '').trim();
+                return `${letter}) ${cleanText}\n\n`;
+            }) + '\n';
+        });
+
+        html = html.replace(/<[^>]+>/g, '');
+        html = html.replace(/\n{3,}/g, '\n\n').trim();
+
+        extractedText = html;
+      } else if (ext === '.txt') {
+        extractedText = fs.readFileSync(file.path, 'utf8');
+      } else {
+        return res.status(400).json({ success: false, error: "Formato de arquivo não suportado. Use PDF ou DOCX." });
+      }
+      
+      // Clean up the uploaded file to save space
+      try {
+        fs.unlinkSync(file.path);
+      } catch (err) {
+        console.error("Erro ao deletar arquivo temporário", err);
+      }
+
+      res.json({ success: true, text: extractedText });
+    } catch (e: any) {
+      console.error("Erro na extração de texto", e);
+      res.status(500).json({ success: false, error: "Erro na extração de texto: " + e.message, stack: e.stack });
     }
   });
 
@@ -2769,7 +2901,6 @@ export async function startServer(isVercel = false) {
       const pool = getDbPool();
       let createdId;
       let finalResult;
-      let generatedPass: string | null = null;
       try {
         await pool.query("BEGIN");
 
@@ -2781,14 +2912,6 @@ export async function startServer(isVercel = false) {
           const uRes = await pool.query("SELECT id FROM au_users WHERE LOWER(email) = LOWER($1)", [normalizedEmail]);
           if (uRes.rows.length > 0) {
             userId = uRes.rows[0].id;
-          } else {
-            // Generate standard 4-digit random password
-            generatedPass = Math.floor(1000 + Math.random() * 9000).toString();
-            const insertUserRes = await pool.query(
-               "INSERT INTO au_users (name, email, password, role_id, status) VALUES ($1, $2, $3, 'provider', 'active') RETURNING id",
-              [name || "Responsável Sem Nome", normalizedEmail, await hashPassword(generatedPass)]
-            );
-            userId = insertUserRes.rows[0].id;
           }
         }
 
@@ -2811,7 +2934,6 @@ export async function startServer(isVercel = false) {
       }
       res.json({ 
         success: true, 
-        generatedPassword: generatedPass,
         data: { 
           id: Number(createdId), 
           name: finalResult.rows[0].name, 
@@ -2935,9 +3057,17 @@ export async function startServer(isVercel = false) {
   const handleDeleteDepartment = async (req: express.Request, res: express.Response) => {
     try {
       const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ success: false, error: "ID de departamento inválido" });
+      }
       const pool = getDbPool();
-      await pool.query("DELETE FROM au_departments WHERE id = $1", [id]);
-      res.json({ success: true, deletedId: id });
+      // Ensure any linked users have department_id set to NULL first
+      await pool.query("UPDATE au_users SET department_id = NULL WHERE department_id = $1", [id]);
+      const result = await pool.query("DELETE FROM au_departments WHERE id = $1 RETURNING id, sigla, nome", [id]);
+      if (result.rowCount === 0) {
+        return res.json({ success: true, deletedId: id, message: "Departamento já havia sido excluído ou não encontrado" });
+      }
+      res.json({ success: true, deletedId: id, deleted: result.rows[0] });
     } catch (error: any) {
       console.error("Erro ao deletar departamento:", error);
       res.status(500).json({ success: false, error: error.message });
@@ -2953,6 +3083,118 @@ export async function startServer(isVercel = false) {
   app.delete("/api/departments/:id", handleDeleteDepartment);
   app.delete("/api/au/departments/:id", handleDeleteDepartment);
 
+  // ==========================================
+  // ROLES (au_roles) ENDPOINTS
+  // ==========================================
+  app.get("/api/roles", async (req, res) => {
+    try {
+      const pool = getDbPool();
+      const result = await pool.query("SELECT id, name, description, permissions FROM au_roles ORDER BY CASE WHEN id = 'admin' THEN 1 WHEN id = 'regulator' THEN 2 WHEN id = 'provider' THEN 3 ELSE 4 END, name ASC");
+      res.json({
+        success: true,
+        data: result.rows.map(r => ({
+          id: r.id,
+          name: r.name,
+          description: r.description || "",
+          permissions: typeof r.permissions === 'string' ? JSON.parse(r.permissions) : (r.permissions || [])
+        }))
+      });
+    } catch (error: any) {
+      console.error("Erro ao listar papéis:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/roles", async (req, res) => {
+    try {
+      const { id, name, description, permissions } = req.body;
+      if (!name || !name.trim()) {
+        return res.status(400).json({ success: false, error: "Nome do papel é obrigatório" });
+      }
+      const pool = getDbPool();
+      const roleId = (id && id.trim()) ? id.trim().toLowerCase().replace(/\s+/g, '_') : 'role_' + Date.now();
+      const roleName = name.trim();
+      const roleDesc = description ? description.trim() : "";
+      const rolePerms = permissions ? JSON.stringify(permissions) : '[]';
+
+      const result = await pool.query(
+        "INSERT INTO au_roles (id, name, description, permissions) VALUES ($1, $2, $3, $4) RETURNING id, name, description, permissions",
+        [roleId, roleName, roleDesc, rolePerms]
+      );
+      const row = result.rows[0];
+      res.json({
+        success: true,
+        data: {
+          id: row.id,
+          name: row.name,
+          description: row.description || "",
+          permissions: typeof row.permissions === 'string' ? JSON.parse(row.permissions) : (row.permissions || [])
+        }
+      });
+    } catch (error: any) {
+      console.error("Erro ao criar papel:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.put("/api/roles/:id", async (req, res) => {
+    try {
+      const roleId = req.params.id;
+      const { name, description, permissions } = req.body;
+      if (!name || !name.trim()) {
+        return res.status(400).json({ success: false, error: "Nome do papel é obrigatório" });
+      }
+      const pool = getDbPool();
+      const roleName = name.trim();
+      const roleDesc = description ? description.trim() : "";
+      const rolePerms = permissions ? JSON.stringify(permissions) : '[]';
+
+      const result = await pool.query(
+        "UPDATE au_roles SET name = $1, description = $2, permissions = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4 RETURNING id, name, description, permissions",
+        [roleName, roleDesc, rolePerms, roleId]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, error: "Papel não encontrado" });
+      }
+      const row = result.rows[0];
+      res.json({
+        success: true,
+        data: {
+          id: row.id,
+          name: row.name,
+          description: row.description || "",
+          permissions: typeof row.permissions === 'string' ? JSON.parse(row.permissions) : (row.permissions || [])
+        }
+      });
+    } catch (error: any) {
+      console.error("Erro ao atualizar papel:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/roles/:id", async (req, res) => {
+    try {
+      const roleId = req.params.id;
+      if (roleId === 'admin') {
+        return res.status(400).json({ success: false, error: "O papel Administrador é do sistema e não pode ser excluído." });
+      }
+      const pool = getDbPool();
+      // Check if any user uses this role
+      const usersUsingRole = await pool.query("SELECT COUNT(*) FROM au_users WHERE role_id = $1", [roleId]);
+      if (parseInt(usersUsingRole.rows[0].count) > 0) {
+        return res.status(400).json({ success: false, error: "Não é possível excluir este papel pois existem usuários vinculados a ele." });
+      }
+      const result = await pool.query("DELETE FROM au_roles WHERE id = $1 RETURNING id, name", [roleId]);
+      if (result.rowCount === 0) {
+        return res.status(404).json({ success: false, error: "Papel não encontrado" });
+      }
+      res.json({ success: true, deletedId: roleId, deleted: result.rows[0] });
+    } catch (error: any) {
+      console.error("Erro ao excluir papel:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { email, password } = req.body;
@@ -2961,7 +3203,7 @@ export async function startServer(isVercel = false) {
       }
       const pool = getDbPool();
       let result = await pool.query(
-        `SELECT u.id, u.name, u.email, u.password, u.role_id, u.status, u.agency, u.department_id,
+        `SELECT u.id, u.name, u.email, u.password, u.role_id, u.status, u.department_id,
                 d.sigla AS department_sigla, d.nome AS department_nome
          FROM au_users u
          LEFT JOIN au_departments d ON u.department_id = d.id
@@ -2969,16 +3211,7 @@ export async function startServer(isVercel = false) {
         [email.trim()]
       );
       if (result.rows.length === 0) {
-        const cleanEmail = email.trim().toLowerCase();
-        if (cleanEmail === "csaeadasa@gmail.com" || cleanEmail === "admin@adasa.gov.br") {
-          const inserted = await pool.query(
-            "INSERT INTO au_users (name, email, password, role_id, status, agency) VALUES ($1, $2, $3, 'admin', 'active', NULL) RETURNING id, name, email, password, role_id, status, agency, department_id",
-            ["Administrador ADASA", email.trim(), await hashPassword(password || "1234")]
-          );
-          result = inserted;
-        } else {
-          return res.status(401).json({ success: false, error: "Usuário não encontrado" });
-        }
+        return res.status(401).json({ success: false, error: "Usuário não encontrado" });
       }
       const user = result.rows[0];
       if (user.status !== "active") {
@@ -2998,13 +3231,12 @@ export async function startServer(isVercel = false) {
           email: user.email,
           roleId: user.role_id,
           status: user.status,
-          agency: user.agency || user.department_sigla || null,
           departmentId: user.department_id || null,
           department: user.department_id ? {
             id: user.department_id,
             sigla: user.department_sigla,
             nome: user.department_nome
-          } : (user.agency ? { id: 0, sigla: user.agency, nome: user.agency } : undefined)
+          } : undefined
         }
       });
     } catch (error: any) {
@@ -3017,7 +3249,7 @@ export async function startServer(isVercel = false) {
     try {
       const pool = getDbPool();
       const result = await pool.query(`
-        SELECT u.id, u.name, u.email, u.role_id, u.status, u.agency, u.department_id,
+        SELECT u.id, u.name, u.email, u.role_id, u.status, u.department_id,
                d.sigla AS department_sigla, d.nome AS department_nome
         FROM au_users u
         LEFT JOIN au_departments d ON u.department_id = d.id
@@ -3031,13 +3263,12 @@ export async function startServer(isVercel = false) {
           email: user.email,
           roleId: user.role_id,
           status: user.status,
-          agency: user.agency || user.department_sigla || null,
           departmentId: user.department_id || null,
           department: user.department_id ? {
             id: user.department_id,
             sigla: user.department_sigla,
             nome: user.department_nome
-          } : (user.agency ? { id: 0, sigla: user.agency, nome: user.agency } : undefined)
+          } : undefined
         }))
       });
     } catch (error: any) {
@@ -3048,21 +3279,25 @@ export async function startServer(isVercel = false) {
 
   app.post("/api/users", async (req, res) => {
     try {
-      const { name, email, password, roleId, status, agency, departmentId } = req.body;
+      const { name, email, password, roleId, status, departmentId } = req.body;
       const pool = getDbPool();
-      let finalAgency = agency || null;
+      
       let finalDeptId = departmentId ? parseInt(departmentId) : null;
-      if (finalDeptId && !finalAgency) {
-        const deptRes = await pool.query("SELECT sigla FROM au_departments WHERE id = $1", [finalDeptId]);
-        if (deptRes.rows.length > 0) {
-          finalAgency = deptRes.rows[0].sigla;
-        }
-      }
       const result = await pool.query(
-        "INSERT INTO au_users (name, email, password, role_id, status, agency, department_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
-        [name, email, await hashPassword(password || "1234"), roleId || "provider", status || "active", finalAgency, finalDeptId]
+        "INSERT INTO au_users (name, email, password, role_id, status, department_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+        [name, email, await hashPassword(password || "1234"), roleId || "provider", status || "active", finalDeptId]
       );
       const user = result.rows[0];
+
+      // Link any matching responsible that does not have user_id yet
+      if (email) {
+        try {
+          await pool.query("UPDATE pl_responsibles SET user_id = $1 WHERE LOWER(email) = LOWER($2) AND user_id IS NULL", [user.id, email.trim()]);
+        } catch (e) {
+          // ignore
+        }
+      }
+
       let department = undefined;
       if (user.department_id) {
         const deptQ = await pool.query("SELECT id, sigla, nome FROM au_departments WHERE id = $1", [user.department_id]);
@@ -3078,7 +3313,6 @@ export async function startServer(isVercel = false) {
           email: user.email,
           roleId: user.role_id,
           status: user.status,
-          agency: user.agency,
           departmentId: user.department_id || null,
           department
         }
@@ -3092,25 +3326,19 @@ export async function startServer(isVercel = false) {
   app.put("/api/users/:id", async (req, res) => {
     try {
       const userId = parseInt(req.params.id);
-      const { name, email, password, roleId, status, agency, departmentId } = req.body;
+      const { name, email, password, roleId, status, departmentId } = req.body;
       const pool = getDbPool();
-      let finalAgency = agency !== undefined ? agency : null;
+      
       let finalDeptId = departmentId !== undefined ? (departmentId ? parseInt(departmentId) : null) : null;
-      if (finalDeptId && !finalAgency) {
-        const deptRes = await pool.query("SELECT sigla FROM au_departments WHERE id = $1", [finalDeptId]);
-        if (deptRes.rows.length > 0) {
-          finalAgency = deptRes.rows[0].sigla;
-        }
-      }
 
       let query;
       let params;
       if (password) {
-        query = "UPDATE au_users SET name = $1, email = $2, password = $3, role_id = $4, status = $5, agency = $6, department_id = $7 WHERE id = $8 RETURNING *";
-        params = [name, email, await hashPassword(password), roleId || "provider", status || "active", finalAgency, finalDeptId, userId];
+        query = "UPDATE au_users SET name = $1, email = $2, password = $3, role_id = $4, status = $5, department_id = $6 WHERE id = $7 RETURNING *";
+        params = [name, email, await hashPassword(password), roleId || "provider", status || "active", finalDeptId, userId];
       } else {
-        query = "UPDATE au_users SET name = $1, email = $2, role_id = $3, status = $4, agency = $5, department_id = $6 WHERE id = $7 RETURNING *";
-        params = [name, email, roleId || "provider", status || "active", finalAgency, finalDeptId, userId];
+        query = "UPDATE au_users SET name = $1, email = $2, role_id = $3, status = $4, department_id = $5 WHERE id = $6 RETURNING *";
+        params = [name, email, roleId || "provider", status || "active", finalDeptId, userId];
       }
       const result = await pool.query(query, params);
       if (result.rows.length === 0) {
@@ -3132,7 +3360,6 @@ export async function startServer(isVercel = false) {
           email: user.email,
           roleId: user.role_id,
           status: user.status,
-          agency: user.agency,
           departmentId: user.department_id || null,
           department
         }
@@ -5242,7 +5469,7 @@ const createContributionHandler = async (req: express.Request, res: express.Resp
         const safeName = (authorName || "Usuário").trim();
         const safeEmail = (authorEmail || `${safeName.toLowerCase().replace(/[^a-z0-9]/g, '.')}@adasa.df.gov.br`).trim();
         const insUser = await dbPool.query(
-          "INSERT INTO au_users (name, email, password, role_id, status, agency) VALUES ($1, $2, $3, 'provider', 'active', 'Participação Social') RETURNING id",
+          "INSERT INTO au_users (name, email, password, role_id, status) VALUES ($1, $2, $3, 'provider', 'active') RETURNING id",
           [safeName, safeEmail, await hashPassword("1234")]
         );
         resolvedUserId = insUser.rows[0].id;
@@ -5343,6 +5570,18 @@ const deleteContributionHandler = async (req: express.Request, res: express.Resp
   }
 };
 
+const deleteArticleHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  try {
+    const { id } = req.params;
+    await dbPool.query("DELETE FROM re_participation_articles WHERE id = $1", [Number(id)]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting article:", error);
+    res.status(500).json({ error: "Failed to delete article" });
+  }
+};
+
 const updateArticleHandler = async (req: express.Request, res: express.Response) => {
   if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
   try {
@@ -5401,8 +5640,24 @@ const updateParticipationArticlesBatchHandler = async (req: express.Request, res
     const { id } = req.params;
     const { articles } = req.body;
     if (Array.isArray(articles)) {
+      const incomingIds = articles
+        .filter(a => a.id && !String(a.id).startsWith('temp-') && !String(a.id).startsWith('new_'))
+        .map(a => Number(a.id));
+
+      if (incomingIds.length > 0) {
+        await dbPool.query(
+          `DELETE FROM re_participation_articles WHERE participation_id = $1 AND id != ALL($2::int[])`,
+          [Number(id), incomingIds]
+        );
+      } else {
+        await dbPool.query(
+          `DELETE FROM re_participation_articles WHERE participation_id = $1`,
+          [Number(id)]
+        );
+      }
+
       for (const art of articles) {
-        if (art.id && !String(art.id).startsWith('temp-')) {
+        if (art.id && !String(art.id).startsWith('temp-') && !String(art.id).startsWith('new_')) {
           await dbPool.query(
             `UPDATE re_participation_articles 
              SET original_text = $1, proposed_text = $2, order_index = $3
@@ -5456,6 +5711,7 @@ app.get("/api/reg/tomadas/:id/contributions", getContributionsHandler);
 app.post("/api/reg/contributions", createContributionHandler);
 app.put("/api/reg/contributions/:id", updateContributionHandler);
 app.put("/api/reg/contributions/:id/analysis", updateContributionAnalysisHandler);
+app.delete("/api/reg/articles/:id", deleteArticleHandler);
 app.delete("/api/reg/contributions/:id", deleteContributionHandler);
 
 app.post("/api/reg/ai/analyze-contribution", async (req, res) => {
@@ -5575,6 +5831,7 @@ Forneça a resposta em formato JSON estrito com os seguintes campos:
         server: { middlewareMode: true },
         appType: "spa",
       });
+      app.use("/api", (req, res) => { res.status(404).json({ success: false, error: "Endpoint não encontrado em dev" }); });
       app.use(vite.middlewares);
     } else {
       const distPath = path.join(process.cwd(), 'dist');
