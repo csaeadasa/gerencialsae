@@ -348,8 +348,8 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
         <div className="flex-1 space-y-4">
           {tipoResolucao === "alteracao" && article.originalText && (
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-2.5 py-1 rounded">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
                   Texto Atual (Vigente)
                 </span>
               </div>
@@ -359,12 +359,12 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
             </div>
           )}
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-2.5 py-1 rounded">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
                 Texto Proposto em Consulta (Minuta)
               </span>
               {isFullyAnalyzed && (
-                <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full">
+                <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-xs font-black uppercase tracking-wider px-3 py-1.5 rounded-full">
                   <CheckCircle2 size={12} /> Totalmente Analisado
                 </span>
               )}
@@ -380,7 +380,9 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
 
       {/* Lista de Contribuições */}
       <div className="p-4 space-y-4">
-        <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Contribuições Recebidas ({contributions.length})</h5>
+        <div className="inline-flex items-center mb-1 bg-slate-200/70 px-3.5 py-2 rounded-lg">
+          <h5 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-0">Contribuições Recebidas ({contributions.length})</h5>
+        </div>
         
         {contributions.length === 0 ? (
           <div className="text-center p-6 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-xs text-slate-500 italic">
@@ -401,9 +403,11 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
       {/* Parecer Final do Dispositivo */}
       <div className="bg-indigo-50/50 border-t border-indigo-100 p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h5 className="text-xs font-black text-indigo-900 uppercase tracking-wider flex items-center gap-2">
-            <CheckCircle2 size={14} className="text-indigo-600" /> Redação Final Após Análise
-          </h5>
+          <div className="inline-flex items-center bg-indigo-100 px-3.5 py-2 rounded-lg">
+            <h5 className="text-xs font-black text-indigo-900 uppercase tracking-widest flex items-center gap-2 mb-0">
+              <CheckCircle2 size={16} className="text-indigo-600" /> Redação Final Após Análise
+            </h5>
+          </div>
           {!isEditing && (
             <div className="flex items-center gap-2">
               <button onClick={handleSuggestAI} disabled={isGeneratingAI} className="p-1 text-[10px] font-bold uppercase tracking-wider text-indigo-50 hover:text-white bg-indigo-500 rounded hover:bg-indigo-600 transition-colors flex items-center gap-1 disabled:opacity-50">
@@ -501,6 +505,16 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
 export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToast, currentUser }) => {
   const auth = useAuth();
   const effectiveUser = currentUser || auth?.currentUser;
+
+  const canCreateSubsidios = auth?.checkPermission ? auth.checkPermission("reg_subsidios", "create") : true;
+  const canEditSubsidios = auth?.checkPermission ? auth.checkPermission("reg_subsidios", "edit") : true;
+  const canDeleteSubsidios = auth?.checkPermission ? auth.checkPermission("reg_subsidios", "delete") : true;
+  const canViewPainel = auth?.checkPermission ? auth.checkPermission("reg_subsidios_painel", "view") : true;
+  const canViewAnalise = auth?.checkPermission ? auth.checkPermission("reg_subsidios_analise", "view") : true;
+  const canEditAnalise = auth?.checkPermission ? auth.checkPermission("reg_subsidios_analise", "edit") : true;
+  const canViewMinuta = auth?.checkPermission ? auth.checkPermission("reg_subsidios_minuta", "view") : true;
+  const canViewPortal = auth?.checkPermission ? auth.checkPermission("reg_subsidios_portal", "view") : true;
+  const canContribute = auth?.checkPermission ? auth.checkPermission("reg_subsidios_portal", "create") : true;
 
   const [tomadas, setTomadas] = useState<TomadaSubsidio[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
@@ -1386,32 +1400,33 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
         {/* Grade Comparativa de 2 Colunas */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Painel 1: Texto Proposto da Minuta */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex flex-col justify-between">
-            <div>
-              <span className="inline-block text-[10px] font-black uppercase tracking-wider text-slate-600 bg-slate-100 px-2.5 py-1 rounded mb-2.5 border border-slate-200">
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
                 1. Texto Proposto em Consulta (Minuta)
               </span>
-              <div className="text-xs text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs h-full">
+              <div className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">
                 {baseText || <span className="text-slate-400 italic">Nenhum texto base definido.</span>}
               </div>
             </div>
           </div>
 
           {/* Painel 2: Contribuição Sugerida com Destaque de Inserções e Exclusões */}
-          <div className="bg-white rounded-xl border border-emerald-300 p-4 shadow-2xs ring-2 ring-emerald-500/20 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-2.5">
-                <span className="inline-block text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded border border-emerald-200">
-                  2. Texto da Contribuição Sugerida (Com destaques)
-                </span>
-              </div>
-
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
+                2. Texto da Contribuição Sugerida (Com destaques)
+              </span>
+            </div>
+            <div className="bg-white rounded-xl border border-emerald-300 p-4 shadow-2xs ring-2 ring-emerald-500/20 h-full">
               {isIdentical ? (
-                <div className="text-xs text-slate-500 italic p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="text-sm text-slate-500 italic p-3 bg-slate-50 rounded-lg border border-slate-200">
                   Redação idêntica ao texto proposto da minuta (nenhuma alteração textual detectada).
                 </div>
               ) : (
-                <div className="text-xs text-slate-800 font-medium leading-relaxed whitespace-pre-wrap">
+                <div className="text-sm text-slate-800 font-medium leading-relaxed whitespace-pre-wrap">
                   {diffParts.map((part, pIdx) => {
                     if (part.added) {
                       return (
@@ -2291,24 +2306,32 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                     </div>
 
                     {selectedTomada.tipoResolucao === "alteracao" && art.originalText && (
-                      <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 shadow-2xs mb-4">
-                        <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                          Texto Atual (Vigente)
-                        </span>
-                        <div className="text-sm font-medium text-slate-600 whitespace-pre-wrap leading-relaxed">
-                          {art.originalText}
+                      <div className="mb-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
+                            Texto Atual (Vigente)
+                          </span>
+                        </div>
+                        <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 shadow-2xs">
+                          <div className="text-sm font-medium text-slate-600 whitespace-pre-wrap leading-relaxed">
+                            {art.originalText}
+                          </div>
                         </div>
                       </div>
                     )}
                     
-                    <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-4 shadow-2xs">
-                      <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                        Texto Proposto em Consulta (Minuta)
-                      </span>
-                      <div className="text-sm font-medium text-slate-800 whitespace-pre-wrap leading-relaxed">
-                        {selectedTomada.tipoResolucao === "alteracao" && art.originalText
-                          ? renderDiffInline(art.originalText, art.proposedText)
-                          : (art.proposedText !== undefined ? art.proposedText : art.originalText)}
+                    <div className="mb-4 mt-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
+                          Texto Proposto em Consulta (Minuta)
+                        </span>
+                      </div>
+                      <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-4 shadow-2xs">
+                        <div className="text-sm font-medium text-slate-800 whitespace-pre-wrap leading-relaxed">
+                          {selectedTomada.tipoResolucao === "alteracao" && art.originalText
+                            ? renderDiffInline(art.originalText, art.proposedText)
+                            : (art.proposedText !== undefined ? art.proposedText : art.originalText)}
+                        </div>
                       </div>
                     </div>
 
@@ -2322,18 +2345,22 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           userArticleContribs[0].proposedText
                         )}
                         
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                              Sua Justificativa Técnica / Motivação
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-medium">
+                        <div className="mb-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
+                                Sua Justificativa Técnica / Motivação
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-medium bg-slate-100 px-2 py-1 rounded">
                               Registrada em {formatDateBr(userArticleContribs[0].createdAt)} por {userArticleContribs[0].authorName}
                             </span>
                           </div>
-                          <p className="text-xs text-slate-700 italic bg-slate-50 p-3 rounded-lg border border-slate-200 whitespace-pre-wrap leading-relaxed">
-                            "{userArticleContribs[0].justification}"
-                          </p>
+                          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
+                            <p className="text-sm text-slate-700 italic bg-slate-50 p-3 rounded-lg border border-slate-200 whitespace-pre-wrap leading-relaxed">
+                              "{userArticleContribs[0].justification}"
+                            </p>
+                          </div>
                         </div>
 
                         {!isContributing && isTomadaAberta && (
@@ -2411,9 +2438,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       
                       <div className="space-y-6">
                         <div>
-                          <label className="block text-xs font-black text-slate-800 uppercase tracking-widest mb-2">
-                            Texto da Contribuição Sugerida
-                          </label>
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
+                              Texto da Contribuição Sugerida
+                            </span>
+                          </div>
                           <textarea 
                             className="w-full bg-white px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-600 text-sm text-slate-800 font-medium shadow-2xs"
                             rows={10}
@@ -2424,9 +2453,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         </div>
 
                         <div>
-                          <label className="block text-xs font-black text-slate-800 uppercase tracking-widest mb-2">
-                            Justificativa Técnica / Motivação
-                          </label>
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
+                              Justificativa Técnica / Motivação
+                            </span>
+                          </div>
                           <textarea 
                             className="w-full bg-white px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-600 text-sm shadow-2xs"
                             rows={6}
@@ -2954,33 +2985,39 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 </h3>
               </div>
               <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200/60 overflow-hidden">
-                <button 
-                  onClick={() => setAnalysisTab("contribuicoes")}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 outline-none",
-                    analysisTab === "contribuicoes" ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-700"
-                  )}
-                >
-                  <MessageSquare size={14} /> Contribuições
-                </button>
-                <button 
-                  onClick={() => setAnalysisTab("painel")}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 outline-none",
-                    analysisTab === "painel" ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-700"
-                  )}
-                >
-                  <BarChart2 size={14} /> Painel das Contribuições
-                </button>
-                <button 
-                  onClick={() => setAnalysisTab("minuta")}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 outline-none",
-                    analysisTab === "minuta" ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-700"
-                  )}
-                >
-                  <ScrollText size={14} /> Minuta da Norma
-                </button>
+                {canViewAnalise && (
+                  <button 
+                    onClick={() => setAnalysisTab("contribuicoes")}
+                    className={cn(
+                      "px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 outline-none",
+                      analysisTab === "contribuicoes" ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-700"
+                    )}
+                  >
+                    <MessageSquare size={14} /> Contribuições
+                  </button>
+                )}
+                {canViewPainel && (
+                  <button 
+                    onClick={() => setAnalysisTab("painel")}
+                    className={cn(
+                      "px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 outline-none",
+                      analysisTab === "painel" ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-700"
+                    )}
+                  >
+                    <BarChart2 size={14} /> Painel das Contribuições
+                  </button>
+                )}
+                {canViewMinuta && (
+                  <button 
+                    onClick={() => setAnalysisTab("minuta")}
+                    className={cn(
+                      "px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 outline-none",
+                      analysisTab === "minuta" ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-700"
+                    )}
+                  >
+                    <ScrollText size={14} /> Minuta da Norma
+                  </button>
+                )}
               </div>
             </div>
 
@@ -3973,12 +4010,14 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => handleOpenCreate()}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/20"
-          >
-            <Plus size={16} /> Nova Participação
-          </button>
+          {canCreateSubsidios && (
+            <button
+              onClick={() => handleOpenCreate()}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/20"
+            >
+              <Plus size={16} /> Nova Participação
+            </button>
+          )}
         </div>
       </div>
 
@@ -4040,8 +4079,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-sm text-slate-500 uppercase tracking-widest font-black">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">
                   <th className="px-5 py-4 w-32 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("numero")}>
                     <div className="flex items-center">Número {getSortIcon("numero")}</div>
                   </th>
@@ -4060,10 +4099,10 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                   <th className="px-5 py-4 w-32 text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("status")}>
                     <div className="flex items-center justify-center">Status {getSortIcon("status")}</div>
                   </th>
-                  <th className="px-5 py-4 w-28 text-right">Ações</th>
+                  <th className="px-5 py-4 w-28 text-center">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-base">
+              <tbody className="divide-y divide-slate-100">
                 {sortedFilteredTomadas.map(tomada => {
                   const status = getStatus(tomada.dataInicio, tomada.dataFim);
                   const isAberta = status.startsWith("Aberta");
@@ -4071,11 +4110,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                   return (
                     <tr key={tomada.id} className="hover:bg-slate-50/40 transition-colors cursor-pointer align-top" onClick={() => handleOpenPublicView(tomada)}>
                       <td className="px-5 py-4 font-semibold text-slate-700">
-                        <span className="text-base font-bold text-slate-800">{tomada.numero}</span>
+                        <span className="text-sm font-bold text-slate-800">{tomada.numero}</span>
                       </td>
                       <td className="px-5 py-4 whitespace-nowrap">
                         <span className={cn(
-                          "px-2.5 py-1 rounded-lg text-sm font-bold border",
+                          "px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider border",
                           tomada.meioParticipacao === "Consulta Pública"
                             ? "bg-sky-50 text-sky-700 border-sky-200"
                             : "bg-indigo-50 text-indigo-700 border-indigo-200"
@@ -4084,12 +4123,12 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         </span>
                       </td>
                       <td className="px-5 py-4">
-                        <div className="text-base font-bold text-slate-800 mb-1">{tomada.title}</div>
-                        <div className="text-sm text-slate-500 line-clamp-2 leading-relaxed">{tomada.objeto}</div>
+                        <div className="text-sm font-bold text-slate-800 mb-0.5">{tomada.title}</div>
+                        <div className="text-xs text-slate-500 line-clamp-2">{tomada.objeto}</div>
                       </td>
                       <td className="px-5 py-4 whitespace-nowrap">
                         <span className={cn(
-                          "px-2.5 py-1 rounded-lg text-sm font-bold border",
+                          "px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider border",
                           tomada.tipoResolucao === "alteracao"
                             ? "bg-amber-50 text-amber-700 border-amber-200"
                             : "bg-emerald-50 text-emerald-700 border-emerald-200"
@@ -4097,39 +4136,45 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           {tomada.tipoResolucao === "alteracao" ? "Alteração de Norma" : "Nova Norma"}
                         </span>
                       </td>
-                      <td className="px-5 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">
+                      <td className="px-5 py-4 whitespace-nowrap text-xs text-slate-600 font-medium">
                         {formatDateBr(tomada.dataInicio)} até {formatDateBr(tomada.dataFim)}
                       </td>
                       <td className="px-5 py-4 whitespace-nowrap text-center">
                         <span className={cn(
-                          "px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-widest",
+                          "px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider",
                           isAberta ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
                         )}>
                           {status}
                         </span>
                       </td>
-                      <td className="px-5 py-4 whitespace-nowrap text-right space-x-1.5">
-                        <button 
-                          className="p-2 text-slate-400 hover:text-emerald-600 transition-colors rounded-lg hover:bg-emerald-50"
-                          onClick={(e) => { e.stopPropagation(); setSelectedTomada(tomada); setActiveView("technical_analysis"); }}
-                          title="Análise Técnica das Contribuições"
-                        >
-                          <CheckCircle2 size={16} />
-                        </button>
-                        <button 
-                          className="p-2 text-slate-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-slate-100"
-                          onClick={(e) => handleOpenEdit(tomada, e, "geral")}
-                          title="Editar Participação Social (Dados, Minuta e Anexos)"
-                        >
-                          <Edit3 size={16} />
-                        </button>
-                        <button 
-                          className="p-2 text-slate-400 hover:text-rose-500 transition-colors rounded-lg hover:bg-rose-50"
-                          onClick={(e) => handleOpenDeleteConfirm(tomada, e)}
-                          title="Excluir Participação Social"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                      <td className="px-5 py-4 whitespace-nowrap text-center space-x-1.5">
+                        {canViewAnalise && (
+                          <button 
+                            className="p-2 text-slate-400 hover:text-emerald-600 transition-colors rounded-lg hover:bg-emerald-50"
+                            onClick={(e) => { e.stopPropagation(); setSelectedTomada(tomada); setActiveView("technical_analysis"); }}
+                            title="Análise Técnica das Contribuições"
+                          >
+                            <CheckCircle2 size={16} />
+                          </button>
+                        )}
+                        {canEditSubsidios && (
+                          <button 
+                            className="p-2 text-slate-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-slate-100"
+                            onClick={(e) => handleOpenEdit(tomada, e, "geral")}
+                            title="Editar Participação Social (Dados, Minuta e Anexos)"
+                          >
+                            <Edit3 size={16} />
+                          </button>
+                        )}
+                        {canDeleteSubsidios && (
+                          <button 
+                            className="p-2 text-slate-400 hover:text-rose-500 transition-colors rounded-lg hover:bg-rose-50"
+                            onClick={(e) => handleOpenDeleteConfirm(tomada, e)}
+                            title="Excluir Participação Social"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

@@ -56,8 +56,12 @@ import {
   Scale,
   ListTree,
   GripVertical,
-  ClipboardList
+  ClipboardList,
+  Printer,
+  FileSpreadsheet,
+  Download
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { FiscalizacaoEditor } from './FiscalizacaoEditor';
 import { RecursoEditor } from './RecursoEditor';
 import { RecursoRevisaoEditor } from './RecursoRevisaoEditor';
@@ -3519,6 +3523,455 @@ export function PlanningTab({
     return `${prefix}${t.title.replace(/^\[.*?\]\s*/, '')}`;
   };
 
+  const getAreaTableExportData = () => {
+    const targetAreas = selectedAreaIds.length > 0 
+      ? areas.filter(a => selectedAreaIds.includes(a.id))
+      : areas;
+
+    const allAreas = [
+      ...targetAreas,
+      ...(selectedAreaIds.length === 0 ? [{ id: 0, name: "Sem Área de Atuação" } as any] : [])
+    ];
+
+    const sortedAreas = [...allAreas].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    const sortedCategories = [...categories].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    
+    const allCategoriesForGroup = [
+      ...sortedCategories,
+      { id: -1, name: "Sem Categoria" } as any
+    ];
+
+    const exportRows: Array<{
+      areaName: string;
+      groupName: string;
+      task: Task;
+      depth: number;
+      formattedStartDate: string;
+      formattedEndDate: string;
+      quarter: string;
+      month: string;
+      normStatus: string;
+      dlSituation: string;
+    }> = [];
+
+    const collectRowHierarchical = (t: Task, depth: number, areaName: string, groupName: string) => {
+      let q = '-';
+      let mLabel = '-';
+      let formattedEndDate = '-';
+      let formattedStartDate = '-';
+      
+      if (t.startDate) {
+        try {
+          const dStart = new Date(t.startDate);
+          if (!isNaN(dStart.getTime())) {
+            formattedStartDate = dStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+          }
+        } catch(e) {}
+      }
+      
+      if (t.endDate) {
+        try {
+          const d = new Date(t.endDate);
+          if (!isNaN(d.getTime())) {
+            formattedEndDate = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+            const monthIdx = d.getUTCMonth();
+            
+            if (monthIdx < 3) q = '1º Trim.';
+            else if (monthIdx < 6) q = '2º Trim.';
+            else if (monthIdx < 9) q = '3º Trim.';
+            else q = '4º Trim.';
+            
+            const monthName = d.toLocaleDateString("pt-BR", { month: "short", timeZone: "UTC" });
+            mLabel = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+          }
+        } catch(e) {}
+      }
+
+      const normStatus = normalizeStatus(t.status);
+      const dlStatus = getDeadlineStatus(t.endDate, t.status);
+      const dlSituation = normStatus === "Concluída" ? "No Prazo (Concluída)" : dlStatus === "Atrasada" ? "Atrasada" : dlStatus === "Crítica" ? "Crítica" : "No Prazo";
+
+      exportRows.push({
+        areaName,
+        groupName,
+        task: t,
+        depth,
+        formattedStartDate,
+        formattedEndDate,
+        quarter: q,
+        month: mLabel,
+        normStatus,
+        dlSituation
+      });
+
+      const children = (childrenMap[t.id] || []).filter(c => filteredTasks.some(x => x.id === c.id));
+      const sortedChildren = sortAreaTaskList(children);
+      sortedChildren.forEach(child => {
+        collectRowHierarchical(child, depth + 1, areaName, groupName);
+      });
+    };
+
+    sortedAreas.forEach(area => {
+      const areaTasks = filteredTasks.filter(t => {
+        const hasArea = t.areaIds && t.areaIds.length > 0;
+        if (area.id === 0) {
+          return !hasArea;
+        } else {
+          return t.areaIds && t.areaIds.includes(area.id);
+        }
+      });
+
+      if (areaTasks.length > 0) {
+        const secondLevelGroups = areaTableGroupMode === "category" 
+          ? allCategoriesForGroup 
+          : [
+              { id: "Não iniciada", name: "Não iniciada" },
+              { id: "Em andamento", name: "Em andamento" },
+              { id: "Concluída", name: "Concluída" }
+            ];
+
+        secondLevelGroups.forEach(groupDesc => {
+          const groupTasks = areaTasks.filter(t => {
+            if (areaTableGroupMode === "category") {
+              const hasCat = t.categoryIds && t.categoryIds.length > 0;
+              if (groupDesc.id === -1) {
+                return !hasCat;
+              } else {
+                return t.categoryIds && t.categoryIds.includes(groupDesc.id as number);
+              }
+            } else {
+              return normalizeStatus(t.status) === groupDesc.name;
+            }
+          });
+
+          if (groupTasks.length > 0) {
+            const groupRoots = groupTasks.filter(t => !t.parentId || !groupTasks.some(x => x.id === t.parentId));
+            const sortedRoots = sortAreaTaskList(groupRoots);
+
+            sortedRoots.forEach(t => {
+              collectRowHierarchical(t, 0, area.name, groupDesc.name);
+            });
+          }
+        });
+      }
+    });
+
+    return exportRows;
+  };
+
+  const handleExportAreaTableExcel = () => {
+    try {
+      const rows = getAreaTableExportData();
+      if (rows.length === 0) {
+        showToast?.("Aviso", "Não há tarefas para exportar com os filtros atuais.", "warning");
+        return;
+      }
+
+      const excelData = rows.map(r => ({
+        "Área Temática": r.areaName,
+        [areaTableGroupMode === "category" ? "Categoria" : "Status"]: r.groupName,
+        "Título da Tarefa": r.depth > 0 ? `${"   ".repeat(r.depth)}↳ ${r.task.title}` : r.task.title,
+        "Início": r.formattedStartDate,
+        "Prazo": r.formattedEndDate,
+        "Trimestre": r.quarter,
+        "Mês": r.month,
+        "Status": r.normStatus,
+        "Situação": r.dlSituation,
+        "Progresso (%)": `${r.task.progress || 0}%`
+      }));
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      ws["!cols"] = [
+        { wch: 28 }, // Área Temática
+        { wch: 22 }, // Categoria / Status
+        { wch: 45 }, // Título da Tarefa
+        { wch: 14 }, // Início
+        { wch: 14 }, // Prazo
+        { wch: 14 }, // Trimestre
+        { wch: 10 }, // Mês
+        { wch: 16 }, // Status
+        { wch: 22 }, // Situação
+        { wch: 14 }  // Progresso (%)
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, "Tarefas por Área");
+
+      const dateStr = new Date().toISOString().split("T")[0];
+      XLSX.writeFile(wb, `Tarefas_Por_Area_Tematica_${dateStr}.xlsx`);
+      showToast?.("Exportação Concluída", "Planilha Excel gerada com sucesso!", "success");
+    } catch (err) {
+      console.error("Erro ao exportar Excel:", err);
+      showToast?.("Erro na Exportação", "Não foi possível gerar a planilha Excel.", "error");
+    }
+  };
+
+  const handleExportAreaTablePDF = () => {
+    try {
+      const rows = getAreaTableExportData();
+      if (rows.length === 0) {
+        showToast?.("Aviso", "Não há tarefas para exportar com os filtros atuais.", "warning");
+        return;
+      }
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        showToast?.("Aviso", "O bloqueador de pop-ups impediu a abertura do documento. Por favor, permita pop-ups para exportar o PDF.", "warning");
+        return;
+      }
+
+      const escapeHtml = (unsafe: string) => {
+        return (unsafe || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      };
+
+      const generationDate = new Date().toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+
+      let currentArea = "";
+      let currentGroup = "";
+      let tableBodyHtml = "";
+
+      rows.forEach(r => {
+        if (r.areaName !== currentArea) {
+          currentArea = r.areaName;
+          currentGroup = "";
+          tableBodyHtml += `
+            <tr class="area-header-row">
+              <td colspan="8">
+                <strong>ÁREA: ${escapeHtml(r.areaName.toUpperCase())}</strong>
+              </td>
+            </tr>
+          `;
+        }
+
+        if (r.groupName !== currentGroup) {
+          currentGroup = r.groupName;
+          tableBodyHtml += `
+            <tr class="group-header-row">
+              <td colspan="8">
+                <span class="group-label">${areaTableGroupMode === "category" ? "CATEGORIA:" : "STATUS:"}</span>
+                <strong>${escapeHtml(r.groupName)}</strong>
+              </td>
+            </tr>
+          `;
+        }
+
+        const indentStyle = r.depth > 0 ? `padding-left: ${10 + r.depth * 15}px; color: #475569;` : "font-weight: 600;";
+        const prefix = r.depth > 0 ? "↳ " : "";
+        
+        const statusBadgeClass = r.normStatus === "Concluída" ? "status-concluida" : r.normStatus === "Em andamento" ? "status-andamento" : "status-pendente";
+        const sitBadgeClass = r.dlSituation === "No Prazo (Concluída)" || r.dlSituation === "No Prazo" ? "sit-prazo" : r.dlSituation === "Atrasada" ? "sit-atrasada" : "sit-critica";
+
+        tableBodyHtml += `
+          <tr class="task-row">
+            <td style="${indentStyle}">${prefix}${escapeHtml(r.task.title)}</td>
+            <td style="text-align: center;">${r.formattedStartDate}</td>
+            <td style="text-align: center;">${r.formattedEndDate}</td>
+            <td style="text-align: center;">${r.quarter}</td>
+            <td style="text-align: center;">${r.month}</td>
+            <td style="text-align: center;"><span class="badge ${statusBadgeClass}">${escapeHtml(r.normStatus)}</span></td>
+            <td style="text-align: center;"><span class="badge ${sitBadgeClass}">${escapeHtml(r.dlSituation)}</span></td>
+            <td style="text-align: center; font-weight: bold;">${r.task.progress || 0}%</td>
+          </tr>
+        `;
+      });
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Tarefas Agrupadas por Área Temática - ADASA</title>
+          <style>
+            @page {
+              size: landscape;
+              margin: 1.2cm;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              font-size: 10px;
+              color: #1e293b;
+              margin: 0;
+              padding: 10px;
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 2px solid #4f46e5;
+              padding-bottom: 10px;
+              margin-bottom: 15px;
+            }
+            .header-left h1 {
+              margin: 0;
+              font-size: 16px;
+              font-weight: 900;
+              color: #1e1b4b;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            }
+            .header-left p {
+              margin: 3px 0 0 0;
+              font-size: 10px;
+              color: #64748b;
+            }
+            .header-right {
+              text-align: right;
+              font-size: 9px;
+              color: #64748b;
+            }
+            .header-right strong {
+              color: #1e293b;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 20px;
+              page-break-inside: auto;
+            }
+            tr {
+              page-break-inside: avoid;
+              page-break-after: auto;
+            }
+            th {
+              background-color: #f1f5f9;
+              color: #475569;
+              font-weight: 800;
+              font-size: 9px;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              border: 1px solid #cbd5e1;
+              padding: 6px 8px;
+              text-align: left;
+            }
+            th.center {
+              text-align: center;
+            }
+            td {
+              border: 1px solid #e2e8f0;
+              padding: 5px 8px;
+              font-size: 9.5px;
+              vertical-align: middle;
+            }
+            .area-header-row td {
+              background-color: #e0e7ff;
+              color: #312e81;
+              font-size: 11px;
+              font-weight: 900;
+              border-top: 2px solid #818cf8;
+              border-bottom: 1px solid #c7d2fe;
+              padding: 7px 10px;
+            }
+            .group-header-row td {
+              background-color: #f8fafc;
+              color: #334155;
+              font-size: 10px;
+              border-top: 1px solid #cbd5e1;
+              border-bottom: 1px solid #cbd5e1;
+              padding: 5px 12px;
+            }
+            .group-label {
+              font-size: 8.5px;
+              color: #64748b;
+              font-weight: bold;
+              margin-right: 4px;
+            }
+            .task-row:nth-child(even) {
+              background-color: #fafafa;
+            }
+            .badge {
+              display: inline-block;
+              padding: 2px 6px;
+              border-radius: 4px;
+              font-size: 8.5px;
+              font-weight: 700;
+              text-transform: uppercase;
+            }
+            .status-concluida { background-color: #d1fae5; color: #065f46; }
+            .status-andamento { background-color: #dbeafe; color: #1e40af; }
+            .status-pendente { background-color: #f1f5f9; color: #475569; }
+            .sit-prazo { background-color: #d1fae5; color: #065f46; }
+            .sit-atrasada { background-color: #ffe4e6; color: #9f1239; }
+            .sit-critica { background-color: #fef3c7; color: #92400e; }
+            .footer {
+              margin-top: 20px;
+              border-top: 1px solid #e2e8f0;
+              padding-top: 8px;
+              display: flex;
+              justify-content: space-between;
+              font-size: 8px;
+              color: #94a3b8;
+            }
+            @media print {
+              body { padding: 0; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="header-left">
+              <h1>Tarefas Agrupadas por Área Temática</h1>
+              <p>ADASA - Sistema de Gestão do Planejamento e Acompanhamento de Atividades</p>
+            </div>
+            <div class="header-right">
+              <div>Gerado em: <strong>${generationDate}</strong></div>
+              <div>Total de tarefas listadas: <strong>${rows.length}</strong></div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 36%;">Título da Tarefa</th>
+                <th class="center" style="width: 9%;">Início</th>
+                <th class="center" style="width: 9%;">Prazo</th>
+                <th class="center" style="width: 10%;">Trimestre</th>
+                <th class="center" style="width: 8%;">Mês</th>
+                <th class="center" style="width: 11%;">Status</th>
+                <th class="center" style="width: 11%;">Situação</th>
+                <th class="center" style="width: 6%;">Prog.</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableBodyHtml}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            <span>ADASA - Agência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal</span>
+            <span>Relatório Operacional</span>
+          </div>
+
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+              }, 300);
+            };
+          </script>
+        </body>
+        </html>
+      `;
+
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+    } catch (err) {
+      console.error("Erro ao exportar PDF:", err);
+      showToast?.("Erro na Exportação", "Não foi possível gerar o PDF.", "error");
+    }
+  };
+
   if (isInitializing || isApplyingFilters) {
     return <PlanningSkeleton />;
   }
@@ -5722,6 +6175,26 @@ export function PlanningTab({
                   </p>
                 </div>
                 <div className="flex flex-col xl:flex-row items-end gap-4 isolate">
+                  {/* Export Buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleExportAreaTablePDF}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100/80 text-xs font-bold transition-colors shadow-2xs hover:shadow-xs uppercase tracking-wider cursor-pointer"
+                      title="Exportar tabela para PDF"
+                    >
+                      <Printer size={14} className="text-indigo-600" />
+                      <span>Exportar PDF</span>
+                    </button>
+                    <button
+                      onClick={handleExportAreaTableExcel}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100/80 text-xs font-bold transition-colors shadow-2xs hover:shadow-xs uppercase tracking-wider cursor-pointer"
+                      title="Exportar tabela para Excel (.xlsx)"
+                    >
+                      <FileSpreadsheet size={14} className="text-emerald-600" />
+                      <span>Exportar Excel</span>
+                    </button>
+                  </div>
+
                   {/* Selector: Tabela vs Calendário */}
                   <div className="flex items-center gap-3">
                     <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Visualização:</span>

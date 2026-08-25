@@ -7,12 +7,13 @@ import type { FiscalizacaoEtapa } from './lib/fiscalizacao';
 
 export type ActionType = 'view' | 'create' | 'edit' | 'delete';
 export type ModuleId = 
-  | 'planning_dashboard' | 'planning_tasks' | 'planning_plans' | 'planning_areas' | 'planning_categories' | 'planning_responsibles' | 'planning_models' | 'planning_radar'
-  | 'water_balances' | 'systems' | 'supply_sources' | 'demands' | 'explore' | 'analyze' | 'templates'
+  | 'planning_my_tasks' | 'planning_dashboard' | 'planning_tasks' | 'planning_plans' | 'planning_areas' | 'planning_categories' | 'planning_responsibles' | 'planning_import' | 'planning_models' | 'planning_radar'
+  | 'water_balances' | 'systems' | 'supply_sources' | 'demands' | 'explore' | 'analyze' | 'compare' | 'templates'
   | 'reg_cadastro' | 'reg_painel' | 'reg_agenda' | 'reg_agenda_painel'
+  | 'reg_subsidios' | 'reg_subsidios_painel' | 'reg_subsidios_portal' | 'reg_subsidios_analise' | 'reg_subsidios_minuta'
   | 'pub_cadastro' | 'pub_painel'
   | 'fisc_operational' | 'recurso_painel'
-  | 'dashboard' | 'geo' | 'users';
+  | 'dashboard' | 'public_hub' | 'geo' | 'users';
 
 export interface RadarComment {
   id: string;
@@ -49,12 +50,20 @@ export interface UserRole {
   permissions: AppPermission[];
 }
 
+export interface Department {
+  id: number;
+  sigla: string;
+  nome: string;
+}
+
 export interface AppUser {
   id: string;
   name: string;
   email: string;
   roleId: string;
   agency?: string;
+  departmentId?: number;
+  department?: Department;
   status: 'active' | 'inactive';
 }
 

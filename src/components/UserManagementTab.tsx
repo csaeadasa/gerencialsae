@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { Users, Shield, Plus, Edit, Trash2, Key, Check, Info, AlertCircle, UserPlus, UserCheck, X, Briefcase, Layers } from "lucide-react";
-import { AppUser, UserRole, ModuleId, ActionType } from "../types";
+import { Users, Shield, Plus, Edit, Trash2, Key, Check, Info, AlertCircle, UserPlus, UserCheck, X, Briefcase, Layers, Building2 } from "lucide-react";
+import { AppUser, UserRole, ModuleId, ActionType, Department } from "../types";
 import { useAuth } from "../lib/auth";
 
 interface ResponsibleItem {
@@ -18,19 +18,43 @@ interface AreaItem {
   description?: string;
 }
 
-export function UserManagementTab() {
-  const { users, roles, currentUser, addUser, updateUser, deleteUser, addRole, updateRole, checkPermission } = useAuth();
-  const [activeTab, setActiveTab] = useState<"users" | "roles">("users");
+export interface UserManagementTabProps {
+  initialTab?: "users" | "roles" | "departments";
+}
+
+export function UserManagementTab({ initialTab = "users" }: UserManagementTabProps = {}) {
+  const { 
+    users, roles, departments, currentUser, 
+    addUser, updateUser, deleteUser, 
+    addRole, updateRole, 
+    addDepartment, updateDepartment, deleteDepartment,
+    checkPermission 
+  } = useAuth();
+  const [activeTab, setActiveTab] = useState<"users" | "roles" | "departments">(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
   const [isEditingUser, setIsEditingUser] = useState<Partial<AppUser & { password?: string }> | null>(null);
   const [isEditingRole, setIsEditingRole] = useState<Partial<UserRole> | null>(null);
+  const [isEditingDept, setIsEditingDept] = useState<Partial<Department> | null>(null);
 
   // Responsibles & Areas state for verification
   const [responsibles, setResponsibles] = useState<ResponsibleItem[]>([]);
   const [areas, setAreas] = useState<AreaItem[]>([]);
   const [isLoadingResp, setIsLoadingResp] = useState(false);
 
+  // Quick department creation modal state
+  const [isQuickDeptModalOpen, setIsQuickDeptModalOpen] = useState(false);
+  const [quickDeptSigla, setQuickDeptSigla] = useState("");
+  const [quickDeptNome, setQuickDeptNome] = useState("");
+  const [isSavingDept, setIsSavingDept] = useState(false);
+
   // Prompt modal state when user is not a responsible
-  const [responsiblePromptUser, setResponsiblePromptUser] = useState<{ name: string; email: string; agency?: string } | null>(null);
+  const [responsiblePromptUser, setResponsiblePromptUser] = useState<{ name: string; email: string; agency?: string; department?: Department } | null>(null);
 
   // Responsible registration modal state
   const [isResponsibleModalOpen, setIsResponsibleModalOpen] = useState(false);
@@ -100,15 +124,24 @@ export function UserManagementTab() {
     const isNewUser = !isEditingUser.id;
     const savedName = isEditingUser.name.trim();
     const savedEmail = isEditingUser.email.trim();
-    const savedAgency = isEditingUser.agency?.trim();
+    const selectedDept = departments.find(d => d.id === Number(isEditingUser.departmentId));
+    const savedAgency = selectedDept ? selectedDept.sigla : (isEditingUser.agency?.trim() || "");
+
+    const payload = {
+      ...isEditingUser,
+      name: savedName,
+      email: savedEmail,
+      agency: savedAgency,
+      departmentId: selectedDept ? selectedDept.id : (isEditingUser.departmentId ? Number(isEditingUser.departmentId) : undefined)
+    };
 
     if (isEditingUser.id) {
-      await updateUser(isEditingUser.id, isEditingUser as any);
+      await updateUser(isEditingUser.id, payload as any);
       showToast("Usuário atualizado com sucesso!", "success");
       setIsEditingUser(null);
     } else {
       // It's a new user registration
-      await addUser(isEditingUser as any);
+      await addUser(payload as any);
       setIsEditingUser(null);
 
       // Check if user is already a responsible
@@ -119,7 +152,8 @@ export function UserManagementTab() {
         setResponsiblePromptUser({
           name: savedName,
           email: savedEmail,
-          agency: savedAgency
+          agency: savedAgency,
+          department: selectedDept
         });
       } else {
         showToast("Usuário cadastrado com sucesso! Este usuário já está registrado como responsável.", "success");
@@ -127,11 +161,77 @@ export function UserManagementTab() {
     }
   };
 
+  const handleQuickCreateDepartment = async () => {
+    if (!quickDeptSigla.trim() || !quickDeptNome.trim()) {
+      alert("Informe a sigla e o nome completo do departamento.");
+      return;
+    }
+    setIsSavingDept(true);
+    try {
+      const res = await addDepartment({
+        sigla: quickDeptSigla.trim().toUpperCase(),
+        nome: quickDeptNome.trim()
+      });
+      if (res.success && res.data) {
+        showToast(`Departamento ${res.data.sigla} cadastrado com sucesso!`, "success");
+        if (isEditingUser) {
+          setIsEditingUser({
+            ...isEditingUser,
+            departmentId: res.data.id,
+            department: res.data,
+            agency: res.data.sigla
+          });
+        }
+        setQuickDeptSigla("");
+        setQuickDeptNome("");
+        setIsQuickDeptModalOpen(false);
+      } else {
+        alert(res.error || "Erro ao cadastrar departamento");
+      }
+    } catch (err: any) {
+      alert("Erro ao cadastrar departamento: " + err.message);
+    } finally {
+      setIsSavingDept(false);
+    }
+  };
+
+  const handleSaveDepartment = async () => {
+    if (!isEditingDept?.sigla?.trim() || !isEditingDept?.nome?.trim()) {
+      alert("Preencha a sigla e o nome do departamento.");
+      return;
+    }
+    try {
+      if (isEditingDept.id) {
+        await updateDepartment(isEditingDept.id, {
+          sigla: isEditingDept.sigla.trim().toUpperCase(),
+          nome: isEditingDept.nome.trim()
+        });
+        showToast("Departamento atualizado com sucesso!", "success");
+      } else {
+        await addDepartment({
+          sigla: isEditingDept.sigla.trim().toUpperCase(),
+          nome: isEditingDept.nome.trim()
+        });
+        showToast("Departamento cadastrado com sucesso!", "success");
+      }
+      setIsEditingDept(null);
+    } catch (err: any) {
+      alert("Erro ao salvar departamento: " + err.message);
+    }
+  };
+
+  const handleDeleteDepartment = async (id: number, sigla: string) => {
+    if (confirm(`Tem certeza que deseja excluir o departamento ${sigla}?`)) {
+      await deleteDepartment(id);
+      showToast("Departamento removido com sucesso!", "success");
+    }
+  };
+
   // Open the responsible modal pre-filled with the user's data
-  const handleOpenResponsibleModalForUser = (user: { name: string; email: string; agency?: string }) => {
+  const handleOpenResponsibleModalForUser = (user: { name: string; email: string; agency?: string; department?: Department }) => {
     setRespFormName(user.name);
     setRespFormEmail(user.email);
-    setRespFormRole(user.agency || "");
+    setRespFormRole(user.department ? `${user.department.sigla} - ${user.department.nome}` : (user.agency || ""));
     setRespFormAreaIds([]);
     setResponsiblePromptUser(null);
     setIsResponsibleModalOpen(true);
@@ -180,11 +280,11 @@ export function UserManagementTab() {
   const moduleCategories: { category: string, modules: ModuleId[] }[] = [
     {
       category: 'Planejamento Estratégico',
-      modules: ['planning_dashboard', 'planning_tasks', 'planning_plans', 'planning_areas', 'planning_categories', 'planning_responsibles', 'planning_models', 'planning_radar']
+      modules: ['planning_my_tasks', 'planning_dashboard', 'planning_tasks', 'planning_plans', 'planning_areas', 'planning_categories', 'planning_responsibles', 'planning_import', 'planning_models', 'planning_radar']
     },
     {
       category: 'Balanço Hídrico',
-      modules: ['water_balances', 'systems', 'supply_sources', 'demands', 'explore', 'analyze', 'templates']
+      modules: ['water_balances', 'systems', 'supply_sources', 'demands', 'explore', 'analyze', 'compare', 'templates']
     },
     {
       category: 'Resoluções',
@@ -193,6 +293,10 @@ export function UserManagementTab() {
     {
       category: 'Agenda Regulatória',
       modules: ['reg_agenda', 'reg_agenda_painel']
+    },
+    {
+      category: 'Participação Social',
+      modules: ['reg_subsidios', 'reg_subsidios_painel', 'reg_subsidios_portal', 'reg_subsidios_analise', 'reg_subsidios_minuta']
     },
     {
       category: 'Publicações',
@@ -204,7 +308,7 @@ export function UserManagementTab() {
     },
     {
       category: 'Gerencial & Mapas',
-      modules: ['dashboard', 'geo']
+      modules: ['dashboard', 'public_hub', 'geo']
     },
     {
       category: 'Configurações',
@@ -213,12 +317,14 @@ export function UserManagementTab() {
   ];
 
   const moduleNames: Record<ModuleId, string> = {
+    planning_my_tasks: 'Minhas Atividades',
     planning_dashboard: 'Painel de Atividades (Gerencial)',
     planning_tasks: 'Cadastrar Atividades',
     planning_plans: 'Cadastrar Planos',
     planning_areas: 'Cadastrar Áreas Temáticas',
     planning_categories: 'Cadastrar Categorias',
     planning_responsibles: 'Cadastrar Responsáveis',
+    planning_import: 'Importar Atividades',
     planning_models: 'Cadastrar Modelo de Atividades',
     planning_radar: 'Radar de Atividades',
     water_balances: 'Balanço Hídrico (Raiz)',
@@ -226,17 +332,24 @@ export function UserManagementTab() {
     supply_sources: 'Configurar Fontes de Suprimento',
     demands: 'Configurar Demandas',
     explore: 'Cadastrar Balanço Hídrico',
-    analyze: 'Painel do Balanço Hídrico e Comparações',
+    analyze: 'Painel do Balanço Hídrico',
+    compare: 'Comparar Balanços',
     templates: 'Arquivos de Modelo do Balanço',
     reg_cadastro: 'Cadastrar Resoluções',
     reg_painel: 'Painel de Resoluções',
     reg_agenda: 'Cadastrar Agenda Regulatória',
     reg_agenda_painel: 'Painel da Agenda Regulatória',
+    reg_subsidios: 'Cadastrar Participação Social',
+    reg_subsidios_painel: 'Painel da Participação Social',
+    reg_subsidios_portal: 'Portal de Contribuições Públicas',
+    reg_subsidios_analise: 'Análise Técnica de Contribuições',
+    reg_subsidios_minuta: 'Minuta Consolidada da Norma',
     pub_cadastro: 'Cadastrar Publicações',
     pub_painel: 'Painel de Publicações',
     fisc_operational: 'Painel de Fiscalização',
     recurso_painel: 'Painel de Qualidade do Atendimento',
     dashboard: 'Painel Geral Gerencial (Hub)',
+    public_hub: 'Portal da Transparência / Consulta Pública',
     geo: 'Mapa Interativo Avançado',
     users: 'Gestão de Usuários e Permissões'
   };
@@ -312,6 +425,12 @@ export function UserManagementTab() {
         >
           <Shield size={16} /> Papéis e Permissões
         </button>
+        <button
+          className={`flex items-center gap-2 px-4 py-2 ${activeTab === "departments" ? "border-b-2 border-indigo-500 text-indigo-600 font-bold" : "text-slate-500 font-medium"}`}
+          onClick={() => setActiveTab("departments")}
+        >
+          <Building2 size={16} /> Departamentos ({departments.length})
+        </button>
       </div>
 
       {activeTab === "users" && (
@@ -319,10 +438,10 @@ export function UserManagementTab() {
           <div className="p-4 flex items-center justify-between bg-slate-50 border-b border-slate-100">
             <div>
               <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider">Usuários do Sistema</h3>
-              <p className="text-xs text-slate-400 font-medium mt-0.5">Gerenciamento de contas de acesso e vínculo com os responsáveis de atividades.</p>
+              <p className="text-xs text-slate-400 font-medium mt-0.5">Gerenciamento de contas de acesso e vínculo com os responsáveis de atividades e departamentos.</p>
             </div>
             {canCreate && (
-              <button onClick={() => setIsEditingUser({ status: 'active', roleId: roles[0]?.id })} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition shadow-sm">
+              <button onClick={() => setIsEditingUser({ status: 'active', roleId: roles[0]?.id, departmentId: departments[0]?.id })} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition shadow-sm">
                 <Plus size={14} /> Novo Usuário
               </button>
             )}
@@ -335,7 +454,7 @@ export function UserManagementTab() {
                   <th className="px-4 py-3">Nome</th>
                   <th className="px-4 py-3">E-mail</th>
                   <th className="px-4 py-3">Papel</th>
-                  <th className="px-4 py-3">Agência (Opcional)</th>
+                  <th className="px-4 py-3">Departamento</th>
                   <th className="px-4 py-3">Responsável (Atividades)</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Ações</th>
@@ -344,6 +463,7 @@ export function UserManagementTab() {
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {users.map(u => {
                   const isResp = checkIsResponsible(u.name, u.email);
+                  const userDept = u.department || departments.find(d => d.id === u.departmentId || d.sigla === u.agency);
                   return (
                     <tr key={u.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3 font-medium">
@@ -351,7 +471,20 @@ export function UserManagementTab() {
                       </td>
                       <td className="px-4 py-3 text-slate-500">{u.email}</td>
                       <td className="px-4 py-3"><span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold border border-slate-200">{roles.find(r => r.id === u.roleId)?.name || 'Desconhecido'}</span></td>
-                      <td className="px-4 py-3 text-slate-500">{u.agency || '-'}</td>
+                      <td className="px-4 py-3">
+                        {userDept ? (
+                          <span className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1 rounded-lg text-xs font-bold" title={userDept.nome}>
+                            <Building2 size={12} className="text-indigo-500" />
+                            {userDept.sigla}
+                          </span>
+                        ) : u.agency ? (
+                          <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs font-semibold">
+                            {u.agency}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">-</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         {isResp ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
@@ -359,7 +492,7 @@ export function UserManagementTab() {
                           </span>
                         ) : (
                           <button
-                            onClick={() => handleOpenResponsibleModalForUser({ name: u.name, email: u.email, agency: u.agency })}
+                            onClick={() => handleOpenResponsibleModalForUser({ name: u.name, email: u.email, agency: u.agency, department: userDept })}
                             className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-full transition-colors"
                             title="Cadastrar como responsável de atividades"
                           >
@@ -375,7 +508,7 @@ export function UserManagementTab() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-2">
                           {canEdit && (
-                            <button onClick={() => setIsEditingUser(u)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition" title="Editar Usuário">
+                            <button onClick={() => setIsEditingUser({ ...u, departmentId: u.departmentId || userDept?.id })} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition" title="Editar Usuário">
                               <Edit size={14} />
                             </button>
                           )}
@@ -389,6 +522,86 @@ export function UserManagementTab() {
                     </tr>
                   );
                 })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "departments" && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-150">
+          <div className="p-4 flex items-center justify-between bg-slate-50 border-b border-slate-100">
+            <div>
+              <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                <Building2 size={16} className="text-indigo-600" />
+                Departamentos e Agências Cadastradas
+              </h3>
+              <p className="text-xs text-slate-400 font-medium mt-0.5">Tabela de órgãos/departamentos para vinculação com usuários e prestadores.</p>
+            </div>
+            {canCreate && (
+              <button 
+                onClick={() => setIsEditingDept({ sigla: "", nome: "" })} 
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition shadow-sm"
+              >
+                <Plus size={14} /> Novo Departamento
+              </button>
+            )}
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-slate-500 text-xs font-bold border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 w-16">ID</th>
+                  <th className="px-4 py-3 w-40">Sigla</th>
+                  <th className="px-4 py-3">Nome do Departamento / Órgão</th>
+                  <th className="px-4 py-3 text-center w-36">Usuários Vinculados</th>
+                  <th className="px-4 py-3 text-right w-28">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {departments.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-slate-400 italic text-xs">
+                      Nenhum departamento cadastrado. Clique no botão acima para adicionar.
+                    </td>
+                  </tr>
+                ) : (
+                  departments.map(d => {
+                    const userCount = users.filter(u => u.departmentId === d.id || u.agency === d.sigla).length;
+                    return (
+                      <tr key={d.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3 font-mono text-xs text-slate-400">#{d.id}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg font-black text-xs">
+                            <Building2 size={12} className="text-indigo-500" />
+                            {d.sigla}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-800">{d.nome}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">
+                            {userCount} {userCount === 1 ? 'usuário' : 'usuários'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex justify-end gap-2">
+                            {canEdit && (
+                              <button onClick={() => setIsEditingDept(d)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition" title="Editar Departamento">
+                                <Edit size={14} />
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button onClick={() => handleDeleteDepartment(d.id, d.sigla)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition" title="Excluir Departamento">
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -532,8 +745,37 @@ export function UserManagementTab() {
                  </select>
                </div>
                <div className="space-y-1">
-                 <label className="text-xs font-bold text-slate-500 uppercase">Agência (Opcional)</label>
-                 <input type="text" value={isEditingUser.agency || ''} onChange={e => setIsEditingUser({...isEditingUser, agency: e.target.value})} placeholder="Ex: ADASA / CAESB" className="w-full p-2.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-500" />
+                 <div className="flex items-center justify-between">
+                   <label className="text-xs font-bold text-slate-500 uppercase">Departamento / Agência</label>
+                   <button
+                     type="button"
+                     onClick={() => setIsQuickDeptModalOpen(true)}
+                     className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 hover:underline"
+                   >
+                     <Plus size={12} /> + Novo
+                   </button>
+                 </div>
+                 <select
+                   value={isEditingUser.departmentId || ''}
+                   onChange={e => {
+                     const deptId = e.target.value ? Number(e.target.value) : undefined;
+                     const dept = departments.find(d => d.id === deptId);
+                     setIsEditingUser({
+                       ...isEditingUser,
+                       departmentId: deptId,
+                       department: dept,
+                       agency: dept ? dept.sigla : ''
+                     });
+                   }}
+                   className="w-full p-2.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-500 bg-white"
+                 >
+                   <option value="">Selecione um departamento...</option>
+                   {departments.map(d => (
+                     <option key={d.id} value={d.id}>
+                       {d.sigla} - {d.nome}
+                     </option>
+                   ))}
+                 </select>
                </div>
                <div className="space-y-1">
                  <label className="text-xs font-bold text-slate-500 uppercase">Status</label>
@@ -547,6 +789,107 @@ export function UserManagementTab() {
                 <button onClick={() => setIsEditingUser(null)} className="px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-200 rounded-xl transition">Cancelar</button>
                 <button onClick={handleSaveUser} className="px-4 py-2 text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition shadow-sm">Salvar Usuário</button>
              </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Add Department Modal */}
+      {isQuickDeptModalOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
+            <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="font-black text-slate-800 text-sm uppercase tracking-wider flex items-center gap-2">
+                <Building2 size={16} className="text-indigo-600" />
+                Novo Departamento
+              </h3>
+              <button onClick={() => setIsQuickDeptModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Sigla do Departamento / Órgão <span className="text-rose-500">*</span></label>
+                <input
+                  type="text"
+                  value={quickDeptSigla}
+                  onChange={e => setQuickDeptSigla(e.target.value.toUpperCase())}
+                  placeholder="Ex: CSAE, ADASA, CAESB"
+                  className="w-full p-2.5 text-sm font-bold border border-slate-200 rounded-lg outline-none focus:border-indigo-500 uppercase"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Nome Completo <span className="text-rose-500">*</span></label>
+                <input
+                  type="text"
+                  value={quickDeptNome}
+                  onChange={e => setQuickDeptNome(e.target.value)}
+                  placeholder="Ex: Superintendência de Abastecimento de Água e Esgoto"
+                  className="w-full p-2.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+              <button onClick={() => setIsQuickDeptModalOpen(false)} className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded-xl transition">
+                Cancelar
+              </button>
+              <button
+                onClick={handleQuickCreateDepartment}
+                disabled={isSavingDept}
+                className="px-4 py-2 text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition shadow-sm"
+              >
+                {isSavingDept ? "Salvando..." : "Salvar Departamento"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Department Edit/Create Modal */}
+      {isEditingDept && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
+            <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="font-black text-slate-800 text-sm uppercase tracking-wider flex items-center gap-2">
+                <Building2 size={16} className="text-indigo-600" />
+                {isEditingDept.id ? "Editar Departamento" : "Novo Departamento"}
+              </h3>
+              <button onClick={() => setIsEditingDept(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Sigla do Departamento <span className="text-rose-500">*</span></label>
+                <input
+                  type="text"
+                  value={isEditingDept.sigla || ""}
+                  onChange={e => setIsEditingDept({ ...isEditingDept, sigla: e.target.value.toUpperCase() })}
+                  placeholder="Ex: ADASA, CAESB, SEDUH"
+                  className="w-full p-2.5 text-sm font-bold border border-slate-200 rounded-lg outline-none focus:border-indigo-500 uppercase"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Nome Completo <span className="text-rose-500">*</span></label>
+                <input
+                  type="text"
+                  value={isEditingDept.nome || ""}
+                  onChange={e => setIsEditingDept({ ...isEditingDept, nome: e.target.value })}
+                  placeholder="Ex: Agência Reguladora de Águas, Energia e Saneamento Básico"
+                  className="w-full p-2.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+              <button onClick={() => setIsEditingDept(null)} className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded-xl transition">
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveDepartment}
+                className="px-4 py-2 text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition shadow-sm"
+              >
+                Salvar Departamento
+              </button>
+            </div>
           </div>
         </div>
       )}

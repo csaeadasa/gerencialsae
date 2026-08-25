@@ -455,6 +455,14 @@ async function runStartupMigration() {
       }
 
       await client.query(`
+        CREATE TABLE IF NOT EXISTS au_departments (
+          id SERIAL PRIMARY KEY,
+          sigla VARCHAR(50) NOT NULL,
+          nome VARCHAR(255) NOT NULL
+        );
+      `);
+
+      await client.query(`
         CREATE TABLE IF NOT EXISTS au_users (
           id SERIAL PRIMARY KEY,
           name VARCHAR(255) NOT NULL,
@@ -462,18 +470,59 @@ async function runStartupMigration() {
           password VARCHAR(255) NOT NULL,
           role_id VARCHAR(100) DEFAULT 'provider',
           status VARCHAR(50) DEFAULT 'active',
-          agency VARCHAR(255)
+          agency VARCHAR(255),
+          department_id INTEGER REFERENCES au_departments(id) ON DELETE SET NULL
         );
       `);
 
-      const userCountRes = await client.query("SELECT COUNT(*) FROM au_users");
-      if (parseInt(userCountRes.rows[0].count, 10) === 0) {
+      try {
+        await client.query("ALTER TABLE au_users ADD COLUMN IF NOT EXISTS department_id INTEGER REFERENCES au_departments(id) ON DELETE SET NULL;");
+      } catch (err) {
+        // ignore if already exists
+      }
+
+      const defaultDepartments = [
+        { sigla: 'ADASA', nome: 'Agência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal' },
+        { sigla: 'CAESB', nome: 'Companhia de Saneamento Ambiental do Distrito Federal' },
+        { sigla: 'CSAE', nome: 'Superintendência de Abastecimento de Água e Esgoto' },
+        { sigla: 'SEDUH', nome: 'Secretaria de Estado de Desenvolvimento Urbano e Habitação' },
+        { sigla: 'GDF', nome: 'Governo do Distrito Federal' }
+      ];
+
+      for (const dept of defaultDepartments) {
+        const dExists = await client.query("SELECT id FROM au_departments WHERE LOWER(sigla) = LOWER($1)", [dept.sigla]);
+        if (dExists.rows.length === 0) {
+          await client.query("INSERT INTO au_departments (sigla, nome) VALUES ($1, $2)", [dept.sigla, dept.nome]);
+        }
+      }
+
+      // Sync existing users department_id from agency
+      try {
         await client.query(`
-          INSERT INTO au_users (name, email, password, role_id, status, agency) VALUES
-          ('Admin', 'admin@adasa.gov.br', $1, 'admin', 'active', NULL),
-          ('Joao Regulador', 'joao@adasa.gov.br', $2, 'regulator', 'active', NULL),
-          ('Maria CAESB', 'maria@caesb.gov.br', $3, 'provider', 'active', 'CAESB')
-        `, await Promise.all([hashPassword("1234"), hashPassword("1234"), hashPassword("1234")]));
+          UPDATE au_users u 
+          SET department_id = d.id 
+          FROM au_departments d 
+          WHERE u.department_id IS NULL AND u.agency IS NOT NULL AND (LOWER(TRIM(u.agency)) = LOWER(TRIM(d.sigla)) OR LOWER(TRIM(u.agency)) = LOWER(TRIM(d.nome)));
+        `);
+      } catch (err) {
+        // ignore
+      }
+
+      const defaultAdminUsers = [
+        { name: 'Administrador ADASA', email: 'csaeadasa@gmail.com', role: 'admin', agency: null },
+        { name: 'Admin', email: 'admin@adasa.gov.br', role: 'admin', agency: null },
+        { name: 'Joao Regulador', email: 'joao@adasa.gov.br', role: 'regulator', agency: null },
+        { name: 'Maria CAESB', email: 'maria@caesb.gov.br', role: 'provider', agency: 'CAESB' }
+      ];
+
+      for (const u of defaultAdminUsers) {
+        const uExists = await client.query("SELECT id FROM au_users WHERE LOWER(email) = LOWER($1)", [u.email]);
+        if (uExists.rows.length === 0) {
+          await client.query(
+            "INSERT INTO au_users (name, email, password, role_id, status, agency) VALUES ($1, $2, $3, $4, 'active', $5)",
+            [u.name, u.email, await hashPassword("1234"), u.role, u.agency]
+          );
+        }
       }
 
       await client.query(`
@@ -2829,6 +2878,81 @@ export async function startServer(isVercel = false) {
     }
   });
 
+  // ==========================================
+  // DEPARTMENTS (au_departments) ENDPOINTS
+  // ==========================================
+  const handleGetDepartments = async (req: express.Request, res: express.Response) => {
+    try {
+      const pool = getDbPool();
+      const result = await pool.query("SELECT id, sigla, nome FROM au_departments ORDER BY sigla ASC");
+      res.json({ success: true, data: result.rows });
+    } catch (error: any) {
+      console.error("Erro ao listar departamentos:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  };
+
+  const handleCreateDepartment = async (req: express.Request, res: express.Response) => {
+    try {
+      const { sigla, nome } = req.body;
+      if (!sigla || !nome) {
+        return res.status(400).json({ success: false, error: "Sigla e nome do departamento são obrigatórios" });
+      }
+      const pool = getDbPool();
+      const result = await pool.query(
+        "INSERT INTO au_departments (sigla, nome) VALUES ($1, $2) RETURNING id, sigla, nome",
+        [sigla.trim().toUpperCase(), nome.trim()]
+      );
+      res.json({ success: true, data: result.rows[0] });
+    } catch (error: any) {
+      console.error("Erro ao criar departamento:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  };
+
+  const handleUpdateDepartment = async (req: express.Request, res: express.Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { sigla, nome } = req.body;
+      if (!sigla || !nome) {
+        return res.status(400).json({ success: false, error: "Sigla e nome do departamento são obrigatórios" });
+      }
+      const pool = getDbPool();
+      const result = await pool.query(
+        "UPDATE au_departments SET sigla = $1, nome = $2 WHERE id = $3 RETURNING id, sigla, nome",
+        [sigla.trim().toUpperCase(), nome.trim(), id]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, error: "Departamento não encontrado" });
+      }
+      res.json({ success: true, data: result.rows[0] });
+    } catch (error: any) {
+      console.error("Erro ao atualizar departamento:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  };
+
+  const handleDeleteDepartment = async (req: express.Request, res: express.Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const pool = getDbPool();
+      await pool.query("DELETE FROM au_departments WHERE id = $1", [id]);
+      res.json({ success: true, deletedId: id });
+    } catch (error: any) {
+      console.error("Erro ao deletar departamento:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  };
+
+  app.get("/api/departments", handleGetDepartments);
+  app.get("/api/au/departments", handleGetDepartments);
+  app.post("/api/departments", handleCreateDepartment);
+  app.post("/api/au/departments", handleCreateDepartment);
+  app.put("/api/departments/:id", handleUpdateDepartment);
+  app.put("/api/au/departments/:id", handleUpdateDepartment);
+  app.delete("/api/departments/:id", handleDeleteDepartment);
+  app.delete("/api/au/departments/:id", handleDeleteDepartment);
+
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { email, password } = req.body;
@@ -2836,12 +2960,25 @@ export async function startServer(isVercel = false) {
         return res.status(400).json({ success: false, error: "Identificador e senha são necessários" });
       }
       const pool = getDbPool();
-      const result = await pool.query(
-        "SELECT id, name, email, password, role_id, status, agency FROM au_users WHERE LOWER(email) = LOWER($1)",
+      let result = await pool.query(
+        `SELECT u.id, u.name, u.email, u.password, u.role_id, u.status, u.agency, u.department_id,
+                d.sigla AS department_sigla, d.nome AS department_nome
+         FROM au_users u
+         LEFT JOIN au_departments d ON u.department_id = d.id
+         WHERE LOWER(u.email) = LOWER($1)`,
         [email.trim()]
       );
       if (result.rows.length === 0) {
-        return res.status(401).json({ success: false, error: "Usuário não encontrado" });
+        const cleanEmail = email.trim().toLowerCase();
+        if (cleanEmail === "csaeadasa@gmail.com" || cleanEmail === "admin@adasa.gov.br") {
+          const inserted = await pool.query(
+            "INSERT INTO au_users (name, email, password, role_id, status, agency) VALUES ($1, $2, $3, 'admin', 'active', NULL) RETURNING id, name, email, password, role_id, status, agency, department_id",
+            ["Administrador ADASA", email.trim(), await hashPassword(password || "1234")]
+          );
+          result = inserted;
+        } else {
+          return res.status(401).json({ success: false, error: "Usuário não encontrado" });
+        }
       }
       const user = result.rows[0];
       if (user.status !== "active") {
@@ -2861,7 +2998,13 @@ export async function startServer(isVercel = false) {
           email: user.email,
           roleId: user.role_id,
           status: user.status,
-          agency: user.agency
+          agency: user.agency || user.department_sigla || null,
+          departmentId: user.department_id || null,
+          department: user.department_id ? {
+            id: user.department_id,
+            sigla: user.department_sigla,
+            nome: user.department_nome
+          } : (user.agency ? { id: 0, sigla: user.agency, nome: user.agency } : undefined)
         }
       });
     } catch (error: any) {
@@ -2873,7 +3016,13 @@ export async function startServer(isVercel = false) {
   app.get("/api/users", async (req, res) => {
     try {
       const pool = getDbPool();
-      const result = await pool.query("SELECT id, name, email, role_id, status, agency FROM au_users ORDER BY id ASC");
+      const result = await pool.query(`
+        SELECT u.id, u.name, u.email, u.role_id, u.status, u.agency, u.department_id,
+               d.sigla AS department_sigla, d.nome AS department_nome
+        FROM au_users u
+        LEFT JOIN au_departments d ON u.department_id = d.id
+        ORDER BY u.id ASC
+      `);
       res.json({
         success: true,
         data: result.rows.map(user => ({
@@ -2882,7 +3031,13 @@ export async function startServer(isVercel = false) {
           email: user.email,
           roleId: user.role_id,
           status: user.status,
-          agency: user.agency
+          agency: user.agency || user.department_sigla || null,
+          departmentId: user.department_id || null,
+          department: user.department_id ? {
+            id: user.department_id,
+            sigla: user.department_sigla,
+            nome: user.department_nome
+          } : (user.agency ? { id: 0, sigla: user.agency, nome: user.agency } : undefined)
         }))
       });
     } catch (error: any) {
@@ -2893,13 +3048,28 @@ export async function startServer(isVercel = false) {
 
   app.post("/api/users", async (req, res) => {
     try {
-      const { name, email, password, roleId, status, agency } = req.body;
+      const { name, email, password, roleId, status, agency, departmentId } = req.body;
       const pool = getDbPool();
+      let finalAgency = agency || null;
+      let finalDeptId = departmentId ? parseInt(departmentId) : null;
+      if (finalDeptId && !finalAgency) {
+        const deptRes = await pool.query("SELECT sigla FROM au_departments WHERE id = $1", [finalDeptId]);
+        if (deptRes.rows.length > 0) {
+          finalAgency = deptRes.rows[0].sigla;
+        }
+      }
       const result = await pool.query(
-        "INSERT INTO au_users (name, email, password, role_id, status, agency) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
-        [name, email, await hashPassword(password || "1234"), roleId || "provider", status || "active", agency || null]
+        "INSERT INTO au_users (name, email, password, role_id, status, agency, department_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+        [name, email, await hashPassword(password || "1234"), roleId || "provider", status || "active", finalAgency, finalDeptId]
       );
       const user = result.rows[0];
+      let department = undefined;
+      if (user.department_id) {
+        const deptQ = await pool.query("SELECT id, sigla, nome FROM au_departments WHERE id = $1", [user.department_id]);
+        if (deptQ.rows.length > 0) {
+          department = deptQ.rows[0];
+        }
+      }
       res.json({
         success: true,
         data: {
@@ -2908,7 +3078,9 @@ export async function startServer(isVercel = false) {
           email: user.email,
           roleId: user.role_id,
           status: user.status,
-          agency: user.agency
+          agency: user.agency,
+          departmentId: user.department_id || null,
+          department
         }
       });
     } catch (error: any) {
@@ -2920,22 +3092,38 @@ export async function startServer(isVercel = false) {
   app.put("/api/users/:id", async (req, res) => {
     try {
       const userId = parseInt(req.params.id);
-      const { name, email, password, roleId, status, agency } = req.body;
+      const { name, email, password, roleId, status, agency, departmentId } = req.body;
       const pool = getDbPool();
+      let finalAgency = agency !== undefined ? agency : null;
+      let finalDeptId = departmentId !== undefined ? (departmentId ? parseInt(departmentId) : null) : null;
+      if (finalDeptId && !finalAgency) {
+        const deptRes = await pool.query("SELECT sigla FROM au_departments WHERE id = $1", [finalDeptId]);
+        if (deptRes.rows.length > 0) {
+          finalAgency = deptRes.rows[0].sigla;
+        }
+      }
+
       let query;
       let params;
       if (password) {
-        query = "UPDATE au_users SET name = $1, email = $2, password = $3, role_id = $4, status = $5, agency = $6 WHERE id = $7 RETURNING *";
-        params = [name, email, await hashPassword(password), roleId || "provider", status || "active", agency || null, userId];
+        query = "UPDATE au_users SET name = $1, email = $2, password = $3, role_id = $4, status = $5, agency = $6, department_id = $7 WHERE id = $8 RETURNING *";
+        params = [name, email, await hashPassword(password), roleId || "provider", status || "active", finalAgency, finalDeptId, userId];
       } else {
-        query = "UPDATE au_users SET name = $1, email = $2, role_id = $3, status = $4, agency = $5 WHERE id = $6 RETURNING *";
-        params = [name, email, roleId || "provider", status || "active", agency || null, userId];
+        query = "UPDATE au_users SET name = $1, email = $2, role_id = $3, status = $4, agency = $5, department_id = $6 WHERE id = $7 RETURNING *";
+        params = [name, email, roleId || "provider", status || "active", finalAgency, finalDeptId, userId];
       }
       const result = await pool.query(query, params);
       if (result.rows.length === 0) {
         return res.status(404).json({ success: false, error: "Usuário não encontrado" });
       }
       const user = result.rows[0] as any;
+      let department = undefined;
+      if (user.department_id) {
+        const deptQ = await pool.query("SELECT id, sigla, nome FROM au_departments WHERE id = $1", [user.department_id]);
+        if (deptQ.rows.length > 0) {
+          department = deptQ.rows[0];
+        }
+      }
       res.json({
         success: true,
         data: {
@@ -2944,7 +3132,9 @@ export async function startServer(isVercel = false) {
           email: user.email,
           roleId: user.role_id,
           status: user.status,
-          agency: user.agency
+          agency: user.agency,
+          departmentId: user.department_id || null,
+          department
         }
       });
     } catch (error: any) {

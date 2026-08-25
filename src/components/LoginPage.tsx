@@ -9,33 +9,8 @@ import {
   Mail,
   ShieldAlert,
   ShieldCheck,
-  UserCheck,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-
-const suggestions = [
-  {
-    name: "Administrador ADASA",
-    email: "admin@adasa.gov.br",
-    pass: "1234",
-    badge: "Acesso Total",
-    accent: "text-sky-300 border-sky-400/20 bg-sky-400/10",
-  },
-  {
-    name: "Joao Regulador",
-    email: "joao@adasa.gov.br",
-    pass: "1234",
-    badge: "Auditoria",
-    accent: "text-emerald-300 border-emerald-400/20 bg-emerald-400/10",
-  },
-  {
-    name: "Maria CAESB",
-    email: "maria@caesb.gov.br",
-    pass: "1234",
-    badge: "Prestador",
-    accent: "text-cyan-300 border-cyan-400/20 bg-cyan-400/10",
-  },
-];
 
 export function LoginPage() {
   const { loginWithCredentials } = useAuth();
@@ -61,12 +36,6 @@ export function LoginPage() {
     if (!result.success) {
       setErrorMsg(result.error || "E-mail ou senha incorretos.");
     }
-  };
-
-  const selectUserSuggestion = (suggestedEmail: string, suggestedPass: string) => {
-    setEmail(suggestedEmail);
-    setPassword(suggestedPass);
-    setErrorMsg("");
   };
 
   return (
@@ -272,65 +241,6 @@ export function LoginPage() {
                   )}
                 </button>
               </form>
-
-              <div className="mt-6 border-t border-white/[0.075] pt-5">
-                <div className="mb-3 flex items-end justify-between gap-4">
-                  <div>
-                    <h3 className="text-xs font-black uppercase tracking-[0.16em] text-slate-200">
-                      Logins disponíveis
-                    </h3>
-                    <p className="mt-1 text-[10px] font-medium text-slate-500">
-                      Clique em um perfil para preencher o acesso.
-                    </p>
-                  </div>
-                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[9px] font-black text-slate-400">
-                    SENHA 1234
-                  </span>
-                </div>
-
-                <div className="grid gap-2.5">
-                  {suggestions.map((suggestion) => {
-                    const isSelected = email === suggestion.email;
-                    return (
-                      <button
-                        type="button"
-                        key={suggestion.email}
-                        disabled={isLoading}
-                        onClick={() =>
-                          selectUserSuggestion(suggestion.email, suggestion.pass)
-                        }
-                        aria-pressed={isSelected}
-                        className={`group flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
-                          isSelected
-                            ? "border-sky-400/55 bg-sky-400/[0.12] ring-2 ring-sky-400/10"
-                            : "border-white/[0.075] bg-white/[0.035] hover:border-white/15 hover:bg-white/[0.06]"
-                        }`}
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <span
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${suggestion.accent}`}
-                          >
-                            <UserCheck size={15} />
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block truncate text-xs font-bold text-slate-100">
-                              {suggestion.name}
-                            </span>
-                            <span className="mt-0.5 block truncate text-[10px] font-medium text-slate-500">
-                              {suggestion.email}
-                            </span>
-                          </span>
-                        </div>
-                        <span
-                          className={`shrink-0 rounded-full border px-2 py-1 text-[8px] font-black uppercase tracking-wider ${suggestion.accent}`}
-                        >
-                          {suggestion.badge}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
             </div>
           </div>
 

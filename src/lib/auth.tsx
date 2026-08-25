@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { AppUser, UserRole, ModuleId, ActionType } from '../types';
+import { AppUser, UserRole, ModuleId, ActionType, Department } from '../types';
 
 export const DEFAULT_ROLES: UserRole[] = [
   {
@@ -7,12 +7,14 @@ export const DEFAULT_ROLES: UserRole[] = [
     name: 'Administrador',
     description: 'Acesso total ao sistema, todas as ações permitidas',
     permissions: [
+      { moduleId: 'planning_my_tasks', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'planning_dashboard', actions: ['view'] },
       { moduleId: 'planning_tasks', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'planning_plans', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'planning_areas', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'planning_categories', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'planning_responsibles', actions: ['view', 'create', 'edit', 'delete'] },
+      { moduleId: 'planning_import', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'planning_models', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'planning_radar', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'water_balances', actions: ['view', 'create', 'edit', 'delete'] },
@@ -21,14 +23,21 @@ export const DEFAULT_ROLES: UserRole[] = [
       { moduleId: 'demands', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'explore', actions: ['view'] },
       { moduleId: 'analyze', actions: ['view'] },
+      { moduleId: 'compare', actions: ['view'] },
       { moduleId: 'templates', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'reg_cadastro', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'reg_painel', actions: ['view'] },
       { moduleId: 'reg_agenda', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'reg_agenda_painel', actions: ['view'] },
+      { moduleId: 'reg_subsidios', actions: ['view', 'create', 'edit', 'delete'] },
+      { moduleId: 'reg_subsidios_painel', actions: ['view'] },
+      { moduleId: 'reg_subsidios_portal', actions: ['view', 'create', 'edit', 'delete'] },
+      { moduleId: 'reg_subsidios_analise', actions: ['view', 'create', 'edit', 'delete'] },
+      { moduleId: 'reg_subsidios_minuta', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'pub_cadastro', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'pub_painel', actions: ['view'] },
       { moduleId: 'dashboard', actions: ['view'] },
+      { moduleId: 'public_hub', actions: ['view'] },
       { moduleId: 'geo', actions: ['view'] },
       { moduleId: 'users', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'fisc_operational', actions: ['view', 'create', 'edit', 'delete'] },
@@ -40,12 +49,14 @@ export const DEFAULT_ROLES: UserRole[] = [
     name: 'Regulador',
     description: 'Acesso de auditoria, edição e alteração técnica, com restrições de exclusão.',
     permissions: [
+      { moduleId: 'planning_my_tasks', actions: ['view', 'create', 'edit'] },
       { moduleId: 'planning_dashboard', actions: ['view'] },
       { moduleId: 'planning_tasks', actions: ['view', 'create', 'edit'] },
       { moduleId: 'planning_plans', actions: ['view', 'create', 'edit'] },
       { moduleId: 'planning_areas', actions: ['view', 'create', 'edit'] },
       { moduleId: 'planning_categories', actions: ['view', 'create', 'edit'] },
       { moduleId: 'planning_responsibles', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'planning_import', actions: ['view', 'create', 'edit'] },
       { moduleId: 'planning_models', actions: ['view', 'create', 'edit'] },
       { moduleId: 'planning_radar', actions: ['view', 'create', 'edit'] },
       { moduleId: 'water_balances', actions: ['view', 'create', 'edit'] },
@@ -54,14 +65,21 @@ export const DEFAULT_ROLES: UserRole[] = [
       { moduleId: 'demands', actions: ['view', 'create', 'edit'] },
       { moduleId: 'explore', actions: ['view'] },
       { moduleId: 'analyze', actions: ['view'] },
+      { moduleId: 'compare', actions: ['view'] },
       { moduleId: 'templates', actions: ['view', 'create', 'edit'] },
       { moduleId: 'reg_cadastro', actions: ['view', 'create', 'edit'] },
       { moduleId: 'reg_painel', actions: ['view'] },
       { moduleId: 'reg_agenda', actions: ['view', 'create', 'edit'] },
       { moduleId: 'reg_agenda_painel', actions: ['view'] },
+      { moduleId: 'reg_subsidios', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'reg_subsidios_painel', actions: ['view'] },
+      { moduleId: 'reg_subsidios_portal', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'reg_subsidios_analise', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'reg_subsidios_minuta', actions: ['view', 'create', 'edit'] },
       { moduleId: 'pub_cadastro', actions: ['view', 'create', 'edit'] },
       { moduleId: 'pub_painel', actions: ['view'] },
       { moduleId: 'dashboard', actions: ['view'] },
+      { moduleId: 'public_hub', actions: ['view'] },
       { moduleId: 'geo', actions: ['view'] },
       { moduleId: 'users', actions: ['view'] },
       { moduleId: 'fisc_operational', actions: ['view', 'create', 'edit'] },
@@ -78,21 +96,33 @@ export const DEFAULT_ROLES: UserRole[] = [
       { moduleId: 'supply_sources', actions: ['view'] },
       { moduleId: 'demands', actions: ['view'] },
       { moduleId: 'explore', actions: ['view'] },
+      { moduleId: 'compare', actions: ['view'] },
       { moduleId: 'dashboard', actions: ['view'] },
+      { moduleId: 'public_hub', actions: ['view'] },
     ]
   }
 ];
 
+export const DEFAULT_DEPARTMENTS: Department[] = [
+  { id: 1, sigla: 'ADASA', nome: 'Agência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal' },
+  { id: 2, sigla: 'CAESB', nome: 'Companhia de Saneamento Ambiental do Distrito Federal' },
+  { id: 3, sigla: 'CSAE', nome: 'Superintendência de Abastecimento de Água e Esgoto' },
+  { id: 4, sigla: 'SEDUH', nome: 'Secretaria de Estado de Desenvolvimento Urbano e Habitação' },
+  { id: 5, sigla: 'GDF', nome: 'Governo do Distrito Federal' },
+];
+
 export const DEFAULT_USERS: AppUser[] = [
-  { id: '1', name: 'Admin', email: 'admin@adasa.gov.br', roleId: 'admin', status: 'active' },
-  { id: '2', name: 'Joao Regulador', email: 'joao@adasa.gov.br', roleId: 'regulator', status: 'active' },
-  { id: '3', name: 'Maria CAESB', email: 'maria@caesb.gov.br', roleId: 'provider', agency: 'CAESB', status: 'active' },
+  { id: '1', name: 'Administrador ADASA', email: 'csaeadasa@gmail.com', roleId: 'admin', status: 'active', departmentId: 1, department: DEFAULT_DEPARTMENTS[0] },
+  { id: '2', name: 'Admin', email: 'admin@adasa.gov.br', roleId: 'admin', status: 'active', departmentId: 1, department: DEFAULT_DEPARTMENTS[0] },
+  { id: '3', name: 'Joao Regulador', email: 'joao@adasa.gov.br', roleId: 'regulator', status: 'active', departmentId: 1, department: DEFAULT_DEPARTMENTS[0] },
+  { id: '4', name: 'Maria CAESB', email: 'maria@caesb.gov.br', roleId: 'provider', agency: 'CAESB', status: 'active', departmentId: 2, department: DEFAULT_DEPARTMENTS[1] },
 ];
 
 interface AuthContextType {
   currentUser: AppUser | null;
   users: AppUser[];
   roles: UserRole[];
+  departments: Department[];
   login: (email: string) => void;
   loginWithCredentials: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -103,6 +133,10 @@ interface AuthContextType {
   deleteUser: (id: string) => void;
   addRole: (role: Omit<UserRole, 'id'>) => void;
   updateRole: (id: string, updates: Partial<UserRole>) => void;
+  fetchDepartments: () => Promise<void>;
+  addDepartment: (dept: { sigla: string; nome: string }) => Promise<{ success: boolean; data?: Department; error?: string }>;
+  updateDepartment: (id: number, dept: { sigla: string; nome: string }) => Promise<{ success: boolean; data?: Department; error?: string }>;
+  deleteDepartment: (id: number) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -114,13 +148,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   });
   const [users, setUsers] = useState<AppUser[]>(DEFAULT_USERS);
   const [roles, setRoles] = useState<UserRole[]>(DEFAULT_ROLES);
+  const [departments, setDepartments] = useState<Department[]>(DEFAULT_DEPARTMENTS);
+
+  const fetchDepartments = async () => {
+    try {
+      const response = await fetch("/api/departments");
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const resData = await response.json();
+        if (resData.success && Array.isArray(resData.data) && resData.data.length > 0) {
+          setDepartments(resData.data);
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch departments from database, using client defaults:", err);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
       const response = await fetch("/api/users");
-      const resData = await response.json();
-      if (resData.success && Array.isArray(resData.data)) {
-        setUsers(resData.data);
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const resData = await response.json();
+        if (resData.success && Array.isArray(resData.data)) {
+          setUsers(resData.data);
+        }
       }
     } catch (err) {
       console.warn("Could not fetch users from database, using client defaults:", err);
@@ -128,6 +181,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    fetchDepartments();
     fetchUsers();
   }, []);
 
@@ -136,19 +190,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password: password || "1234" })
+        body: JSON.stringify({ email: email.trim(), password: password || "1234" })
       });
-      const data = await response.json();
-      if (data.success && data.user) {
-        setCurrentUser(data.user);
-        localStorage.setItem("adasa-sgi-user", JSON.stringify(data.user));
-        await fetchUsers(); // Refresh users list
-        return { success: true };
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await response.json();
+        if (data.success && data.user) {
+          setCurrentUser(data.user);
+          localStorage.setItem("adasa-sgi-user", JSON.stringify(data.user));
+          await fetchUsers(); // Refresh users list
+          return { success: true };
+        } else {
+          return { success: false, error: data.error || "Erro na autenticação" };
+        }
       } else {
-        return { success: false, error: data.error || "Erro na autenticação" };
+        // Fallback for offline/local environment or proxy response
+        const cleanEmail = email.trim().toLowerCase();
+        const localUser = users.find(u => u.email.toLowerCase() === cleanEmail) ||
+                          DEFAULT_USERS.find(u => u.email.toLowerCase() === cleanEmail);
+        if (localUser) {
+          setCurrentUser(localUser);
+          localStorage.setItem("adasa-sgi-user", JSON.stringify(localUser));
+          return { success: true };
+        }
+        return { success: false, error: "Serviço de autenticação temporariamente indisponível. Tente novamente." };
       }
     } catch (err: any) {
       console.error("Login verification error:", err);
+      const cleanEmail = email.trim().toLowerCase();
+      const localUser = users.find(u => u.email.toLowerCase() === cleanEmail) ||
+                        DEFAULT_USERS.find(u => u.email.toLowerCase() === cleanEmail);
+      if (localUser) {
+        setCurrentUser(localUser);
+        localStorage.setItem("adasa-sgi-user", JSON.stringify(localUser));
+        return { success: true };
+      }
       return { success: false, error: "Serviço de autenticação indisponível." };
     }
   };
@@ -187,16 +263,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(userData)
       });
-      const data = await response.json();
-      if (data.success && data.data) {
-        await fetchUsers();
-        return { success: true, data: data.data };
-      } else {
-        // Fallback local
-        const newUser = { ...userData, id: Date.now().toString() };
-        setUsers(prev => [...prev, newUser]);
-        return { success: true, data: newUser };
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          await fetchUsers();
+          return { success: true, data: data.data };
+        }
       }
+      // Fallback local
+      const newUser = { ...userData, id: Date.now().toString() };
+      setUsers(prev => [...prev, newUser]);
+      return { success: true, data: newUser };
     } catch (err: any) {
       console.error("Error creating database user, falling back:", err);
       const newUser = { ...userData, id: Date.now().toString() };
@@ -212,19 +290,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates)
       });
-      const data = await response.json();
-      if (data.success) {
-        await fetchUsers();
-        // If updating currently logged in user, apply updates
-        if (currentUser && currentUser.id === id) {
-          const updatedUser = { ...currentUser, ...updates };
-          setCurrentUser(updatedUser);
-          localStorage.setItem("adasa-sgi-user", JSON.stringify(updatedUser));
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await response.json();
+        if (data.success) {
+          await fetchUsers();
+          if (currentUser && currentUser.id === id) {
+            const updatedUser = { ...currentUser, ...updates };
+            setCurrentUser(updatedUser);
+            localStorage.setItem("adasa-sgi-user", JSON.stringify(updatedUser));
+          }
+          return;
         }
-      } else {
-        // Fallback local
-        setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
       }
+      // Fallback local
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
     } catch (err) {
       console.error("Error updating database user, falling back:", err);
       setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
@@ -236,13 +316,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const response = await fetch(`/api/users/${id}`, {
         method: "DELETE"
       });
-      const data = await response.json();
-      if (data.success) {
-        await fetchUsers();
-      } else {
-        // Fallback local
-        setUsers(prev => prev.filter(u => u.id !== id));
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await response.json();
+        if (data.success) {
+          await fetchUsers();
+          return;
+        }
       }
+      // Fallback local
+      setUsers(prev => prev.filter(u => u.id !== id));
     } catch (err) {
       console.error("Error deleting database user, falling back:", err);
       setUsers(prev => prev.filter(u => u.id !== id));
@@ -258,12 +341,85 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setRoles(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
   };
 
+  const addDepartment = async (dept: { sigla: string; nome: string }): Promise<{ success: boolean; data?: Department; error?: string }> => {
+    try {
+      const response = await fetch("/api/departments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dept)
+      });
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          await fetchDepartments();
+          return { success: true, data: data.data };
+        }
+      }
+      const newDept: Department = { id: Date.now(), sigla: dept.sigla.toUpperCase(), nome: dept.nome };
+      setDepartments(prev => [...prev, newDept]);
+      return { success: true, data: newDept };
+    } catch (err: any) {
+      console.error("Erro ao cadastrar departamento:", err);
+      const newDept: Department = { id: Date.now(), sigla: dept.sigla.toUpperCase(), nome: dept.nome };
+      setDepartments(prev => [...prev, newDept]);
+      return { success: true, data: newDept };
+    }
+  };
+
+  const updateDepartment = async (id: number, dept: { sigla: string; nome: string }): Promise<{ success: boolean; data?: Department; error?: string }> => {
+    try {
+      const response = await fetch(`/api/departments/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dept)
+      });
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          await fetchDepartments();
+          return { success: true, data: data.data };
+        }
+      }
+      setDepartments(prev => prev.map(d => d.id === id ? { ...d, ...dept, sigla: dept.sigla.toUpperCase() } : d));
+      return { success: true };
+    } catch (err: any) {
+      console.error("Erro ao atualizar departamento:", err);
+      setDepartments(prev => prev.map(d => d.id === id ? { ...d, ...dept, sigla: dept.sigla.toUpperCase() } : d));
+      return { success: true };
+    }
+  };
+
+  const deleteDepartment = async (id: number): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`/api/departments/${id}`, {
+        method: "DELETE"
+      });
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await response.json();
+        if (data.success) {
+          await fetchDepartments();
+          return { success: true };
+        }
+      }
+      setDepartments(prev => prev.filter(d => d.id !== id));
+      return { success: true };
+    } catch (err: any) {
+      console.error("Erro ao deletar departamento:", err);
+      setDepartments(prev => prev.filter(d => d.id !== id));
+      return { success: true };
+    }
+  };
+
   return (
     <AuthContext.Provider value={{ 
-        currentUser, users, roles, 
+        currentUser, users, roles, departments,
         login, loginWithCredentials, logout, checkPermission, hasRole,
         addUser, updateUser, deleteUser,
-        addRole, updateRole
+        addRole, updateRole,
+        fetchDepartments, addDepartment, updateDepartment, deleteDepartment
     }}>
       {children}
     </AuthContext.Provider>
