@@ -534,20 +534,16 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
   const [activeView, setActiveView] = useState<"list" | "create_step1" | "create_step2" | "public_view" | "public_contribute" | "public_contributions" | "technical_analysis">("list");
   const [publicTab, setPublicTab] = useState<"contribuir" | "ver">("contribuir");
-  const [analysisTab, setAnalysisTab] = useState<"contribuicoes" | "painel" | "minuta" | "minuta_completa">("contribuicoes");
+  const [analysisTab, setAnalysisTab] = useState<"contribuicoes" | "painel" | "minuta">("contribuicoes");
   const [expandedRowArtId, setExpandedRowArtId] = useState<string | number | null>(null);
   const [selectedTomada, setSelectedTomada] = useState<TomadaSubsidio | null>(null);
   const [participantRankingViewMode, setParticipantRankingViewMode] = useState<"chart" | "bento">("bento");
 
-  const [minutaCompletaOriginalText, setMinutaCompletaOriginalText] = useState("");
-  const [isExtractingCompleta, setIsExtractingCompleta] = useState(false);
-  const [minutaCompletaDiffHtml, setMinutaCompletaDiffHtml] = useState<{__html: string} | undefined>(undefined);
-
 
   // Minuta da Norma State
   const minutaModel = selectedTomada?.tipoResolucao === "alteracao" ? "alteracao" : "nova";
-  const [minutaTipoAto, setMinutaTipoAto] = useState<string>("NORMA");
-  const [minutaNumero, setMinutaNumero] = useState<string>("XX");
+  const [minutaTipoAto, setMinutaTipoAto] = useState<string>("RESOLUÇÃO");
+  const [minutaNumero, setMinutaNumero] = useState<string>("65");
   const [minutaData, setMinutaData] = useState<string>(() => {
     const today = new Date();
     const meses = ["JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"];
@@ -557,13 +553,17 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     return `${dia} DE ${mes} DE ${ano}`;
   });
   const [minutaEmenta, setMinutaEmenta] = useState<string>("");
-  const [minutaProcessoSEI, setMinutaProcessoSEI] = useState<string>("00197-00000000/2026-00");
-  const [minutaResolucoesAlteradas, setMinutaResolucoesAlteradas] = useState<string>("Norma nº 03, de 13 de abril de 2012");
+  const [minutaProcessoSEI, setMinutaProcessoSEI] = useState<string>("00197-00000724/2025-51");
+  const [minutaResolucoesAlteradas, setMinutaResolucoesAlteradas] = useState<string>("Resolução nº 03, de 13 de abril de 2012");
   const [minutaConsiderandos, setMinutaConsiderandos] = useState<string>(
     "Considerando os dispositivos da Lei nº 11.445, de 5 de janeiro de 2007 que estabelece as diretrizes nacionais para o saneamento básico;\nConsiderando a competência regulatória e fiscalizatória atribuída a esta Agência Reguladora nos termos da Lei Distrital nº 4.285, de 26 de dezembro de 2008;\nConsiderando as contribuições recebidas e acatadas no âmbito da Consulta Pública / Tomada de Subsídios;"
   );
-  const [minutaAssinante, setMinutaAssinante] = useState<string>("DIRETOR-PRESIDENTE");
+  const [minutaVigencia, setMinutaVigencia] = useState<string>("Esta Resolução entra em vigor na data de sua publicação, e será aplicável imediatamente aos processos em curso, desde que não tenham sido julgados, em sede de Recurso de Revisão.");
+  const [minutaAssinante, setMinutaAssinante] = useState<string>("RAIMUNDO DA SILVA RIBEIRO NETO - DIRETOR-PRESIDENTE");
   const [minutaCopied, setMinutaCopied] = useState<boolean>(false);
+  const [minutaClassificationOverrides, setMinutaClassificationOverrides] = useState<Record<string | number, "acrescido" | "alterado">>({});
+  const [minutaSubunitOverrides, setMinutaSubunitOverrides] = useState<Record<string, "acrescido" | "alterado" | "ignorar">>({});
+  const [showGranularBreakdown, setShowGranularBreakdown] = useState<boolean>(true);
 
   // Create Form State
   const [formData, setFormData] = useState<{
@@ -593,76 +593,6 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [selectedExtractedArticles, setSelectedExtractedArticles] = useState<boolean[]>([]);
   const [isExtractingText, setIsExtractingText] = useState(false);
 
-  useEffect(() => {
-    if (!minutaCompletaOriginalText || !selectedTomada) {
-      setMinutaCompletaDiffHtml(undefined);
-      return;
-    }
-
-    const currentTomadaArticles = articles.filter(a => String(a.tomadaId) === String(selectedTomada.id));
-
-    let modifiedText = minutaCompletaOriginalText;
-    
-    // Replace each original article with the final text
-    currentTomadaArticles.forEach(art => {
-      const orig = art.originalText;
-      const final = art.finalText || art.proposedText;
-      if (orig && orig.trim() && final && final.trim()) {
-        try {
-          const escapedOrig = orig.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const regexPattern = escapedOrig.replace(/\s+/g, '\\s+');
-          const regex = new RegExp(regexPattern, 'gi');
-          modifiedText = modifiedText.replace(regex, final);
-        } catch (e) {
-          modifiedText = modifiedText.replace(orig, final);
-        }
-      }
-    });
-
-    const escapeHtml = (text: string) => {
-      return text.replace(/&/g, "&amp;")
-                 .replace(/</g, "&lt;")
-                 .replace(/>/g, "&gt;")
-                 .replace(/"/g, "&quot;")
-                 .replace(/'/g, "&#039;");
-    };
-
-    const d = diff.diffWordsWithSpace(minutaCompletaOriginalText, modifiedText);
-    const html = d.map(part => {
-      const val = escapeHtml(part.value);
-      if (part.added) return `<span class="bg-emerald-200 text-emerald-900 font-bold px-1 rounded">${val}</span>`;
-      if (part.removed) return `<del class="bg-rose-200 text-rose-900 opacity-80 px-1 rounded">${val}</del>`;
-      return `<span>${val}</span>`;
-    }).join("");
-
-    setMinutaCompletaDiffHtml({ __html: html.replace(/\n/g, "<br/>") });
-  }, [minutaCompletaOriginalText, activeView, selectedTomada, articles]);
-
-  const handleExtractCompletaText = async (file: File) => {
-    setIsExtractingCompleta(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      
-      const res = await fetch("/api/extract-text", {
-        method: "POST",
-        body: formData
-      });
-      
-      const data = await res.json();
-      if (data.success && data.text) {
-        setMinutaCompletaOriginalText(data.text);
-        showToast("Leitura Concluída", "O texto atual da Resolução foi carregado com sucesso.", "success");
-      } else {
-        showToast("Erro de Leitura", data.error || "Não foi possível ler o arquivo.", "error");
-      }
-    } catch (err) {
-      console.error(err);
-      showToast("Erro", "Falha na comunicação com o servidor.", "error");
-    } finally {
-      setIsExtractingCompleta(false);
-    }
-  };
   const handleExtractText = async (file: File) => {
     setIsExtractingText(true);
     try {
@@ -836,7 +766,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [contributingArticleId, setContributingArticleId] = useState<string | null>(null);
   const [editingContributionId, setEditingContributionId] = useState<string | number | null>(null);
   const [participantFilter, setParticipantFilter] = useState<string>("all");
-  const [publicContributionsView, setPublicContributionsView] = useState<"minhas" | "todas">("todas");
+  const [publicContributionsView, setPublicContributionsView] = useState<"minhas" | "todas">("minhas");
   const [contributionsSortConfig, setContributionsSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [proposedText, setProposedText] = useState("");
   const [justification, setJustification] = useState("");
@@ -858,9 +788,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     const authorName = (effectiveUser?.name || effectiveUser?.email || "").toLowerCase().trim();
     return contributions.filter(c => {
       if (String(c.articleId) !== sId) return false;
+      
       if (currentUserId && c.userId !== undefined && c.userId !== null && String(c.userId) === currentUserId) return true;
       if (authorName && (c.authorName || "").toLowerCase().trim() === authorName) return true;
-      if (sessionContribArticleIds.includes(sId)) return true;
+      if (!currentUserId && !authorName && sessionContribArticleIds.includes(sId) && (!c.userId || c.authorName === "Usuário")) return true;
+      
       return false;
     });
   };
@@ -1318,6 +1250,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     
     const isAberta = getStatus(tomada.dataInicio, tomada.dataFim).startsWith("Aberta");
     setPublicTab(isAberta ? "contribuir" : "ver");
+    setPublicContributionsView("minhas");
     
     setActiveView("public_view");
   };
@@ -1384,6 +1317,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       showToast("Erro", "Erro ao conectar ao servidor.", "error");
     } finally {
       setIsDeleting(false);
+      setDeletingContribution(null);
     }
   };
 
@@ -1739,7 +1673,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   };
 
 
-  if (activeView === "create_step1") {
+  const renderMainContent = () => {
+    if (activeView === "create_step1") {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4 border-b border-slate-200 pb-4">
@@ -2476,7 +2411,10 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 {!isTomadaAberta && <Lock size={14} className="ml-1" />}
               </button>
               <button
-                onClick={() => setPublicTab("ver")}
+                onClick={() => {
+                  setPublicTab("ver");
+                  setPublicContributionsView("minhas");
+                }}
                 className={cn(
                   "px-6 py-3 text-xs sm:text-sm font-black uppercase tracking-wider transition-all flex items-center gap-2 rounded-xl outline-none whitespace-nowrap",
                   publicTab === "ver" 
@@ -2663,7 +2601,12 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         {!isContributing && isTomadaAberta && (
                           <div className="flex justify-end items-center gap-2 pt-2 border-t border-emerald-100">
                             <button
-                              onClick={() => handleDeleteUserContribution(userArticleContribs[0].id, art.id)}
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDeleteUserContribution(userArticleContribs[0].id, art.id);
+                              }}
                               className="px-3.5 py-1.5 text-xs font-bold text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
                             >
                               <Trash2 size={13} /> Excluir Proposta
@@ -3313,16 +3256,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         analysisTab === "minuta" ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-700"
                       )}
                     >
-                      <ScrollText size={14} /> Minuta para Publicação
-                    </button>
-                    <button 
-                      onClick={() => setAnalysisTab("minuta_completa")}
-                      className={cn(
-                        "px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 outline-none",
-                        analysisTab === "minuta_completa" ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-700"
-                      )}
-                    >
-                      <Sparkles size={14} /> Minuta Completa com Alterações
+                      <ScrollText size={14} /> Minuta da Resolução
                     </button>
                   </>
                 )}
@@ -3934,56 +3868,501 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
             })()}
 
             {analysisTab === "minuta" && (() => {
+              // 1. Types for Granular Legal Subunits
+              type SubunitType = "caput" | "artigo_inserido" | "paragrafo" | "inciso" | "alinea" | "item" | "outro";
+              type SubunitStatus = "acrescido" | "alterado" | "inalterado";
+
+              interface LegalSubunit {
+                id: string; // e.g. "caput", "art_1a", "art_1_a", "par_1", "par_1-a", "par_unico", "inciso_VI", "alinea_a", "item_1.1"
+                type: SubunitType;
+                label: string; // e.g. "Caput", "Art. 1Aº", "Art. 1º-A", "§ 1º", "§ 1º-A", "Parágrafo único", "Inciso VI"
+                text: string; // Full text of this subunit
+                orderIndex: number;
+              }
+
+              interface AnalyzedSubunit extends LegalSubunit {
+                status: SubunitStatus;
+                originalTextSnippet?: string;
+                isOverridden?: boolean;
+              }
+
+              interface AnalyzedArticle {
+                article: Article;
+                artLabel: string;
+                isEntireArticleNew: boolean;
+                subunits: AnalyzedSubunit[];
+                acrescidosCount: number;
+                alteradosCount: number;
+                inalteradosCount: number;
+                hasAcrescido: boolean;
+                hasAlterado: boolean;
+              }
+
+              // 2. Parser function: breaks legal text into granular subunits (Caput, Novos Artigos Inseridos, Parágrafos, Incisos, Alíneas, Itens)
+              const parseLegalSubunits = (rawText: string): LegalSubunit[] => {
+                if (!rawText || !rawText.trim()) return [];
+
+                // Safe line breaker: if an Art., §, Parágrafo único, or Inciso starts after punctuation/space, ensure it separates onto a new line
+                let preparedText = rawText;
+                preparedText = preparedText.replace(/([.;:])\s*(Art(?:igo)?\.?\s*[0-9]+(?:\s*[ºª])?(?:[\s\-_]*[A-Za-z0-9]+)*(?:\s*[ºª])?[\.:\s\-–—]+)/gi, "$1\n$2");
+                preparedText = preparedText.replace(/([.;:])\s*(§\s*[0-9]+[ºª]?(?:-[A-Za-z0-9]+)?|Par[aá]grafo\s+[uú]nico)/gi, "$1\n$2");
+                preparedText = preparedText.replace(/([.;:])\s*([IVXLCDM]+\s*[-–—\.]\s*)/g, "$1\n$2");
+
+                const lines = preparedText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                const subunits: LegalSubunit[] = [];
+                let currentSubunit: LegalSubunit | null = null;
+                let counter = 0;
+
+                for (const line of lines) {
+                  const cleanLine = line.replace(/^["'“]+/, "").replace(/["'”]+$/, "").trim();
+                  if (!cleanLine) continue;
+
+                  // Regex patterns
+                  // A. Parágrafo: § 1º, § 1º-A, § 2, Parágrafo único
+                  const parMatch = cleanLine.match(/^(?:§\s*([0-9]+[ºª]?(?:-[A-Za-z0-9]+)?)|Par[aá]grafo\s+[uú]nico)[\.:\s\-–—]*/i);
+                  // B. Inciso: Roman numerals I -, II -, VI -, VII -, etc.
+                  const incisoMatch = cleanLine.match(/^([IVXLCDM]+)\s*[-–—\.]\s*(.*)$/i);
+                  // C. Alínea: a), b), c), etc.
+                  const alineaMatch = cleanLine.match(/^([a-z])\)\s*(.*)$/i);
+                  // D. Item: 1.1., 8.1.1., etc.
+                  const itemMatch = cleanLine.match(/^([0-9]+(?:\.[0-9]+)+)\.?\s*[-–—\.]?\s*(.*)$/);
+                  // E. Art / Caput: Art. 1º, Artigo 2º, Art. 1Aº, Art. 1º-A, Art. 1-A, Art. 1A, Art. 5º-D, etc.
+                  const artMatch = cleanLine.match(/^Art(?:igo)?\.?\s*([0-9]+(?:[ºª])?(?:[-_]?[A-Za-z]{1,3})?(?:[ºª])?)(?:[\.:\s\-–—]+|$)/i);
+
+                  if (artMatch) {
+                    const hasRealCaput = subunits.some(s => s.type === "caput" && s.label.startsWith("Art.")) || 
+                                         (currentSubunit && currentSubunit.type === "caput" && currentSubunit.label.startsWith("Art."));
+                                         
+                    if (!hasRealCaput) {
+                      // First article encountered in this text block -> Caput of the base article
+                      if (currentSubunit) {
+                        // If there was text before this (e.g., a Chapter heading), demote it from caput to "outro"
+                        if (currentSubunit.type === "caput") {
+                           currentSubunit.id = `texto_intro_${currentSubunit.orderIndex}`;
+                           currentSubunit.type = "outro";
+                           currentSubunit.label = "Introdução";
+                        }
+                        subunits.push(currentSubunit);
+                      }
+                      counter++;
+                      const rawNum = artMatch[1].trim();
+                      currentSubunit = {
+                        id: "caput",
+                        type: "caput",
+                        label: `Art. ${rawNum}`,
+                        text: cleanLine,
+                        orderIndex: counter
+                      };
+                    } else {
+                      // Encountered a NEW article header (e.g. Art. 1Aº, Art. 1º-A) inserted within the same entry!
+                      if (currentSubunit) subunits.push(currentSubunit);
+                      counter++;
+                      const rawNum = artMatch[1].trim();
+                      const cleanId = rawNum.toLowerCase().replace(/[^a-z0-9]/g, "_");
+                      currentSubunit = {
+                        id: `art_${cleanId}`,
+                        type: "artigo_inserido",
+                        label: `Art. ${rawNum}`,
+                        text: cleanLine,
+                        orderIndex: counter
+                      };
+                    }
+                  } else if (parMatch) {
+                    // If active subunit is an inserted article (e.g. Art. 1Aº), keep internal paragraphs inside that article
+                    if (currentSubunit && currentSubunit.type === "artigo_inserido") {
+                      currentSubunit.text += `\n${cleanLine}`;
+                    } else {
+                      if (currentSubunit) subunits.push(currentSubunit);
+                      counter++;
+                      const isUnico = /par[aá]grafo\s+[uú]nico/i.test(parMatch[0]);
+                      const parNum = isUnico ? "unico" : (parMatch[1] || "").toLowerCase().replace(/[^a-z0-9-]/g, "");
+                      const label = isUnico ? "Parágrafo único" : `§ ${parMatch[1] || ""}`;
+                      currentSubunit = {
+                        id: `par_${parNum}`,
+                        type: "paragrafo",
+                        label,
+                        text: cleanLine,
+                        orderIndex: counter
+                      };
+                    }
+                  } else if (incisoMatch) {
+                    // If active subunit is an inserted article, keep internal incisos inside that article
+                    if (currentSubunit && currentSubunit.type === "artigo_inserido") {
+                      currentSubunit.text += `\n${cleanLine}`;
+                    } else {
+                      if (currentSubunit) subunits.push(currentSubunit);
+                      counter++;
+                      const roman = incisoMatch[1].toUpperCase();
+                      currentSubunit = {
+                        id: `inciso_${roman}`,
+                        type: "inciso",
+                        label: `Inciso ${roman}`,
+                        text: cleanLine,
+                        orderIndex: counter
+                      };
+                    }
+                  } else if (alineaMatch) {
+                    if (currentSubunit && currentSubunit.type === "artigo_inserido") {
+                      currentSubunit.text += `\n${cleanLine}`;
+                    } else {
+                      if (currentSubunit) subunits.push(currentSubunit);
+                      counter++;
+                      const letter = alineaMatch[1].toLowerCase();
+                      currentSubunit = {
+                        id: `alinea_${letter}`,
+                        type: "alinea",
+                        label: `Alínea ${letter})`,
+                        text: cleanLine,
+                        orderIndex: counter
+                      };
+                    }
+                  } else if (itemMatch) {
+                    if (currentSubunit && currentSubunit.type === "artigo_inserido") {
+                      currentSubunit.text += `\n${cleanLine}`;
+                    } else {
+                      if (currentSubunit) subunits.push(currentSubunit);
+                      counter++;
+                      const itemNum = itemMatch[1];
+                      currentSubunit = {
+                        id: `item_${itemNum}`,
+                        type: "item",
+                        label: `Item ${itemNum}`,
+                        text: cleanLine,
+                        orderIndex: counter
+                      };
+                    }
+                  } else {
+                    // Line is continuation of the active subunit (e.g. multi-line paragraph or formula)
+                    if (currentSubunit) {
+                      currentSubunit.text += `\n${cleanLine}`;
+                    } else {
+                      counter++;
+                      currentSubunit = {
+                        id: counter === 1 ? "caput" : `item_lin_${counter}`,
+                        type: counter === 1 ? "caput" : "outro",
+                        label: counter === 1 ? "Caput" : `Dispositivo ${counter}`,
+                        text: cleanLine,
+                        orderIndex: counter
+                      };
+                    }
+                  }
+                }
+
+                if (currentSubunit) {
+                  subunits.push(currentSubunit);
+                }
+
+                // Ensure every subunit within this article has a strictly unique id
+                const idCounts: Record<string, number> = {};
+                const deduplicatedSubunits: LegalSubunit[] = subunits.map((sub, idx) => {
+                  const baseId = sub.id || `unit_${idx + 1}`;
+                  idCounts[baseId] = (idCounts[baseId] || 0) + 1;
+                  const uniqueId = idCounts[baseId] === 1 ? baseId : `${baseId}_${idCounts[baseId]}`;
+                  return {
+                    ...sub,
+                    id: uniqueId,
+                    orderIndex: sub.orderIndex || (idx + 1)
+                  };
+                });
+
+                return deduplicatedSubunits;
+              };
+
+              // 3. Normalizer helper for text comparison
+              const normalizeLegalText = (str: string): string => {
+                return (str || "")
+                  .toLowerCase()
+                  .replace(/[“”"'`]/g, "")
+                  .replace(/[;\.,\s]+$/g, "")
+                  .replace(/\s+/g, " ")
+                  .trim();
+              };
+
+              // 4. Helper: Extract standard article label like "Art. 2º", "Art. 5º-C", "Art. 31"
+              const extractArticleLabel = (text: string, defaultOrder: number): string => {
+                if (!text) return `Art. ${defaultOrder}º`;
+                const clean = text.replace(/^["'“\s]+/, "").trim();
+                
+                const artMatch = clean.match(/^Art(?:igo)?\.?\s*([0-9]+(?:[ºª])?(?:[-_]?[A-Za-z]{1,3})?(?:[ºª])?)(?:[\.:\s\-–—]+|$)/i);
+                if (artMatch && artMatch[1]) {
+                  return `Art. ${artMatch[1].trim()}`;
+                }
+                
+                const clausulaMatch = clean.match(/^Cl[aá]usula\s+([A-Za-z0-9ºª]+)/i);
+                if (clausulaMatch && clausulaMatch[1]) {
+                  return `Cláusula ${clausulaMatch[1]}`;
+                }
+                
+                const tabelaMatch = clean.match(/^Tabela\s+([A-Za-z0-9]+)/i);
+                if (tabelaMatch && tabelaMatch[1]) {
+                  return `Tabela ${tabelaMatch[1]}`;
+                }
+                
+                return `Art. ${defaultOrder}º`;
+              };
+
+              // 5. Helper: Format Portuguese list of articles, e.g., "2º, 5º, 5º-C, 8º, 20 e 31"
+              const formatArticleListInPortuguese = (labels: string[]): string => {
+                const cleanedNumbers = labels.map(l => l.replace(/^Art(?:igo)?\.?\s*/i, "").trim()).filter(Boolean);
+                const unique = Array.from(new Set(cleanedNumbers));
+                if (unique.length === 0) return "artigos alterados";
+                if (unique.length === 1) return `${unique[0]}`;
+                if (unique.length === 2) return `${unique[0]} e ${unique[1]}`;
+                return `${unique.slice(0, -1).join(", ")} e ${unique[unique.length - 1]}`;
+              };
+
+              // 6. Helper: Format quoted device string with standard Adasa quotation
+              const formatQuotedDevice = (rawText: string): string => {
+                const trimmed = (rawText || "").trim();
+                if (!trimmed) return '""';
+                const startsQuote = trimmed.startsWith('"') || trimmed.startsWith('“');
+                const endsQuote = trimmed.endsWith('"') || trimmed.endsWith('”');
+                return `${startsQuote ? '' : '"'}${trimmed}${endsQuote ? '' : '"'}`;
+              };
+
+              // 7. STRICT INCLUSION FILTER: Only include articles with saved Final Text (finalText)
+              const articlesWithFinalText = currentArticles.filter(art => Boolean(art.finalText && art.finalText.trim().length > 0));
+
+              // 8. Granular Decomposition & Analysis of each Article
+              const analyzedArticles: AnalyzedArticle[] = articlesWithFinalText.map((art, idx) => {
+                const baseLabelSource = (art.originalText && art.originalText.trim()) || (art.finalText && art.finalText.trim()) || "";
+                const artLabel = extractArticleLabel(baseLabelSource, art.order || idx + 1);
+                
+                const origRaw = (art.originalText || "").trim();
+                const isEntireArticleNew = !origRaw || 
+                  origRaw === "-" || 
+                  /^(\[novo\]|\(novo\)|novo\s+artigo|novo\s+dispositivo|acrescido|\(ac\)|\[acrescido\])/i.test(origRaw) ||
+                  minutaClassificationOverrides[art.id] === "acrescido";
+
+                const origSubunits = isEntireArticleNew ? [] : parseLegalSubunits(origRaw);
+                const finSubunits = parseLegalSubunits(art.finalText || "");
+
+                const analyzedSubunits: AnalyzedSubunit[] = finSubunits.map(finUnit => {
+                  const overrideKey = `${art.id}_${finUnit.id}`;
+                  const userOverride = minutaSubunitOverrides[overrideKey];
+
+                  if (isEntireArticleNew) {
+                    return {
+                      ...finUnit,
+                      status: (userOverride || "acrescido") as SubunitStatus,
+                      isOverridden: Boolean(userOverride)
+                    };
+                  }
+
+                  // If this is an inserted article (e.g. Art. 1Aº, Art. 1º-A)
+                  if (finUnit.type === "artigo_inserido") {
+                    const origMatch = origSubunits.find(o => o.id === finUnit.id);
+                    let status: SubunitStatus = "acrescido";
+                    if (userOverride) {
+                      status = userOverride as SubunitStatus;
+                    } else if (origMatch) {
+                      const normFin = normalizeLegalText(finUnit.text);
+                      const normOrig = normalizeLegalText(origMatch.text);
+                      status = normFin !== normOrig ? "alterado" : "inalterado";
+                    } else {
+                      // Not present in original text -> ACRESCIDO
+                      status = "acrescido";
+                    }
+
+                    return {
+                      ...finUnit,
+                      status,
+                      originalTextSnippet: origMatch?.text,
+                      isOverridden: Boolean(userOverride)
+                    };
+                  }
+
+                  const origMatch = origSubunits.find(o => o.id === finUnit.id);
+                  let status: SubunitStatus = "inalterado";
+
+                  if (userOverride) {
+                    status = userOverride as SubunitStatus;
+                  } else if (!origMatch) {
+                    // New paragraph, inciso, alínea inserted into existing article -> ACRESCIDO
+                    status = "acrescido";
+                  } else {
+                    // Existed in original -> check if text changed
+                    const normFin = normalizeLegalText(finUnit.text);
+                    const normOrig = normalizeLegalText(origMatch.text);
+                    if (normFin !== normOrig) {
+                      status = "alterado";
+                    } else {
+                      status = "inalterado";
+                    }
+                  }
+
+                  return {
+                    ...finUnit,
+                    status,
+                    originalTextSnippet: origMatch?.text,
+                    isOverridden: Boolean(userOverride)
+                  };
+                });
+
+                const acrescidosCount = analyzedSubunits.filter(s => s.status === "acrescido").length;
+                const alteradosCount = analyzedSubunits.filter(s => s.status === "alterado" && s.type !== "artigo_inserido").length;
+                const inalteradosCount = analyzedSubunits.filter(s => s.status === "inalterado").length;
+
+                return {
+                  article: art,
+                  artLabel,
+                  isEntireArticleNew,
+                  subunits: analyzedSubunits,
+                  acrescidosCount,
+                  alteradosCount,
+                  inalteradosCount,
+                  hasAcrescido: isEntireArticleNew || acrescidosCount > 0 || analyzedSubunits.some(s => s.type === "artigo_inserido"),
+                  hasAlterado: !isEntireArticleNew && alteradosCount > 0
+                };
+              });
+
+              // Articles that contain at least one Acrescido (go to Art. 1º)
+              const articlesWithAcrescidos = analyzedArticles.filter(a => a.hasAcrescido);
+              // Articles that contain at least one Alterado (go to Art. 2º)
+              const articlesWithAlterados = analyzedArticles.filter(a => a.hasAlterado);
+
+              // Extract altered labels for Art. 2º preamble
+              const labelsAlterados = articlesWithAlterados.map(a => a.artLabel);
+              const formattedAlteradosLabels = formatArticleListInPortuguese(labelsAlterados);
+
               // Pre-calculate ementa default if not set
               const defaultEmenta = minutaModel === "nova" 
                 ? (selectedTomada.objeto || "Dispõe sobre os procedimentos e diretrizes regulatórias e dá outras providências.")
-                : `Altera a(s) ${minutaResolucoesAlteradas}.`;
+                : `Altera a ${minutaResolucoesAlteradas}, e dá outras providências.`;
 
               const effectiveEmenta = minutaEmenta.trim() ? minutaEmenta : defaultEmenta;
               const consultNumber = selectedTomada.numero || "001/2026";
               const meiodePart = selectedTomada.meioParticipacao || "Consulta Pública";
 
-              // Build raw text for copy/export
+              // 9. Format Article Block for Art. 1º (Acréscimos)
+              const buildAcrescidoArticleText = (ana: AnalyzedArticle): string => {
+                if (ana.isEntireArticleNew) {
+                  return formatQuotedDevice(ana.article.finalText || "");
+                }
+
+                // Subunits added to an existing article
+                const insertedArticles = ana.subunits.filter(s => s.type === "artigo_inserido");
+                const addedSubunits = ana.subunits.filter(s => s.status === "acrescido" && s.type !== "artigo_inserido");
+
+                if (insertedArticles.length === 0 && addedSubunits.length === 0) return "";
+
+                const blocks: string[] = [];
+
+                // A. Independent inserted full articles (e.g. Art. 1Aº, Art. 1º-A)
+                for (const ins of insertedArticles) {
+                  blocks.push(formatQuotedDevice(ins.text));
+                }
+
+                // B. Added paragraphs/incisos to the base article
+                if (addedSubunits.length > 0) {
+                  let baseBlock = `${ana.artLabel}. ..............................................................................................\n`;
+                  baseBlock += `............................................................................................................\n`;
+                  baseBlock += addedSubunits.map(u => u.text).join("\n\n");
+                  blocks.push(formatQuotedDevice(baseBlock));
+                }
+
+                return blocks.join("\n\n");
+              };
+
+              // 10. Format Article Block for Art. 2º (Novas Redações)
+              const buildAlteradoArticleText = (ana: AnalyzedArticle): string => {
+                if (ana.isEntireArticleNew) return "";
+
+                const alteredUnits = ana.subunits.filter(s => s.status === "alterado" && s.type !== "artigo_inserido");
+                if (alteredUnits.length === 0) return "";
+
+                const caputAltered = alteredUnits.find(s => s.type === "caput");
+                const otherAltered = alteredUnits.filter(s => s.type !== "caput");
+
+                let block = "";
+                if (caputAltered) {
+                  block += caputAltered.text;
+                  if (otherAltered.length > 0) {
+                    block += "\n\n" + otherAltered.map(u => u.text).join("\n\n");
+                  }
+                  if (ana.inalteradosCount > 0) {
+                    block += "\n.................................................................................................";
+                  }
+                } else {
+                  // Caput unchanged, specific incisos or parágrafos changed
+                  block += `${ana.artLabel}. ..............................................................................................\n`;
+                  block += `............................................................................................................\n`;
+                  block += otherAltered.map(u => u.text).join("\n\n");
+                  if (ana.inalteradosCount > 0) {
+                    block += "\n.................................................................................................";
+                  }
+                }
+
+                return formatQuotedDevice(block);
+              };
+
+              // 11. Build plain text for copy/export
               const generatePlainTextMinuta = () => {
                 let text = `Governo do Distrito Federal\nAgência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal\nSecretaria Geral\n\n`;
-                text += `${(minutaTipoAto || "NORMA").toUpperCase()} Nº ${minutaNumero}, DE ${minutaData}.\n\n`;
+                text += `${(minutaTipoAto || "RESOLUÇÃO").toUpperCase()} Nº ${minutaNumero}, DE ${minutaData}.\n\n`;
                 text += `${effectiveEmenta}\n\n`;
                 text += `O DIRETOR-PRESIDENTE DA AGÊNCIA REGULADORA DE ÁGUAS, ENERGIA E SANEAMENTO BÁSICO DO DISTRITO FEDERAL – Adasa, Ad Referendum da Diretoria Colegiada, no uso das atribuições que lhe confere o art. 7º, inciso III, do Regimento Interno desta Agência, aprovado pela Resolução nº 16, de 17 de setembro de 2014, tendo em vista o que dispõe o art. 23, inciso II e VII, da Lei n.º 4.285, 26 de dezembro de 2008, o constante no processo SEI nº ${minutaProcessoSEI}, as contribuições da ${meiodePart} nº ${consultNumber}, e\n\n`;
                 
                 if (minutaConsiderandos.trim()) {
                   const considerandosList = minutaConsiderandos.split("\n").filter(c => c.trim());
                   considerandosList.forEach(c => {
-                    text += `${c.trim()};\n\n`;
+                    const cleanC = c.trim().replace(/;$/, "");
+                    text += `${cleanC};\n\n`;
                   });
                 }
                 
-                text += `Resolve:\n\n`;
-
-                const articlesWithFinalText = currentArticles.filter(art => art.finalText && art.finalText.trim());
+                text += `RESOLVE:\n\n`;
 
                 if (minutaModel === "nova") {
                   if (articlesWithFinalText.length === 0) {
                     text += `[Nenhum dispositivo com texto final cadastrado. Salve a revisão e texto final dos dispositivos na aba de Análise Técnica.]\n\n`;
                   } else {
                     articlesWithFinalText.forEach((art) => {
-                      text += `${art.finalText!.trim()}\n\n`;
+                      const body = (art.finalText && art.finalText.trim()) || "";
+                      text += `${body.trim()}\n\n`;
                     });
                   }
                 } else {
                   // Alteração de Norma Existente
-                  text += `Art. 1º. A ${minutaResolucoesAlteradas}, passa a vigorar com as seguintes alterações:\n\n`;
                   if (articlesWithFinalText.length === 0) {
-                    text += `[Nenhum dispositivo com texto final cadastrado. Salve a revisão e texto final dos dispositivos na aba de Análise Técnica.]\n\n`;
+                    text += `[Nenhum dispositivo com texto final cadastrado. Apenas artigos com texto final salvo na aba 'Análise das Contribuições' são incluídos na minuta.]\n\n`;
                   } else {
-                    articlesWithFinalText.forEach((art) => {
-                      text += `"${art.finalText!.trim()}"\n\n`;
-                    });
-                  }
+                    let artigoAtoIndex = 1;
 
-                  text += `Art. 2º. Esta Norma entra em vigor na data da sua publicação.\n\n`;
+                    // 1. Dispositivos Acrescidos (Novos Artigos / Novos Parágrafos / Novos Incisos)
+                    if (articlesWithAcrescidos.length > 0) {
+                      text += `Art. ${artigoAtoIndex}º. A ${minutaResolucoesAlteradas}, passa a vigorar acrescida dos seguintes artigos:\n\n`;
+                      artigoAtoIndex++;
+
+                      articlesWithAcrescidos.forEach((ana) => {
+                        const block = buildAcrescidoArticleText(ana);
+                        if (block) text += `${block}\n\n`;
+                      });
+                    }
+
+                    // 2. Dispositivos com Nova Redação
+                    if (articlesWithAlterados.length > 0) {
+                      const isSingular = articlesWithAlterados.length === 1 && !formattedAlteradosLabels.startsWith("Cláusula") && !formattedAlteradosLabels.startsWith("Tabela");
+                      if (isSingular) {
+                        text += `Art. ${artigoAtoIndex}º. O art. ${formattedAlteradosLabels}, da ${minutaResolucoesAlteradas}, passa a vigorar com a seguinte redação:\n\n`;
+                      } else {
+                        text += `Art. ${artigoAtoIndex}º. Os artigos ${formattedAlteradosLabels}, da ${minutaResolucoesAlteradas}, passam a vigorar com as seguintes redações:\n\n`;
+                      }
+                      artigoAtoIndex++;
+
+                      articlesWithAlterados.forEach((ana) => {
+                        const block = buildAlteradoArticleText(ana);
+                        if (block) text += `${block}\n\n`;
+                      });
+                    }
+
+                    // 3. Disposição de Vigência
+                    text += `Art. ${artigoAtoIndex}º. ${minutaVigencia.trim()}\n\n`;
+                  }
                 }
 
                 text += `\n${minutaAssinante}\n`;
+                text += `Agência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal - Adasa\n`;
                 return text;
               };
 
@@ -4005,12 +4384,33 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = `Minuta_${(minutaTipoAto || "Norma").replace(/[^a-zA-Z0-9_-]/g, "_")}_${minutaNumero}_${(selectedTomada.numero || "participacao").replace(/[^a-zA-Z0-9_-]/g, "_")}.txt`;
+                a.download = `Minuta_${(minutaTipoAto || "Resolucao").replace(/[^a-zA-Z0-9_-]/g, "_")}_${minutaNumero}_${(selectedTomada.numero || "participacao").replace(/[^a-zA-Z0-9_-]/g, "_")}.txt`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                showToast("Download Concluído", "Minuta exportada em formato texto com sucesso.", "success");
+                showToast("Download Concluído", "Minuta exportada em formato texto (.txt) com sucesso.", "success");
+              };
+
+              // Quick helper: Populate empty final texts with proposed text if available
+              const handleFillFinalTextFromProposed = () => {
+                setArticles(prev => prev.map(art => {
+                  if (String(art.tomadaId) === String(selectedTomada.id) && (!art.finalText || !art.finalText.trim())) {
+                    return { ...art, finalText: art.proposedText || art.originalText || "" };
+                  }
+                  return art;
+                }));
+                showToast("Textos Finais Atualizados", "Os textos propostos foram copiados para os textos finais dos artigos.", "success");
+              };
+
+              // Toggle subunit status
+              const toggleSubunitStatus = (overrideKey: string, currentStatus: SubunitStatus) => {
+                const nextStatus: SubunitStatus = currentStatus === "acrescido" ? "alterado" : currentStatus === "alterado" ? "inalterado" : "acrescido";
+                setMinutaSubunitOverrides(prev => ({
+                  ...prev,
+                  [overrideKey]: nextStatus
+                }));
+                showToast("Classificação Atualizada", `Dispositivo reclassificado para "${nextStatus === 'acrescido' ? 'Acrescido (Art. 1º)' : nextStatus === 'alterado' ? 'Nova Redação (Art. 2º)' : 'Inalterado'}".`, "info");
               };
 
               return (
@@ -4019,18 +4419,35 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                   <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-5">
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
                       <div>
-                        <span className="text-xs font-black uppercase tracking-wider text-indigo-600">GERADOR DE MINUTA REGULATÓRIA</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black uppercase tracking-wider text-indigo-600">GERADOR DE MINUTA REGULATÓRIA</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            Filtro Estrito: Apenas com Texto Final
+                          </span>
+                        </div>
                         <h4 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2 mt-0.5">
                           <ScrollText size={22} className="text-indigo-600" />
                           Proposição do Texto Final da Norma
                         </h4>
                         <p className="text-xs text-slate-500 mt-1">
-                          Gera a minuta oficial formatada segundo o padrão de atos normativos da Adasa, consolidando apenas os dispositivos que possuem texto final cadastrado pós-contribuições.
+                          {minutaModel === "alteracao" 
+                            ? "Analisa minuciosamente o caput, parágrafos, incisos e alíneas de cada artigo com texto final salvo, separando automaticamente os acréscimos (Art. 1º) das alterações de redação (Art. 2º)."
+                            : "Gera a minuta integral da nova norma regulatória consolidando apenas os dispositivos com texto final cadastrado."}
                         </p>
                       </div>
 
                       {/* Action Buttons */}
                       <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        {currentArticles.some(art => (!art.finalText || !art.finalText.trim()) && art.proposedText) && (
+                          <button
+                            onClick={handleFillFinalTextFromProposed}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold transition-all border border-amber-200 shadow-sm active:scale-95"
+                            title="Preencher textos finais vazios com a proposta inicial"
+                          >
+                            <Sparkles size={15} className="text-amber-600" />
+                            <span>Copiar Propostas para Texto Final</span>
+                          </button>
+                        )}
                         <button
                           onClick={handleCopyMinuta}
                           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all shadow-sm active:scale-95"
@@ -4058,7 +4475,162 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       </div>
                     </div>
 
-                    {/* Model Switcher & Metadata Form */}
+                    {/* Stats & Structure Summary in Alteration Mode */}
+                    {minutaModel === "alteracao" && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80">
+                          <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                            <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-sm">
+                              {articlesWithAcrescidos.length}
+                            </div>
+                            <div>
+                              <div className="text-[11px] font-bold text-slate-800">Artigos com Acréscimos</div>
+                              <div className="text-[10px] text-slate-500">Integrarão o Art. 1º da Minuta</div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                            <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-black text-sm">
+                              {articlesWithAlterados.length}
+                            </div>
+                            <div>
+                              <div className="text-[11px] font-bold text-slate-800">Artigos com Nova Redação</div>
+                              <div className="text-[10px] text-slate-500">
+                                {articlesWithAlterados.length > 0 ? `Art. 2º: ${formattedAlteradosLabels}` : "Nenhum alterado"}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                            <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-sm">
+                              {articlesWithFinalText.length}
+                            </div>
+                            <div>
+                              <div className="text-[11px] font-bold text-slate-800">Artigos com Texto Final</div>
+                              <div className="text-[10px] text-slate-500">De {currentArticles.length} artigos no total</div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                            <div>
+                              <div className="text-[11px] font-bold text-slate-800">Análise Granular</div>
+                              <div className="text-[10px] text-slate-500">Caput, §§, incisos e alíneas</div>
+                            </div>
+                            <button
+                              onClick={() => setShowGranularBreakdown(!showGranularBreakdown)}
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 transition-all"
+                            >
+                              <span>{showGranularBreakdown ? "Ocultar" : "Detalhar"}</span>
+                              {showGranularBreakdown ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Granular Breakdown Accordion */}
+                        {showGranularBreakdown && (
+                          <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h5 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                <CheckCircle2 size={15} className="text-indigo-600" />
+                                Detalhamento Granular por Dispositivo (Caput, §§, Incisos e Alíneas)
+                              </h5>
+                              <span className="text-[11px] text-slate-500 italic">
+                                Clique no status de qualquer dispositivo para reclassificar manualmente
+                              </span>
+                            </div>
+
+                            {analyzedArticles.length === 0 ? (
+                              <div className="p-4 bg-amber-50 rounded-xl text-xs text-amber-800 border border-amber-200 text-center">
+                                Nenhum artigo possui texto final salvo ainda. Preencha o Parecer/Texto Final na aba "Análise das Contribuições".
+                              </div>
+                            ) : (
+                              <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                                {analyzedArticles.map((ana) => (
+                                  <div key={ana.article.id} className="bg-white rounded-xl p-3 border border-slate-200 shadow-xs space-y-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-black text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+                                          Dispositivo #{currentArticles.findIndex(a => a.id === ana.article.id) + 1}
+                                        </span>
+                                        {ana.isEntireArticleNew ? (
+                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                            Artigo Integralmente Novo (Acrescido no Art. 1º)
+                                          </span>
+                                        ) : (
+                                          <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                                            {ana.acrescidosCount > 0 && (
+                                              <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                                +{ana.acrescidosCount} Acréscimo(s)
+                                              </span>
+                                            )}
+                                            {ana.alteradosCount > 0 && (
+                                              <span className="font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                                ~{ana.alteradosCount} Nova Redação
+                                              </span>
+                                            )}
+                                            {ana.inalteradosCount > 0 && (
+                                              <span className="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                ={ana.inalteradosCount} Inalterado
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* List of subunits */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                      {ana.subunits.map((unit, uIdx) => {
+                                        const overrideKey = `${ana.article.id}_${unit.id}`;
+                                        return (
+                                          <div 
+                                            key={`${ana.article.id}_${unit.id}_${uIdx}`}
+                                            className={cn(
+                                              "p-2 rounded-lg border text-xs flex flex-col justify-between gap-1 transition-all",
+                                              unit.status === "acrescido" && "bg-emerald-50/50 border-emerald-200",
+                                              unit.status === "alterado" && "bg-blue-50/50 border-blue-200",
+                                              unit.status === "inalterado" && "bg-slate-50 border-slate-200 text-slate-500"
+                                            )}
+                                          >
+                                            <div className="flex items-center justify-between gap-1">
+                                              <div className="flex items-center gap-1.5 overflow-hidden">
+                                                <span className="font-bold text-[11px] text-slate-800 shrink-0">{unit.label}</span>
+                                                {unit.type === "artigo_inserido" && (
+                                                  <span className="text-[9px] font-black uppercase tracking-wider px-1 py-0.2 bg-emerald-100 text-emerald-800 rounded border border-emerald-300">
+                                                    Novo Artigo
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <button
+                                                onClick={() => toggleSubunitStatus(overrideKey, unit.status)}
+                                                className={cn(
+                                                  "px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all active:scale-95 shrink-0",
+                                                  unit.status === "acrescido" && "bg-emerald-100 text-emerald-800 hover:bg-emerald-200",
+                                                  unit.status === "alterado" && "bg-blue-100 text-blue-800 hover:bg-blue-200",
+                                                  unit.status === "inalterado" && "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                                                )}
+                                                title="Clique para alternar classificação"
+                                              >
+                                                {unit.status === "acrescido" ? "+ Acrescido (Art. 1º)" : unit.status === "alterado" ? "~ Nova Redação (Art. 2º)" : "= Inalterado"}
+                                              </button>
+                                            </div>
+                                            <p className="text-[11px] line-clamp-2 italic text-slate-600">
+                                              "{unit.text}"
+                                            </p>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Metadata Form */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
                       {/* Model Selector */}
                       <div className="lg:col-span-2">
@@ -4067,7 +4639,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         </label>
                         <div className="flex bg-slate-100 p-1 rounded-xl">
                           <div className="w-full py-2 px-3 rounded-lg text-xs font-black bg-white text-indigo-700 shadow-sm border border-slate-200 flex items-center justify-center gap-2">
-                            <span>{minutaModel === "nova" ? "Nova Norma (Integral)" : "Alteração de Norma Existente"}</span>
+                            <span>{minutaModel === "nova" ? "Nova Norma (Integral)" : "Alteração de Norma Existente (Resolução / Portaria)"}</span>
                           </div>
                         </div>
                       </div>
@@ -4075,13 +4647,13 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       {/* Tipo de Ato / Norma */}
                       <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
-                          Tipo de Ato / Norma
+                          Tipo de Ato Normativo
                         </label>
                         <input
                           type="text"
                           value={minutaTipoAto}
                           onChange={(e) => setMinutaTipoAto(e.target.value)}
-                          placeholder="Ex: NORMA, RESOLUÇÃO, PORTARIA"
+                          placeholder="Ex: RESOLUÇÃO, PORTARIA, NORMA"
                           className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all uppercase"
                         />
                       </div>
@@ -4095,7 +4667,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           type="text"
                           value={minutaNumero}
                           onChange={(e) => setMinutaNumero(e.target.value)}
-                          placeholder="Ex: 58 ou 65"
+                          placeholder="Ex: 65 ou 03"
                           className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all"
                         />
                       </div>
@@ -4123,13 +4695,29 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           type="text"
                           value={minutaProcessoSEI}
                           onChange={(e) => setMinutaProcessoSEI(e.target.value)}
-                          placeholder="00197-00000000/2026-00"
+                          placeholder="00197-00000724/2025-51"
                           className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all"
                         />
                       </div>
 
+                      {/* Normas Alteradas (apenas para modelo de alteração) */}
+                      {minutaModel === "alteracao" && (
+                        <div className="lg:col-span-2">
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                            Norma Originária Alterada (Identificação Completa)
+                          </label>
+                          <input
+                            type="text"
+                            value={minutaResolucoesAlteradas}
+                            onChange={(e) => setMinutaResolucoesAlteradas(e.target.value)}
+                            placeholder="Ex: Resolução nº 03, de 13 de abril de 2012"
+                            className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                          />
+                        </div>
+                      )}
+
                       {/* Assinante / Cargo */}
-                      <div>
+                      <div className={minutaModel === "alteracao" ? "" : "lg:col-span-2"}>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
                           Autoridade Signatária
                         </label>
@@ -4137,26 +4725,10 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           type="text"
                           value={minutaAssinante}
                           onChange={(e) => setMinutaAssinante(e.target.value)}
-                          placeholder="Ex: RAIMUNDO RIBEIRO - DIRETOR-PRESIDENTE"
+                          placeholder="Ex: RAIMUNDO DA SILVA RIBEIRO NETO - DIRETOR-PRESIDENTE"
                           className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all"
                         />
                       </div>
-
-                      {/* Normas Alteradas (apenas para modelo de alteração) */}
-                      {minutaModel === "alteracao" && (
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
-                            Norma(s) Alterada(s)
-                          </label>
-                          <input
-                            type="text"
-                            value={minutaResolucoesAlteradas}
-                            onChange={(e) => setMinutaResolucoesAlteradas(e.target.value)}
-                            placeholder="Ex: Norma nº 03, de 13 de abril de 2012"
-                            className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all"
-                          />
-                        </div>
-                      )}
 
                       {/* Ementa customizável */}
                       <div className="md:col-span-2 lg:col-span-4">
@@ -4186,6 +4758,22 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-mono rounded-xl p-3 outline-none focus:bg-white focus:border-indigo-500 transition-all leading-relaxed"
                         />
                       </div>
+
+                      {/* Disposição de Vigência */}
+                      {minutaModel === "alteracao" && (
+                        <div className="md:col-span-2 lg:col-span-4">
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                            Disposição de Vigência e Aplicação (Artigo Final)
+                          </label>
+                          <input
+                            type="text"
+                            value={minutaVigencia}
+                            onChange={(e) => setMinutaVigencia(e.target.value)}
+                            placeholder="Esta Resolução entra em vigor na data de sua publicação..."
+                            className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium rounded-xl px-3.5 py-2.5 outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -4206,7 +4794,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       {/* Norma Title */}
                       <div className="text-center mb-8">
                         <h2 className="font-sans text-base sm:text-lg font-black tracking-wide uppercase text-slate-900">
-                          {(minutaTipoAto || "NORMA").toUpperCase()} Nº {minutaNumero}, DE {minutaData}.
+                          {(minutaTipoAto || "RESOLUÇÃO").toUpperCase()} Nº {minutaNumero}, DE {minutaData}.
                         </h2>
                       </div>
 
@@ -4224,11 +4812,14 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         </p>
 
                         {/* Considerandos */}
-                        {minutaConsiderandos.split("\n").filter(c => c.trim()).map((c, cIdx, arr) => (
-                          <p key={cIdx} className="indent-8">
-                            <strong>Considerando</strong> {c.replace(/^considerando\s+/i, "").trim()}{cIdx === arr.length - 1 ? ";" : ";"}
-                          </p>
-                        ))}
+                        {minutaConsiderandos.split("\n").filter(c => c.trim()).map((c, cIdx, arr) => {
+                          const cleanC = c.trim().replace(/^considerando\s+/i, "").replace(/;$/, "");
+                          return (
+                            <p key={cIdx} className="indent-8">
+                              <strong>Considerando</strong> {cleanC}{cIdx === arr.length - 1 ? ";" : ";"}
+                            </p>
+                          );
+                        })}
 
                         <p className="font-bold pt-2">
                           RESOLVE:
@@ -4240,7 +4831,6 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         {minutaModel === "nova" ? (
                           <>
                             {(() => {
-                              const articlesWithFinalText = currentArticles.filter(art => art.finalText && art.finalText.trim());
                               if (articlesWithFinalText.length === 0) {
                                 return (
                                   <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl text-amber-800 text-xs italic text-center font-sans">
@@ -4248,23 +4838,21 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                   </div>
                                 );
                               }
-                              return articlesWithFinalText.map((art) => (
-                                <div key={art.id} className="relative group">
-                                  <div className="p-2 rounded transition-colors whitespace-pre-wrap leading-relaxed">
-                                    {art.finalText!.trim()}
+                              return articlesWithFinalText.map((art) => {
+                                const body = (art.finalText && art.finalText.trim()) || "";
+                                return (
+                                  <div key={art.id} className="relative group">
+                                    <div className="p-2 rounded transition-colors whitespace-pre-wrap leading-relaxed">
+                                      {body.trim()}
+                                    </div>
                                   </div>
-                                </div>
-                              ));
+                                );
+                              });
                             })()}
                           </>
                         ) : (
                           <>
-                            <p className="indent-8">
-                              <strong>Art. 1º.</strong> A {minutaResolucoesAlteradas}, passa a vigorar acrescida e/ou com a seguinte redação nos seus dispositivos:
-                            </p>
-
                             {(() => {
-                              const articlesWithFinalText = currentArticles.filter(art => art.finalText && art.finalText.trim());
                               if (articlesWithFinalText.length === 0) {
                                 return (
                                   <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl text-amber-800 text-xs italic text-center font-sans my-4">
@@ -4272,20 +4860,83 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                   </div>
                                 );
                               }
+
+                              let articleCounter = 1;
+                              const art1Index = articlesWithAcrescidos.length > 0 ? articleCounter++ : null;
+                              const art2Index = articlesWithAlterados.length > 0 ? articleCounter++ : null;
+                              const artVigenciaIndex = articleCounter;
+
                               return (
-                                <div className="space-y-4 pl-4 sm:pl-8 border-l-2 border-slate-300 italic">
-                                  {articlesWithFinalText.map((art) => (
-                                    <div key={art.id} className="p-2 rounded not-italic whitespace-pre-wrap leading-relaxed bg-emerald-50/50 border-l-2 border-emerald-500 print:bg-transparent print:border-none">
-                                      "{art.finalText!.trim()}"
+                                <div className="space-y-6">
+                                  {/* SEÇÃO 1: ARTIGO DE DISPOSITIVOS ACRESCIDOS */}
+                                  {articlesWithAcrescidos.length > 0 && (
+                                    <div className="space-y-3">
+                                      <p className="indent-8">
+                                        <strong>Art. {art1Index}º.</strong> A {minutaResolucoesAlteradas}, passa a vigorar acrescida dos seguintes artigos:
+                                      </p>
+
+                                      <div className="space-y-4 pl-4 sm:pl-8 border-l-2 border-emerald-400">
+                                        {articlesWithAcrescidos.map((ana) => {
+                                          const blockText = buildAcrescidoArticleText(ana);
+                                          if (!blockText) return null;
+
+                                          return (
+                                            <div key={ana.article.id} className="p-3 rounded-lg bg-emerald-50/40 border border-emerald-200/60 print:bg-transparent print:border-none print:p-0">
+                                              <div className="flex items-center justify-between gap-2 mb-1.5 print:hidden">
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 font-sans">
+                                                  <PlusCircle size={11} /> {ana.isEntireArticleNew ? "Artigo Integralmente Novo" : "Dispositivo(s) Acrescido(s)"}
+                                                </span>
+                                              </div>
+                                              <div className="whitespace-pre-wrap leading-relaxed not-italic text-slate-900">
+                                                {blockText}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
                                     </div>
-                                  ))}
+                                  )}
+
+                                  {/* SEÇÃO 2: ARTIGO DE DISPOSITIVOS COM NOVA REDAÇÃO */}
+                                  {articlesWithAlterados.length > 0 && (
+                                    <div className="space-y-3 pt-2">
+                                      <p className="indent-8">
+                                        <strong>Art. {art2Index || 1}º.</strong> {articlesWithAlterados.length === 1 && !formattedAlteradosLabels.startsWith("Cláusula") && !formattedAlteradosLabels.startsWith("Tabela")
+                                          ? `O art. ${formattedAlteradosLabels}, da ${minutaResolucoesAlteradas}, passa a vigorar com a seguinte redação:`
+                                          : `Os artigos ${formattedAlteradosLabels}, da ${minutaResolucoesAlteradas}, passam a vigorar com as seguintes redações:`}
+                                      </p>
+
+                                      <div className="space-y-4 pl-4 sm:pl-8 border-l-2 border-blue-400">
+                                        {articlesWithAlterados.map((ana) => {
+                                          const blockText = buildAlteradoArticleText(ana);
+                                          if (!blockText) return null;
+
+                                          return (
+                                            <div key={ana.article.id} className="p-3 rounded-lg bg-blue-50/40 border border-blue-200/60 print:bg-transparent print:border-none print:p-0">
+                                              <div className="flex items-center justify-between gap-2 mb-1.5 print:hidden">
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 font-sans">
+                                                  <Edit3 size={11} /> Nova Redação ({ana.artLabel})
+                                                </span>
+                                              </div>
+                                              <div className="whitespace-pre-wrap leading-relaxed not-italic text-slate-900">
+                                                {blockText}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* SEÇÃO 3: ARTIGO DE VIGÊNCIA */}
+                                  <div className="pt-2">
+                                    <p className="indent-8">
+                                      <strong>Art. {artVigenciaIndex}º.</strong> {minutaVigencia.trim()}
+                                    </p>
+                                  </div>
                                 </div>
                               );
                             })()}
-
-                            <p className="indent-8 pt-4">
-                              <strong>Art. 2º.</strong> Esta Norma entra em vigor na data da sua publicação.
-                            </p>
                           </>
                         )}
                       </div>
@@ -4301,93 +4952,6 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               );
             })()}
 
-            {analysisTab === "minuta_completa" && (
-              <div className="space-y-6">
-                <div className="flex flex-col lg:flex-row justify-between items-start gap-4 mb-4">
-                  <div>
-                    <h3 className="text-lg font-black text-slate-800">Minuta Completa com Alterações</h3>
-                    <p className="text-xs text-slate-500 font-medium">
-                      Carregue o texto atual (original) da Resolução em formato Word para comparar automaticamente com as alterações cadastradas.
-                    </p>
-                  </div>
-                </div>
-
-                {!minutaCompletaOriginalText ? (
-                  <div className="bg-slate-50 border border-slate-200 border-dashed rounded-2xl p-10 text-center">
-                    <div className="inline-flex items-center justify-center w-12 h-12 bg-white rounded-full shadow-sm mb-4">
-                      <FileText size={20} className="text-slate-400" />
-                    </div>
-                    <h4 className="text-sm font-bold text-slate-700 mb-2">Carregar Texto Atual</h4>
-                    <p className="text-xs text-slate-500 mb-6 max-w-sm mx-auto">
-                      Faça o upload do arquivo Word (.docx) contendo o texto completo e atual da Resolução para visualizarmos as modificações finais.
-                    </p>
-                    <label className={cn(
-                      "inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
-                      isExtractingCompleta 
-                        ? "bg-slate-100 text-slate-400 cursor-not-allowed" 
-                        : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
-                    )}>
-                      {isExtractingCompleta ? (
-                        <><RefreshCw size={14} className="animate-spin" /> Carregando...</>
-                      ) : (
-                        <><Upload size={14} /> Selecionar Arquivo (.docx)</>
-                      )}
-                      <input 
-                        type="file" 
-                        accept=".docx" 
-                        className="hidden" 
-                        disabled={isExtractingCompleta}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleExtractCompletaText(file);
-                        }} 
-                      />
-                    </label>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 block"></span> Texto Adicionado
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-100">
-                          <span className="w-2 h-2 rounded-full bg-rose-500 block"></span> Texto Removido
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => {
-                          setMinutaCompletaOriginalText("");
-                          setMinutaCompletaDiffHtml(undefined);
-                        }}
-                        className="text-[10px] text-slate-500 hover:text-slate-700 font-bold underline"
-                      >
-                        Carregar outro documento
-                      </button>
-                    </div>
-
-                    <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
-                      {minutaCompletaDiffHtml ? (
-                        <div 
-                          className="prose prose-sm max-w-none prose-p:leading-relaxed text-slate-800 font-serif outline-none focus:ring-2 focus:ring-indigo-100 hover:bg-slate-50 transition-colors p-4 -mx-4 rounded-xl cursor-text"
-                          contentEditable={true}
-                          suppressContentEditableWarning={true}
-                          onBlur={(e) => {
-                            setMinutaCompletaDiffHtml({ __html: e.currentTarget.innerHTML });
-                          }}
-                          dangerouslySetInnerHTML={minutaCompletaDiffHtml}
-                        />
-                      ) : (
-                        <div className="text-center py-10">
-                          <RefreshCw size={24} className="text-indigo-400 animate-spin mx-auto mb-3" />
-                          <p className="text-xs font-bold text-slate-500">Comparando alterações...</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -4581,10 +5145,17 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           </div>
         </div>
       )}
+    </div>
+    );
+  };
+
+  return (
+    <>
+      {renderMainContent()}
 
       {/* Modal de Edição Geral, Minuta e Anexos */}
       {editingTomada && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 animate-fadeIn">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-[9999] animate-fadeIn" style={{ zIndex: 9999 }}>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-5xl w-full p-6 space-y-5 flex flex-col max-h-[92vh]">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4 shrink-0">
               <div>
@@ -4959,7 +5530,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
       {/* Modal de Confirmação de Exclusão (100% compatível com iFrames) */}
       {deletingTomada && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[99999] animate-fadeIn" style={{ zIndex: 99999 }}>
           <div className="bg-white rounded-2xl border border-rose-100 shadow-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
@@ -5007,7 +5578,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
       {/* Modal de Confirmação de Exclusão de Dispositivo */}
       {deletingArticle && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[99999] animate-fadeIn" style={{ zIndex: 99999 }}>
           <div className="bg-white rounded-2xl border border-rose-100 shadow-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
@@ -5055,7 +5626,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
       {/* Modal de Confirmação de Exclusão de Contribuição */}
       {deletingContribution && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-fadeIn" style={{ zIndex: 99999 }}>
           <div className="bg-white rounded-2xl border border-rose-100 shadow-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
@@ -5093,6 +5664,6 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };

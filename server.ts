@@ -5558,14 +5558,14 @@ const updateContributionAnalysisHandler = async (req: express.Request, res: expr
   }
 };
 
-const deleteContributionHandler = async (req: express.Request, res: express.Response) => {
+const deleteContributionHandler = async (req: express.Request, res: express.Response) => { console.log("[LOG] DELETE CONTRIB", req.params);
   if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
   try {
     const { id } = req.params;
     await dbPool.query("DELETE FROM re_participation_contributions WHERE id = $1", [Number(id)]);
     res.json({ success: true });
   } catch (error) {
-    console.error("Error deleting contribution:", error);
+    console.log("DELETE CONTRIB HIT", req.params); console.error("Error deleting contribution:", error);
     res.status(500).json({ error: "Failed to delete contribution" });
   }
 };
