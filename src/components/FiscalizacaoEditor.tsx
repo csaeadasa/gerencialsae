@@ -28,6 +28,13 @@ export const FiscalizacaoEditor: React.FC<Props> = ({ data, onChange }) => {
         method: 'POST',
         body: formData
       });
+      if (!res.ok) {
+        throw new Error(`Erro no servidor: ${res.status}`);
+      }
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Resposta inválida do servidor.");
+      }
       const data = await res.json();
       if (data.success && data.urls) {
         const currentImages = localData.imagens || [];

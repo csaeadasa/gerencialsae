@@ -2,7 +2,7 @@
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-
+  
   --color-adasa-dark: #1A3E8A;
   --color-adasa-mid: #0091DA;
   --color-adasa-light: #45C4F6;
@@ -44,5 +44,25 @@
   }
   .kanban-scrollbar::-webkit-scrollbar-thumb {
     @apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors;
+  }
+}
+
+@media print {
+  body.printing-minuta * {
+    visibility: hidden;
+  }
+  body.printing-minuta #minuta-resolucao-print, 
+  body.printing-minuta #minuta-resolucao-print * {
+    visibility: visible;
+  }
+  body.printing-minuta #minuta-resolucao-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
   }
 }

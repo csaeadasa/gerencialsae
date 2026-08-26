@@ -6,6 +6,89 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { cn } from "../lib/utils";
 import { useAuth } from "../lib/auth";
 
+
+export const getSmartDiff = (oldText: string, newText: string) => {
+  const oText = oldText || "";
+  const nText = newText || "";
+  if (!oText && !nText) return [];
+  if (!oText) return [{ added: true, removed: false, value: nText }];
+  if (!nText) return [{ added: false, removed: true, value: oText }];
+
+  const oLines = oText.split('\n');
+  const nLines = nText.split('\n');
+  
+  const lineDiffs = diff.diffArrays(oLines, nLines);
+  
+  let finalDiff: any[] = [];
+  
+  for (let i = 0; i < lineDiffs.length; i++) {
+    const part = lineDiffs[i];
+    const isLastPart = (i === lineDiffs.length - 1);
+    
+    if (!part.added && !part.removed) {
+        finalDiff.push({ added: false, removed: false, value: part.value.join('\n') + (isLastPart ? '' : '\n') });
+    } else if (part.removed) {
+        if (i + 1 < lineDiffs.length && lineDiffs[i+1].added) {
+            const addedPart = lineDiffs[i+1];
+            const isNextLastPart = (i + 1 === lineDiffs.length - 1);
+            
+            const oParas = part.value;
+            const nParas = addedPart.value;
+            
+            const maxParas = Math.max(oParas.length, nParas.length);
+            for (let j = 0; j < maxParas; j++) {
+                const op = oParas[j] || "";
+                const np = nParas[j] || "";
+                
+                const isLastLineInGroup = (j === maxParas - 1);
+                const suffix = (isNextLastPart && isLastLineInGroup) ? '' : '\n';
+                
+                if (!op && !np) {
+                    finalDiff.push({ added: false, removed: false, value: suffix });
+                    continue; 
+                }
+                
+                if (!op) {
+                     finalDiff.push({ added: true, removed: false, value: np + suffix });
+                     continue;
+                }
+                if (!np) {
+                     finalDiff.push({ added: false, removed: true, value: op + suffix });
+                     continue;
+                }
+                
+                const wd = diff.diffWords(op, np);
+                let ua = 0;
+                wd.forEach((p: any) => {
+                  if (!p.added && !p.removed) {
+                    ua += p.value.replace(/[^a-zA-Z0-9áéíóúâêîôûãõçÁÉÍÓÚÂÊÎÔÛÃÕÇ]/g, '').length;
+                  }
+                });
+                const oa = op.replace(/[^a-zA-Z0-9áéíóúâêîôûãõçÁÉÍÓÚÂÊÎÔÛÃÕÇ]/g, '').length;
+                const r = oa > 0 ? ua / oa : 0;
+                
+                if (oa > 5 && r < 0.35) {
+                    finalDiff.push({ added: false, removed: true, value: op + suffix });
+                    finalDiff.push({ added: true, removed: false, value: np + suffix });
+                } else {
+                    if (wd.length > 0) {
+                        wd[wd.length - 1].value += suffix;
+                    }
+                    finalDiff.push(...wd);
+                }
+            }
+            i++;
+        } else {
+            finalDiff.push({ added: false, removed: true, value: part.value.join('\n') + (isLastPart ? '' : '\n') });
+        }
+    } else if (part.added) {
+        finalDiff.push({ added: true, removed: false, value: part.value.join('\n') + (isLastPart ? '' : '\n') });
+    }
+  }
+  
+  return finalDiff;
+};
+
 interface TomadaSubsidiosTabProps {
   showToast: (title: string, message: string, type: "success" | "error" | "warning" | "info") => void;
   currentUser?: any;
@@ -57,7 +140,7 @@ export const renderDiffInline = (originalText?: string, proposedText?: string) =
   if (!prop) return <span className="whitespace-pre-wrap">{orig}</span>;
   if (orig === prop) return <span className="whitespace-pre-wrap">{prop}</span>;
 
-  const diffParts = diff.diffWords(originalText || "", (proposedText !== undefined && proposedText !== null ? proposedText : originalText || ""));
+  const diffParts = getSmartDiff(originalText || "", (proposedText !== undefined && proposedText !== null ? proposedText : originalText || ""));
   return (
     <span className="whitespace-pre-wrap leading-relaxed">
       {diffParts.map((part, pIdx) => {
@@ -109,7 +192,7 @@ interface ContributionAnalysisItemProps {
 
 const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, article, handleUpdateAnalysis }) => {
   const originalText = article.proposedText || article.originalText || "";
-  const diffParts = diff.diffWords(originalText, c.proposedText);
+  const diffParts = getSmartDiff(originalText, c.proposedText);
   
   const [isEditingAnalysis, setIsEditingAnalysis] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
@@ -305,11 +388,51 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [repeatProposed, setRepeatProposed] = useState(false);
 
+  const prevContributionsRef = React.useRef<string>("");
+
+  useEffect(() => {
+    // Check if decisions changed to auto-fill text
+    const currentDecisions = contributions.map(c => `${c.id}:${c.decision}`).join('|');
+    
+    if (prevContributionsRef.current !== "" && prevContributionsRef.current !== currentDecisions) {
+      const acatadas = contributions.filter(c => c.decision === "Acatada");
+      const todasNaoAcatadas = contributions.length > 0 && contributions.every(c => 
+        c.decision === "Não Acatada" || 
+        c.decision === "Prejudicada" || 
+        c.decision === "Retida para Estudos Adicionais"
+      );
+
+      let newFinalText = finalText;
+      let shouldUpdate = false;
+
+      if (acatadas.length === 1) {
+        newFinalText = acatadas[0].proposedText || "";
+        shouldUpdate = true;
+      } else if (acatadas.length > 1) {
+        newFinalText = acatadas.map(c => c.proposedText).filter(Boolean).join("\n\n");
+        shouldUpdate = true;
+      } else if (todasNaoAcatadas) {
+        newFinalText = article.proposedText || article.originalText || "";
+        shouldUpdate = true;
+      } else {
+        newFinalText = "";
+        shouldUpdate = true;
+      }
+
+      if (shouldUpdate && newFinalText !== finalText) {
+        setFinalText(newFinalText);
+        handleUpdateFinalAnalysis(article.id, newFinalText, finalJustification);
+      }
+    }
+    
+    prevContributionsRef.current = currentDecisions;
+  }, [contributions, article.id, article.proposedText, article.originalText, finalJustification, handleUpdateFinalAnalysis, finalText]);
+
   useEffect(() => {
     setFinalText(article.finalText || "");
     setFinalJustification(article.finalJustification || "");
     setRepeatProposed(false);
-  }, [article]);
+  }, [article.finalText, article.finalJustification]);
 
   const handleSuggestAI = async () => {
     setIsGeneratingAI(true);
@@ -558,8 +681,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [minutaConsiderandos, setMinutaConsiderandos] = useState<string>(
     "Considerando os dispositivos da Lei nº 11.445, de 5 de janeiro de 2007 que estabelece as diretrizes nacionais para o saneamento básico;\nConsiderando a competência regulatória e fiscalizatória atribuída a esta Agência Reguladora nos termos da Lei Distrital nº 4.285, de 26 de dezembro de 2008;\nConsiderando as contribuições recebidas e acatadas no âmbito da Consulta Pública / Tomada de Subsídios;"
   );
-  const [minutaVigencia, setMinutaVigencia] = useState<string>("Esta Resolução entra em vigor na data de sua publicação, e será aplicável imediatamente aos processos em curso, desde que não tenham sido julgados, em sede de Recurso de Revisão.");
-  const [minutaAssinante, setMinutaAssinante] = useState<string>("RAIMUNDO DA SILVA RIBEIRO NETO - DIRETOR-PRESIDENTE");
+  const [minutaVigencia, setMinutaVigencia] = useState<string>("Esta Resolução entra em vigor na data de sua publicação.");
+  const [minutaAssinante, setMinutaAssinante] = useState<string>("RAIMUNDO RIBEIRO");
   const [minutaCopied, setMinutaCopied] = useState<boolean>(false);
   const [minutaClassificationOverrides, setMinutaClassificationOverrides] = useState<Record<string | number, "acrescido" | "alterado">>({});
   const [minutaSubunitOverrides, setMinutaSubunitOverrides] = useState<Record<string, "acrescido" | "alterado" | "ignorar">>({});
@@ -604,6 +727,15 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
         body: formData
       });
       
+      if (!res.ok) {
+        throw new Error(`Erro do servidor: ${res.status}`);
+      }
+
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Resposta inválida do servidor.");
+      }
+
       const data = await res.json();
       if (data.success && data.text) {
         const text = data.text as string;
@@ -769,6 +901,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [publicContributionsView, setPublicContributionsView] = useState<"minhas" | "todas">("minhas");
   const [contributionsSortConfig, setContributionsSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [proposedText, setProposedText] = useState("");
+  const [isSuppressing, setIsSuppressing] = useState(false);
   const [justification, setJustification] = useState("");
   const [contributeArticleFilter, setContributeArticleFilter] = useState<"todos" | "com_contribuicao" | "sem_contribuicao">("todos");
   const [analysisArticleFilter, setAnalysisArticleFilter] = useState<"todos" | "analisados" | "pendentes">("todos");
@@ -814,6 +947,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   // Edit Modal State
   const [editingTomada, setEditingTomada] = useState<TomadaSubsidio | null>(null);
   const [editModalTab, setEditModalTab] = useState<"geral" | "minuta" | "anexos">("geral");
+  const [showOrientacoesModal, setShowOrientacoesModal] = useState(false);
   const [editFormData, setEditFormData] = useState({
     id: "" as string | number,
     numero: "",
@@ -1183,10 +1317,16 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
       // 2. Update articles
       if (editArticles && editArticles.length > 0) {
+        // Guarantee order reflects the current array state
+        const articlesToSave = editArticles.map((art, idx) => ({
+          ...art,
+          order: idx + 1
+        }));
+        
         await fetch(`/api/reg/participations/${editFormData.id}/articles`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ articles: editArticles })
+          body: JSON.stringify({ articles: articlesToSave })
         });
       }
 
@@ -1266,6 +1406,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       ? article.proposedText
       : (article.originalText || "");
     setProposedText(baseText);
+    setIsSuppressing(false);
     setJustification("");
   };
 
@@ -1277,6 +1418,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     setContributingArticleId(String(article.id));
     setEditingContributionId(contrib.id);
     setProposedText(contrib.proposedText || "");
+    setIsSuppressing(!contrib.proposedText || contrib.proposedText.trim() === "");
     setJustification(contrib.justification || "");
   };
 
@@ -1327,8 +1469,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       showToast("Autenticação Necessária", "Você precisa estar logado para enviar uma contribuição.", "warning");
       return;
     }
-    if (!proposedText.trim() || !justification.trim()) {
-      showToast("Aviso", "Preencha o texto da contribuição e a justificativa.", "warning");
+    if ((!isSuppressing && !proposedText.trim()) || !justification.trim()) {
+      showToast("Aviso", "Preencha a proposta de alteração (ou marque a opção de supressão) e a justificativa técnica.", "warning");
       return;
     }
 
@@ -1337,6 +1479,31 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     const authorSignature = (effectiveUser?.name || effectiveUser?.email || "Usuário").trim();
     const authorEmail = (effectiveUser?.email || "").trim();
 
+    const currentArt = articles.find(a => String(a.id) === currentArtIdStr);
+    let finalProposedText = proposedText;
+
+    if (currentArt && !isSuppressing) {
+      const originalTextForArt = currentArt.originalText || "";
+      const baseMatch = originalTextForArt.match(/(?:^|\n)\s*(?:Art\.|Artigo)\s*(\d+)/i);
+      if (baseMatch) {
+        const baseNum = baseMatch[1];
+        let letterIndex = 0;
+        let formatApplied = false;
+
+        finalProposedText = proposedText.replace(/(^|\n)(\s*)(Art\.|Artigo)(\s+)(\d+)(?:\s*-\s*)?([A-Za-z])?(º|°|o|-)?/gi, (match, prefix, spaces, artWord, spaces2, num, existingLetter, suffix) => {
+          if (existingLetter || num === baseNum) return match;
+          formatApplied = true;
+          const letter = String.fromCharCode(65 + letterIndex);
+          letterIndex++;
+          return `${prefix}${spaces}${artWord}${spaces2}${baseNum}${letter}${suffix || 'º'}`;
+        });
+
+        if (formatApplied) {
+          showToast("Formatação Automática", "A numeração de novos artigos foi ajustada para letras maiúsculas (padrão de técnica legislativa).", "info");
+        }
+      }
+    }
+
     try {
       if (editingContributionId) {
         // Edit existing contribution
@@ -1344,7 +1511,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            proposedText,
+            proposedText: isSuppressing ? "" : finalProposedText,
             justification,
             authorName: authorSignature,
             authorEmail,
@@ -1358,7 +1525,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               return {
                 ...c,
                 userId: currentUserId,
-                proposedText,
+                proposedText: isSuppressing ? "" : finalProposedText,
                 justification,
                 authorName: authorSignature,
                 authorEmail,
@@ -1371,6 +1538,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           setExpandedUserContribs(prev => ({ ...prev, [currentArtIdStr]: true }));
           showToast("Sucesso", "Sua proposta de alteração foi atualizada com sucesso!", "success");
           setProposedText("");
+          setIsSuppressing(false);
           setJustification("");
           setContributingArticleId(null);
           setEditingContributionId(null);
@@ -1388,7 +1556,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           userId: currentUserId,
           authorName: authorSignature,
           authorEmail,
-          proposedText,
+          proposedText: isSuppressing ? "" : finalProposedText,
           justification,
           createdAt: new Date().toISOString()
         };
@@ -1409,7 +1577,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               articleId: Number(contributingArticleId),
               userId: currentUserId,
               authorName: authorSignature,
-              proposedText,
+              proposedText: isSuppressing ? "" : finalProposedText,
               justification,
               createdAt: newContrib.createdAt
             },
@@ -1511,7 +1679,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   };
 
   const renderUserContributionComparison = (baseText: string, suggestedText: string) => {
-    const diffParts = diff.diffWords(baseText || "", suggestedText || "");
+    const diffParts = getSmartDiff(baseText || "", suggestedText || "");
     const hasAdded = diffParts.some(p => p.added);
     const hasRemoved = diffParts.some(p => p.removed);
     const isIdentical = !hasAdded && !hasRemoved;
@@ -1603,7 +1771,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   };
 
   const renderArticleDiff = (original: string, proposed: string) => {
-    const diffResult = diff.diffWords(original, proposed);
+    const diffResult = getSmartDiff(original, proposed);
 
     return (
       <div className="text-sm mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1638,7 +1806,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   };
 
   const renderDiff = (original: string, proposed: string) => {
-    const diffResult = diff.diffWords(original, proposed);
+    const diffResult = getSmartDiff(original, proposed);
 
     return (
       <div className="text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 mt-2 grid grid-cols-2 gap-4">
@@ -2023,7 +2191,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           </div>
                           <textarea 
                             className={cn(
-                              "w-full bg-white border rounded-lg p-3 resize-none text-sm font-medium whitespace-pre-wrap transition-all outline-none",
+                              "w-full bg-white border rounded-lg p-3 resize-y text-sm font-medium whitespace-pre-wrap transition-all outline-none",
                               isMissingOriginal 
                                 ? "border-amber-400 focus:ring-2 focus:ring-amber-300 text-slate-700 bg-amber-50/20" 
                                 : "border-slate-200 focus:ring-2 focus:ring-slate-400 text-slate-600"
@@ -2034,7 +2202,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                               newArts[i].originalText = e.target.value;
                               setPreviewArticles(newArts);
                             }}
-                            rows={Math.max(3, (art.proposedText || art.originalText || "").split('\n').length)}
+                            rows={Math.max(12, (art.proposedText || art.originalText || "").split('\n').length)}
                             placeholder="Insira o texto atual vigente deste dispositivo (obrigatório)..."
                           />
                           {isMissingOriginal && (
@@ -2047,14 +2215,14 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       <div>
                         <label className="block text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-1">Texto Proposto (Área Técnica)</label>
                         <textarea 
-                          className="w-full bg-white border border-indigo-200 rounded-lg p-3 resize-none focus:ring-2 focus:ring-indigo-600 text-sm font-medium text-slate-800 whitespace-pre-wrap outline-none"
+                          className="w-full bg-white border border-indigo-200 rounded-lg p-3 resize-y focus:ring-2 focus:ring-indigo-600 text-sm font-medium text-slate-800 whitespace-pre-wrap outline-none"
                           value={art.proposedText !== undefined ? art.proposedText : art.originalText}
                           onChange={e => {
                             const newArts = [...(previewArticles || [])];
                             newArts[i].proposedText = e.target.value;
                             setPreviewArticles(newArts);
                           }}
-                          rows={Math.max(3, (art.proposedText || art.originalText || "").split('\n').length)}
+                          rows={Math.max(12, (art.proposedText || art.originalText || "").split('\n').length)}
                         />
                       </div>
                     </div>
@@ -2641,12 +2809,21 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       <>
                         {isTomadaAberta ? (
                           !hasUserContributed ? (
+                            <div className="flex items-center gap-2">
                             <button 
-                              onClick={() => handleAddContribution(art)} 
+                              onClick={() => handleAddContribution(art)}
                               className="text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg transition-all shadow-sm flex items-center gap-2 bg-white text-slate-700 border border-slate-200 hover:border-indigo-700 hover:text-indigo-700"
                             >
                               <MessageSquare size={14} className="text-indigo-600" /> Propor Alteração
                             </button>
+                            <button 
+                              onClick={() => setShowOrientacoesModal(true)}
+                              className="text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg transition-all shadow-sm flex items-center gap-2 bg-white text-slate-700 border border-slate-200 hover:border-slate-800 hover:text-slate-800"
+                              title="Orientações sobre como propor alterações"
+                            >
+                              <AlertTriangle size={14} className="text-amber-500" /> Orientações
+                            </button>
+                            </div>
                           ) : null
                         ) : (
                           <button 
@@ -2678,17 +2855,38 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       
                       <div className="space-y-6">
                         <div>
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
-                              Texto da Contribuição Sugerida
-                            </span>
+                          <div className="flex items-center justify-between gap-4 flex-wrap mb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
+                                Texto da Contribuição Sugerida
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-200 shadow-sm">
+                              <input
+                                type="checkbox"
+                                id={`suppress-${art.id}`}
+                                checked={isSuppressing}
+                                onChange={(e) => {
+                                  setIsSuppressing(e.target.checked);
+                                  if (e.target.checked) setProposedText("");
+                                }}
+                                className="w-4 h-4 text-rose-600 rounded border-rose-300 focus:ring-rose-600 cursor-pointer"
+                              />
+                              <label htmlFor={`suppress-${art.id}`} className="text-xs font-bold text-rose-800 cursor-pointer select-none">
+                                Propor supressão (exclusão) integral deste dispositivo
+                              </label>
+                            </div>
                           </div>
                           <textarea 
-                            className="w-full bg-white px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-600 text-sm text-slate-800 font-medium shadow-2xs"
+                            className={cn(
+                              "w-full px-4 py-3 border rounded-xl text-sm font-medium shadow-2xs transition-all",
+                              isSuppressing ? "bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200" : "bg-white border-slate-300 focus:ring-2 focus:ring-emerald-600 text-slate-800"
+                            )}
                             rows={10}
                             value={proposedText}
                             onChange={e => setProposedText(e.target.value)}
-                            placeholder="Insira a redação que você propõe para este dispositivo..."
+                            disabled={isSuppressing}
+                            placeholder={isSuppressing ? "Dispositivo será excluído integralmente." : "Insira a redação que você propõe para este dispositivo..."}
                           />
                         </div>
 
@@ -3086,10 +3284,10 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           const artIndex = currentArticles.findIndex(a => String(a.id) === String(c.articleId));
                           const originalArticle = artIndex !== -1 ? currentArticles[artIndex] : undefined;
                           const originalText = originalArticle ? (originalArticle.proposedText !== undefined ? originalArticle.proposedText : originalArticle.originalText) : "Artigo não encontrado";
-                          const diffResult = diff.diffWords(originalText, c.proposedText || "");
+                          const diffResult = getSmartDiff(originalText, c.proposedText || "");
                           
                           const fText = originalArticle?.finalText || originalText;
-                          const finalDiffParts = diff.diffWords(originalText, fText);
+                          const finalDiffParts = getSmartDiff(originalText, fText);
                           
                           return (
                             <tr key={c.id} className="hover:bg-slate-50/40 transition-colors align-top">
@@ -3274,6 +3472,9 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               }).length;
               const totalWithContributions = articlesWithContributions.length;
 
+              const finalizedTextCount = currentArticles.filter(art => Boolean(art.finalText && art.finalText.trim().length > 0)).length;
+              const totalArticlesCount = currentArticles.length;
+
               const filteredAnalysisArticles = currentArticles.filter(art => {
                 const artsContribs = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
                 if (analysisArticleFilter === "todos") return true;
@@ -3341,6 +3542,29 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         >
                           Pendentes ({totalWithContributions - fullyAnalyzedCount})
                         </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Painel de Destaque dos Dispositivos com Texto Final */}
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black uppercase tracking-wider text-slate-500">TEXTO FINAL CONCLUÍDO</span>
+                          {finalizedTextCount > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-800 uppercase tracking-wider border border-indigo-200">
+                              <CheckCircle2 size={12} className="text-indigo-600" /> {finalizedTextCount} {finalizedTextCount === 1 ? 'redação finalizada' : 'redações finalizadas'}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                              Nenhuma redação finalizada ainda
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-600 font-medium mt-1">
+                          Você redigiu o texto final de <strong className="text-indigo-700 font-bold">{finalizedTextCount}</strong> de <strong className="text-slate-900 font-bold">{totalArticlesCount}</strong> dispositivos da norma.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -3717,7 +3941,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             
                             const origText = art.proposedText || art.originalText || "";
                             const fText = art.finalText || origText;
-                            const diffParts = diff.diffWords(origText, fText);
+                            const diffParts = getSmartDiff(origText, fText);
 
                             return (
                               <React.Fragment key={art.id}>
@@ -3819,7 +4043,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                                   <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
                                                     {(() => {
                                                       const cOrigText = art.proposedText || art.originalText || "";
-                                                      const cDiffParts = diff.diffWords(cOrigText, c.proposedText || "");
+                                                      const cDiffParts = getSmartDiff(cOrigText, c.proposedText || "");
                                                       return cDiffParts.map((part, i) => (
                                                         part.added ? <span key={i} className="bg-emerald-100 text-emerald-950 font-bold px-1 rounded mx-0.5 border border-emerald-300">{part.value}</span> :
                                                         part.removed ? <span key={i} className="bg-rose-100 text-rose-950 px-1 rounded mx-0.5 line-through decoration-rose-500 border border-rose-300">{part.value}</span> :
@@ -3891,11 +4115,13 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 artLabel: string;
                 isEntireArticleNew: boolean;
                 subunits: AnalyzedSubunit[];
+                deletedSubunits: LegalSubunit[];
                 acrescidosCount: number;
                 alteradosCount: number;
                 inalteradosCount: number;
                 hasAcrescido: boolean;
                 hasAlterado: boolean;
+                hasRevogado: boolean;
               }
 
               // 2. Parser function: breaks legal text into granular subunits (Caput, Novos Artigos Inseridos, Parágrafos, Incisos, Alíneas, Itens)
@@ -3905,8 +4131,17 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 // Safe line breaker: if an Art., §, Parágrafo único, or Inciso starts after punctuation/space, ensure it separates onto a new line
                 let preparedText = rawText;
                 preparedText = preparedText.replace(/([.;:])\s*(Art(?:igo)?\.?\s*[0-9]+(?:\s*[ºª])?(?:[\s\-_]*[A-Za-z0-9]+)*(?:\s*[ºª])?[\.:\s\-–—]+)/gi, "$1\n$2");
-                preparedText = preparedText.replace(/([.;:])\s*(§\s*[0-9]+[ºª]?(?:-[A-Za-z0-9]+)?|Par[aá]grafo\s+[uú]nico)/gi, "$1\n$2");
-                preparedText = preparedText.replace(/([.;:])\s*([IVXLCDM]+\s*[-–—\.]\s*)/g, "$1\n$2");
+                preparedText = preparedText.replace(/(^|[\s.;:])(?:(do|no|ao|o|dos|nos|aos|os|art\.?)\s+)?(§\s*[0-9]+[ºª]?(?:-[A-Za-z0-9]+)?|Par[aá]grafo\s+[uú]nico)/gi, (match, p1, prep, subunit) => {
+                  if (prep) return match;
+                  return p1 + "\n" + subunit;
+                });
+                preparedText = preparedText.replace(/(^|[^a-zA-Z])([IVXLCDM]+\s*[-–—\.]\s*)/g, (match, p1, p2) => {
+                  // Roman numerals can be tricky, but if they have a dash/dot and spaces, it's likely an inciso.
+                  // E.g. " I - " or " I. "
+                  // Avoid if preceded by "Título", "Capítulo", "Seção"
+                  if (p1.match(/t[íi]tulo\s*$|cap[íi]tulo\s*$|se[çc][ãa]o\s*$/i)) return match;
+                  return p1 + "\n" + p2;
+                });
 
                 const lines = preparedText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
                 const subunits: LegalSubunit[] = [];
@@ -4199,20 +4434,27 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                   };
                 });
 
+                const deletedSubunits: LegalSubunit[] = isEntireArticleNew ? [] : origSubunits.filter(o => {
+                  return !finSubunits.some(f => f.id === o.id);
+                });
+
                 const acrescidosCount = analyzedSubunits.filter(s => s.status === "acrescido").length;
                 const alteradosCount = analyzedSubunits.filter(s => s.status === "alterado" && s.type !== "artigo_inserido").length;
                 const inalteradosCount = analyzedSubunits.filter(s => s.status === "inalterado").length;
+                const hasRevogado = deletedSubunits.length > 0;
 
                 return {
                   article: art,
                   artLabel,
                   isEntireArticleNew,
                   subunits: analyzedSubunits,
+                  deletedSubunits,
                   acrescidosCount,
                   alteradosCount,
                   inalteradosCount,
                   hasAcrescido: isEntireArticleNew || acrescidosCount > 0 || analyzedSubunits.some(s => s.type === "artigo_inserido"),
-                  hasAlterado: !isEntireArticleNew && alteradosCount > 0
+                  hasAlterado: !isEntireArticleNew && alteradosCount > 0,
+                  hasRevogado
                 };
               });
 
@@ -4296,6 +4538,62 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 return formatQuotedDevice(block);
               };
 
+              // 10.5. Format Article Block for Art. 3º (Revogados)
+              const articlesWithRevogados = analyzedArticles.filter(a => a.hasRevogado);
+              const buildRevogadosText = (articles: AnalyzedArticle[], base: string): string => {
+                const items: string[] = [];
+                for (const ana of articles) {
+                  const art = ana.artLabel.toLowerCase();
+                  const isFullArticle = ana.deletedSubunits.some(s => s.type === "caput") && ana.subunits.length === 0; 
+                  
+                  if (isFullArticle) {
+                     items.push(`o ${art}`);
+                  } else {
+                     const labels = ana.deletedSubunits.map(s => s.label.toLowerCase()); 
+                     const formattedLabels = labels.map(l => {
+                       if (l.startsWith("alínea") || l.startsWith("alinea")) return `a ${l}`;
+                       if (l.startsWith("§") || l.startsWith("parágrafo") || l.startsWith("paragrafo")) return `o ${l}`;
+                       if (l.startsWith("inciso")) return `o ${l}`;
+                       return `o ${l}`;
+                     });
+
+                     let labelStr = "";
+                     if (formattedLabels.length === 1) {
+                       labelStr = formattedLabels[0];
+                     } else if (formattedLabels.length === 2) {
+                       labelStr = `${formattedLabels[0]} e ${formattedLabels[1]}`;
+                     } else {
+                       const last = formattedLabels.pop();
+                       labelStr = `${formattedLabels.join(", ")} e ${last}`;
+                     }
+                     
+                     items.push(`${labelStr}, do ${art}`);
+                  }
+                }
+
+                if (items.length === 0) return "";
+                
+                let combined = "";
+                let isPlural = false;
+                
+                if (items.length === 1) {
+                  combined = items[0];
+                  if (combined.includes(" e ")) isPlural = true;
+                } else if (items.length === 2) {
+                  combined = `${items[0]} e ${items[1]}`;
+                  isPlural = true;
+                } else {
+                  const last = items.pop();
+                  combined = `${items.join(", ")} e ${last}`;
+                  isPlural = true;
+                }
+
+                if (isPlural) {
+                  return `Ficam revogados ${combined}, da ${base}.`;
+                }
+                return `Fica revogado ${combined}, da ${base}.`;
+              };
+
               // 11. Build plain text for copy/export
               const generatePlainTextMinuta = () => {
                 let text = `Governo do Distrito Federal\nAgência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal\nSecretaria Geral\n\n`;
@@ -4356,7 +4654,16 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       });
                     }
 
-                    // 3. Disposição de Vigência
+                    // 3. Dispositivos Revogados
+                    if (articlesWithRevogados.length > 0) {
+                      const block = buildRevogadosText(articlesWithRevogados, minutaResolucoesAlteradas);
+                      if (block) {
+                        text += `Art. ${artigoAtoIndex}º. ${block}\n\n`;
+                        artigoAtoIndex++;
+                      }
+                    }
+
+                    // 4. Disposição de Vigência
                     text += `Art. ${artigoAtoIndex}º. ${minutaVigencia.trim()}\n\n`;
                   }
                 }
@@ -4375,7 +4682,46 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               };
 
               const handlePrintMinuta = () => {
-                window.print();
+                const printContent = document.getElementById("minuta-resolucao-print")?.innerHTML;
+                if (!printContent) return;
+
+                const printWindow = window.open('', '_blank');
+                if (!printWindow) {
+                  showToast("Erro", "O bloqueador de pop-ups impediu a impressão.", "error");
+                  return;
+                }
+
+                printWindow.document.write(`
+                  <!DOCTYPE html>
+                  <html>
+                  <head>
+                    <title>Minuta de Norma - Adasa</title>
+                    <script src="https://cdn.tailwindcss.com"></script>
+                    <style>
+                      @media print {
+                        body { margin: 0; padding: 15mm; }
+                        .print\\:hidden { display: none !important; }
+                        .print\\:bg-transparent { background-color: transparent !important; }
+                        .print\\:border-none { border: none !important; }
+                        .print\\:p-0 { padding: 0 !important; }
+                        .print\\:m-0 { margin: 0 !important; }
+                        .print\\:shadow-none { box-shadow: none !important; }
+                      }
+                    </style>
+                  </head>
+                  <body class="bg-white text-black font-serif">
+                    <div class="max-w-4xl mx-auto leading-relaxed">
+                      ${printContent}
+                    </div>
+                    <script>
+                      setTimeout(() => {
+                        window.print();
+                      }, 800);
+                    </script>
+                  </body>
+                  </html>
+                `);
+                printWindow.document.close();
               };
 
               const handleExportMinutaDoc = () => {
@@ -4410,7 +4756,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                   ...prev,
                   [overrideKey]: nextStatus
                 }));
-                showToast("Classificação Atualizada", `Dispositivo reclassificado para "${nextStatus === 'acrescido' ? 'Acrescido (Art. 1º)' : nextStatus === 'alterado' ? 'Nova Redação (Art. 2º)' : 'Inalterado'}".`, "info");
+                showToast("Classificação Atualizada", `Dispositivo reclassificado para "${nextStatus === 'acrescido' ? 'Acrescido' : nextStatus === 'alterado' ? 'Nova Redação' : 'Inalterado'}".`, "info");
               };
 
               return (
@@ -4431,7 +4777,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         </h4>
                         <p className="text-xs text-slate-500 mt-1">
                           {minutaModel === "alteracao" 
-                            ? "Analisa minuciosamente o caput, parágrafos, incisos e alíneas de cada artigo com texto final salvo, separando automaticamente os acréscimos (Art. 1º) das alterações de redação (Art. 2º)."
+                            ? "Analisa minuciosamente o caput, parágrafos, incisos e alíneas de cada artigo com texto final salvo, separando automaticamente os acréscimos, as alterações de redação e as revogações."
                             : "Gera a minuta integral da nova norma regulatória consolidando apenas os dispositivos com texto final cadastrado."}
                         </p>
                       </div>
@@ -4478,7 +4824,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                     {/* Stats & Structure Summary in Alteration Mode */}
                     {minutaModel === "alteracao" && (
                       <div className="space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80">
                           <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
                             <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-sm">
                               {articlesWithAcrescidos.length}
@@ -4497,6 +4843,18 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                               <div className="text-[11px] font-bold text-slate-800">Artigos com Nova Redação</div>
                               <div className="text-[10px] text-slate-500">
                                 {articlesWithAlterados.length > 0 ? `Art. 2º: ${formattedAlteradosLabels}` : "Nenhum alterado"}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                            <div className="w-9 h-9 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center font-black text-sm">
+                              {articlesWithRevogados.length}
+                            </div>
+                            <div>
+                              <div className="text-[11px] font-bold text-slate-800">Artigos com Revogações</div>
+                              <div className="text-[10px] text-slate-500">
+                                {articlesWithRevogados.length > 0 ? "Integrarão o Art. 3º" : "Nenhuma exclusão"}
                               </div>
                             </div>
                           </div>
@@ -4554,7 +4912,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                         </span>
                                         {ana.isEntireArticleNew ? (
                                           <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                                            Artigo Integralmente Novo (Acrescido no Art. 1º)
+                                            Artigo Integralmente Novo (Acrescido)
                                           </span>
                                         ) : (
                                           <div className="flex items-center gap-1 text-[10px] text-slate-500">
@@ -4566,6 +4924,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                             {ana.alteradosCount > 0 && (
                                               <span className="font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
                                                 ~{ana.alteradosCount} Nova Redação
+                                              </span>
+                                            )}
+                                            {ana.hasRevogado && (
+                                              <span className="font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                                                -{ana.deletedSubunits?.length || 0} Revogado(s)
                                               </span>
                                             )}
                                             {ana.inalteradosCount > 0 && (
@@ -4611,7 +4974,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                                 )}
                                                 title="Clique para alternar classificação"
                                               >
-                                                {unit.status === "acrescido" ? "+ Acrescido (Art. 1º)" : unit.status === "alterado" ? "~ Nova Redação (Art. 2º)" : "= Inalterado"}
+                                                {unit.status === "acrescido" ? "+ Acrescido" : unit.status === "alterado" ? "~ Nova Redação" : "= Inalterado"}
                                               </button>
                                             </div>
                                             <p className="text-[11px] line-clamp-2 italic text-slate-600">
@@ -4620,6 +4983,24 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                           </div>
                                         );
                                       })}
+                                      {ana.deletedSubunits?.map((delUnit, dIdx) => (
+                                          <div
+                                            key={`${ana.article.id}_del_${delUnit.id}_${dIdx}`}
+                                            className="p-2 rounded-lg border text-xs flex flex-col justify-between gap-1 transition-all bg-rose-50/50 border-rose-200"
+                                          >
+                                            <div className="flex items-center justify-between gap-1">
+                                              <div className="flex items-center gap-1.5 overflow-hidden">
+                                                <span className="font-bold text-[11px] text-slate-800 shrink-0">{delUnit.label}</span>
+                                              </div>
+                                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 bg-rose-100 text-rose-800">
+                                                - Revogado
+                                              </span>
+                                            </div>
+                                            <p className="text-[11px] line-clamp-2 italic text-slate-600 line-through">
+                                              "{delUnit.text}"
+                                            </p>
+                                          </div>
+                                      ))}
                                     </div>
                                   </div>
                                 ))}
@@ -4725,7 +5106,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           type="text"
                           value={minutaAssinante}
                           onChange={(e) => setMinutaAssinante(e.target.value)}
-                          placeholder="Ex: RAIMUNDO DA SILVA RIBEIRO NETO - DIRETOR-PRESIDENTE"
+                          placeholder="Ex: RAIMUNDO RIBEIRO"
                           className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all"
                         />
                       </div>
@@ -4864,6 +5245,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                               let articleCounter = 1;
                               const art1Index = articlesWithAcrescidos.length > 0 ? articleCounter++ : null;
                               const art2Index = articlesWithAlterados.length > 0 ? articleCounter++ : null;
+                              const art3Index = articlesWithRevogados.length > 0 ? articleCounter++ : null;
                               const artVigenciaIndex = articleCounter;
 
                               return (
@@ -4928,7 +5310,16 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                     </div>
                                   )}
 
-                                  {/* SEÇÃO 3: ARTIGO DE VIGÊNCIA */}
+                                  {/* SEÇÃO 3: ARTIGO DE DISPOSITIVOS REVOGADOS */}
+                                  {articlesWithRevogados.length > 0 && (
+                                    <div className="pt-2">
+                                      <p className="indent-8">
+                                        <strong>Art. {art3Index}º.</strong> {buildRevogadosText(articlesWithRevogados, minutaResolucoesAlteradas)}
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {/* SEÇÃO 4: ARTIGO DE VIGÊNCIA */}
                                   <div className="pt-2">
                                     <p className="indent-8">
                                       <strong>Art. {artVigenciaIndex}º.</strong> {minutaVigencia.trim()}
@@ -5156,7 +5547,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       {/* Modal de Edição Geral, Minuta e Anexos */}
       {editingTomada && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-[9999] animate-fadeIn" style={{ zIndex: 9999 }}>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-5xl w-full p-6 space-y-5 flex flex-col max-h-[92vh]">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-7xl w-full p-6 space-y-5 flex flex-col max-h-[92vh]">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4 shrink-0">
               <div>
                 <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
@@ -5351,20 +5742,97 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                   ) : (
                     editArticles.map((art, idx) => (
                       <div key={art.id || idx} className="bg-slate-50/90 rounded-2xl border border-slate-200 p-5 space-y-3.5 relative group shadow-sm hover:border-indigo-200 transition-colors">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
                           <span className="text-xs font-black uppercase text-indigo-700 bg-white px-2.5 py-1 rounded-lg border border-indigo-100 shadow-xs">
                             Dispositivo #{idx + 1}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditArticles(editArticles.filter((_, i) => i !== idx));
-                            }}
-                            className="text-xs font-bold text-rose-500 hover:text-rose-700 px-2 py-1 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-1.5"
-                            title="Remover este dispositivo"
-                          >
-                            <Trash2 size={14} /> Remover Dispositivo
-                          </button>
+                          
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (idx > 0) {
+                                  const newArts = [...editArticles];
+                                  [newArts[idx - 1], newArts[idx]] = [newArts[idx], newArts[idx - 1]];
+                                  setEditArticles(newArts);
+                                }
+                              }}
+                              disabled={idx === 0}
+                              className="text-xs font-bold text-slate-500 hover:text-indigo-600 disabled:opacity-30 px-1.5 py-1 hover:bg-indigo-50 rounded transition-colors flex items-center gap-1"
+                              title="Mover para Cima"
+                            >
+                              <ArrowUp size={14} /> <span className="hidden sm:inline">Mover</span> Cima
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (idx < editArticles.length - 1) {
+                                  const newArts = [...editArticles];
+                                  [newArts[idx + 1], newArts[idx]] = [newArts[idx], newArts[idx + 1]];
+                                  setEditArticles(newArts);
+                                }
+                              }}
+                              disabled={idx === editArticles.length - 1}
+                              className="text-xs font-bold text-slate-500 hover:text-indigo-600 disabled:opacity-30 px-1.5 py-1 hover:bg-indigo-50 rounded transition-colors flex items-center gap-1"
+                              title="Mover para Baixo"
+                            >
+                              <ArrowDown size={14} /> <span className="hidden sm:inline">Mover</span> Baixo
+                            </button>
+
+                            <div className="w-px h-4 bg-slate-300 mx-1"></div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newArticle = {
+                                  id: 'new_' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                                  tomadaId: editFormData.id,
+                                  originalText: "",
+                                  proposedText: "",
+                                  order: idx
+                                };
+                                const newArts = [...editArticles];
+                                newArts.splice(idx, 0, newArticle as any);
+                                setEditArticles(newArts);
+                              }}
+                              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 px-1.5 py-1 hover:bg-emerald-50 rounded transition-colors flex items-center gap-1"
+                              title="Adicionar Dispositivo Acima"
+                            >
+                              <Plus size={14} /><ArrowUp size={10} className="-ml-1 hidden sm:block" /> <span className="hidden sm:inline">Acima</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newArticle = {
+                                  id: 'new_' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                                  tomadaId: editFormData.id,
+                                  originalText: "",
+                                  proposedText: "",
+                                  order: idx + 1
+                                };
+                                const newArts = [...editArticles];
+                                newArts.splice(idx + 1, 0, newArticle as any);
+                                setEditArticles(newArts);
+                              }}
+                              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 px-1.5 py-1 hover:bg-emerald-50 rounded transition-colors flex items-center gap-1"
+                              title="Adicionar Dispositivo Abaixo"
+                            >
+                              <Plus size={14} /><ArrowDown size={10} className="-ml-1 hidden sm:block" /> <span className="hidden sm:inline">Abaixo</span>
+                            </button>
+
+                            <div className="w-px h-4 bg-slate-300 mx-1"></div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditArticles(editArticles.filter((_, i) => i !== idx));
+                              }}
+                              className="text-xs font-bold text-rose-500 hover:text-rose-700 px-2 py-1 hover:bg-rose-50 rounded transition-colors flex items-center gap-1.5"
+                              title="Remover este dispositivo"
+                            >
+                              <Trash2 size={14} /> <span className="hidden sm:inline">Remover</span>
+                            </button>
+                          </div>
                         </div>
 
                         <div className={cn("grid gap-4", editFormData.tipoResolucao === "alteracao" ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1")}>
@@ -5374,7 +5842,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                 Texto Vigente / Anterior (Opcional)
                               </label>
                               <textarea
-                                rows={8}
+                                rows={14}
                                 className="w-full bg-white px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-700 focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all font-mono leading-relaxed resize-y"
                                 placeholder="Texto anterior ou vigente da norma (se houver alteração)..."
                                 value={art.originalText || ""}
@@ -5391,7 +5859,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                               <span className="text-[10px] text-indigo-400 font-normal lowercase">redação proposta</span>
                             </label>
                             <textarea
-                              rows={8}
+                              rows={14}
                               className="w-full bg-white px-3.5 py-2.5 border border-indigo-200 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600 transition-all font-mono leading-relaxed resize-y shadow-xs"
                               placeholder="Redação proposta oficial pela agência reguladora..."
                               value={art.proposedText !== undefined ? art.proposedText : (art.originalText || "")}
@@ -5664,6 +6132,90 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           </div>
         </div>
       )}
+
+      {/* Modal de Orientações */}
+      {showOrientacoesModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
+            <div className="flex items-center justify-between p-5 border-b border-slate-200 bg-slate-50">
+              <h3 className="text-base font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                <FileText size={18} className="text-indigo-600" />
+                Guia de Orientação: Como Propor Alterações
+              </h3>
+              <button 
+                onClick={() => setShowOrientacoesModal(false)}
+                className="p-2 bg-slate-200 hover:bg-slate-300 rounded-xl transition-colors text-slate-700"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-6 text-sm text-slate-700 leading-relaxed font-medium">
+              <div className="space-y-3">
+                <h4 className="text-emerald-700 font-bold uppercase tracking-wider text-xs">📝 Edição Simples de Texto</h4>
+                <p>
+                  Para propor uma pequena alteração no texto de um dispositivo, clique no botão <strong className="text-indigo-600">Propor Alteração</strong> correspondente ao dispositivo desejado. 
+                  Você visualizará o texto original. Edite-o conforme sua proposta e preencha a Justificativa Técnica para explicar a motivação. 
+                  O sistema destacará suas inclusões (em verde) e exclusões (riscadas em vermelho) automaticamente para a área técnica.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-orange-600 font-bold uppercase tracking-wider text-xs">✂️ Supressão (Exclusão) Parcial</h4>
+                <p>
+                  Para propor exclusões parciais, como retirar apenas um parágrafo, inciso ou alínea sem remover o artigo inteiro, basta utilizar o botão <strong className="text-indigo-600">Propor Alteração</strong> e, no campo de texto, excluir a parte indesejada. O sistema irá riscar o texto removido automaticamente.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-rose-700 font-bold uppercase tracking-wider text-xs">🗑️ Supressão (Exclusão) Total de Dispositivo</h4>
+                <p>
+                  Para sugerir que um dispositivo inteiro seja removido da norma:
+                </p>
+                <ol className="list-decimal list-inside space-y-1 ml-2">
+                  <li>Clique em "Propor Alteração" no dispositivo que deseja suprimir.</li>
+                  <li>Marque a opção <strong className="text-rose-600">"Propor supressão (exclusão) integral deste dispositivo"</strong> localizada acima da caixa de texto.</li>
+                  <li>A caixa de texto será desativada, não sendo necessário apagar o texto manualmente.</li>
+                  <li>Insira a Justificativa Técnica com os motivos da exclusão e salve.</li>
+                </ol>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-amber-600 font-bold uppercase tracking-wider text-xs">➕ Inclusão de Novo Artigo / Dispositivo</h4>
+                <p>
+                  Caso deseje incluir um novo artigo ou dispositivo no meio do texto normativo:
+                </p>
+                <ul className="list-disc list-inside space-y-2 ml-2">
+                  <li><strong>Identificação:</strong> Ao invés de renumerar todos os artigos subsequentes, utilize a numeração do artigo anterior seguida de uma letra maiúscula. <br />
+                    <em>Exemplo:</em> Para sugerir um novo artigo após o <strong className="font-mono bg-slate-100 px-1 rounded">Art. 1º</strong>, denomine-o como <strong className="font-mono bg-slate-100 px-1 rounded text-indigo-700">Art. 1Aº</strong>, <strong className="font-mono bg-slate-100 px-1 rounded text-indigo-700">Art. 1Bº</strong>, etc.
+                  </li>
+                  <li><strong>Como fazer:</strong> Se o novo dispositivo for substituir totalmente o anterior, você pode usar a opção de edição normal no próprio artigo anterior, apagando todo o texto e escrevendo o seu novo texto. Se for uma adição além do que já existe, utilize o artigo mais próximo ao local desejado e adicione a sua proposta junto ao texto, ou adicione no final do capítulo/seção.</li>
+                </ul>
+              </div>
+
+              <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 space-y-2 text-indigo-900">
+                <h4 className="font-bold uppercase tracking-wider text-xs flex items-center gap-2">
+                  <AlertTriangle size={14} /> Dicas Importantes
+                </h4>
+                <ul className="list-disc list-inside text-xs space-y-1 ml-1">
+                  <li>Cada usuário pode enviar <strong>apenas uma proposta por dispositivo</strong>. Porém, enquanto a participação estiver aberta, você pode editar sua proposta livremente.</li>
+                  <li>O preenchimento da <strong>Justificativa Técnica</strong> é obrigatório em todas as contribuições, pois fundamenta a análise pela área técnica da ADASA.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end">
+              <button 
+                onClick={() => setShowOrientacoesModal(false)}
+                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-md transition-all active:scale-95"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };
+
