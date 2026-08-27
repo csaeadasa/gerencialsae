@@ -1,24 +1,67 @@
 import { useState, useEffect } from "react";
 import { ResponsiveContainer, ComposedChart, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Line, LabelList } from "recharts";
-import { BookOpen, FileText, Search, ArrowUpDown, Filter, ExternalLink, Share2, ClipboardList, TrendingUp, Inbox, Image as ImageIcon } from "lucide-react";
+import { BookOpen, FileText, Search, ArrowUpDown, Filter, ExternalLink, Share2, ClipboardList, TrendingUp, Inbox, Image as ImageIcon, Maximize2, X, ZoomIn, Check } from "lucide-react";
 
 // Helper component for Document Thumbnail
-const DocumentThumbnail = ({ tipo, titulo, className, imageUrl }: { tipo?: string, titulo?: string, className?: string, imageUrl?: string }) => {
+const DocumentThumbnail = ({ 
+  tipo, 
+  titulo, 
+  className, 
+  imageUrl,
+  formato = "retrato",
+  onImageClick 
+}: { 
+  tipo?: string;
+  titulo?: string; 
+  className?: string; 
+  imageUrl?: string;
+  formato?: "retrato" | "paisagem";
+  onImageClick?: (url: string) => void;
+}) => {
   const [imgError, setImgError] = useState(false);
-  const containerClasses = className || "w-24 h-32 md:w-32 md:h-44";
-  const iconSize = className ? 18 : 32;
+  const [actualFormat, setActualFormat] = useState<"retrato" | "paisagem">(formato);
+
+  useEffect(() => {
+    setActualFormat(formato);
+  }, [formato]);
+
+  const isLandscape = actualFormat === "paisagem";
+  const defaultClasses = isLandscape 
+    ? "w-full max-w-[280px] sm:max-w-none sm:w-56 md:w-64 h-36 sm:h-40 md:h-44" 
+    : "w-28 h-38 md:w-34 md:h-48";
+  const containerClasses = className || defaultClasses;
+  const iconSize = isLandscape ? 26 : (className ? 18 : 32);
 
   if (imageUrl && !imgError) {
     return (
-      <div className={`${containerClasses} bg-slate-100 rounded-xl shrink-0 overflow-hidden border relative shadow-sm group`}>
+      <div 
+        onClick={() => onImageClick && onImageClick(imageUrl)}
+        className={`${containerClasses} bg-slate-900/5 rounded-xl shrink-0 overflow-hidden border border-slate-200/80 relative shadow-sm group ${onImageClick ? 'cursor-pointer' : ''}`}
+      >
         <img 
           src={imageUrl} 
           alt={titulo || "Capa do Documento"} 
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           onError={() => setImgError(true)}
+          onLoad={(e) => {
+            const img = e.currentTarget;
+            if (!formato && img.naturalWidth && img.naturalHeight) {
+              if (img.naturalWidth > img.naturalHeight * 1.15) {
+                setActualFormat("paisagem");
+              } else {
+                setActualFormat("retrato");
+              }
+            }
+          }}
         />
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-          <ImageIcon size={iconSize} className="text-white drop-shadow-md" />
+        <div className="absolute inset-0 bg-slate-950/0 group-hover:bg-slate-950/25 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+          <div className="p-2 rounded-full bg-white/95 shadow-md text-slate-800 transform scale-90 group-hover:scale-100 transition-transform flex items-center gap-1 text-[10px] font-black">
+            <ZoomIn size={14} className="text-indigo-600" />
+            <span>Ver Capa</span>
+          </div>
+        </div>
+        <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-xs text-white text-[9px] font-bold font-mono tracking-tight">
+          {isLandscape ? "Paisagem 16:9" : "Retrato 3:4"}
         </div>
       </div>
     );
@@ -41,6 +84,45 @@ const DocumentThumbnail = ({ tipo, titulo, className, imageUrl }: { tipo?: strin
   } else if (docType.includes("estudo")) {
     themeClass = "from-purple-500 to-purple-700 border-purple-600 text-purple-50";
     icon = <TrendingUp size={iconSize} className="opacity-90 drop-shadow-sm" />;
+  }
+
+  if (isLandscape) {
+    return (
+      <div className={`${containerClasses} bg-gradient-to-br ${themeClass} rounded-xl shrink-0 overflow-hidden border relative shadow-sm flex flex-col justify-between p-3.5 group`}>
+        {/* Decorative top fold */}
+        <div className="absolute top-0 right-0 w-10 h-10 border-b border-l border-white/20 bg-white/10 rounded-bl-xl shadow-sm"></div>
+        
+        {/* Top Header bar with dots and badge */}
+        <div className="flex items-center justify-between relative z-10">
+          <div className="flex gap-1 opacity-40">
+            <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+            <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+            <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+          </div>
+          <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-black/20 text-white/90">
+            {tipo || "Publicação"}
+          </span>
+        </div>
+
+        {/* Center content in landscape layout */}
+        <div className="flex items-center gap-3 my-auto py-1">
+          <div className="p-2.5 rounded-xl bg-white/15 backdrop-blur-xs shrink-0 transform group-hover:scale-105 transition-transform">
+            {icon}
+          </div>
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="w-4/5 h-1.5 bg-white/40 rounded-full"></div>
+            <div className="w-3/5 h-1.5 bg-white/30 rounded-full"></div>
+            <div className="w-2/5 h-1.5 bg-white/20 rounded-full"></div>
+          </div>
+        </div>
+
+        {/* Footer label */}
+        <div className="flex items-center justify-between text-[9px] font-bold text-white/70 border-t border-white/15 pt-1.5">
+          <span className="truncate max-w-[140px]">{titulo || "Documento Oficial"}</span>
+          <span className="text-[8px] font-mono font-black uppercase text-white/90">Paisagem</span>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -85,6 +167,7 @@ interface Publication {
   link_acesso: string;
   observacoes: string;
   imagem_capa?: string;
+  formato_capa?: 'retrato' | 'paisagem';
 }
 
 interface PublicationsDashboardProps {
@@ -94,6 +177,7 @@ interface PublicationsDashboardProps {
 export function PublicationsDashboard({ showToast }: PublicationsDashboardProps) {
   const [publications, setPublications] = useState<Publication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; titulo?: string; formato?: string } | null>(null);
 
   // Search & Filter state
   const [searchText, setSearchText] = useState("");
@@ -612,14 +696,21 @@ export function PublicationsDashboard({ showToast }: PublicationsDashboardProps)
         ) : (
           <div className="space-y-4">
             {sortedPublications.map(pub => {
+              const isLandscape = pub.formato_capa === "paisagem";
               return (
                 <div
                   key={pub.id}
                   className="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col sm:flex-row transition-all hover:bg-slate-50/50 group hover:shadow-md"
                 >
-                  {/* Thumbnail Section */}
-                  <div className="w-full sm:w-32 md:w-44 bg-slate-50/50 shrink-0 border-b sm:border-b-0 sm:border-r border-slate-100 flex items-center justify-center p-4">
-                    <DocumentThumbnail tipo={pub.tipo_documento} titulo={pub.titulo_assunto} imageUrl={pub.imagem_capa} />
+                  {/* Thumbnail Section - Adapts dynamically to Portrait (Vertical) or Landscape (Horizontal) */}
+                  <div className={`w-full ${isLandscape ? 'sm:w-60 md:w-72' : 'sm:w-36 md:w-44'} bg-slate-50/50 shrink-0 border-b sm:border-b-0 sm:border-r border-slate-100 flex items-center justify-center p-3.5 sm:p-4 transition-all`}>
+                    <DocumentThumbnail 
+                      tipo={pub.tipo_documento} 
+                      titulo={pub.titulo_assunto} 
+                      imageUrl={pub.imagem_capa} 
+                      formato={pub.formato_capa || "retrato"}
+                      onImageClick={(url) => setLightboxImage({ url, titulo: pub.titulo_assunto, formato: pub.formato_capa || "retrato" })}
+                    />
                   </div>
                   
                   {/* Content Section */}
@@ -633,6 +724,11 @@ export function PublicationsDashboard({ showToast }: PublicationsDashboardProps)
                         <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
                           {pub.data_publicacao}
                         </span>
+                        {pub.imagem_capa && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                            {isLandscape ? "Formato Paisagem 16:9" : "Formato Retrato 3:4"}
+                          </span>
+                        )}
                       </div>
                       
                       {/* Title */}
@@ -688,6 +784,47 @@ export function PublicationsDashboard({ showToast }: PublicationsDashboardProps)
           </div>
         )}
       </div>
+
+      {/* Full Resolution Image Lightbox Modal */}
+      {lightboxImage && (
+        <div 
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setLightboxImage(null)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-150 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
+                  <ImageIcon size={16} />
+                </span>
+                <div>
+                  <h4 className="font-bold text-slate-800 text-xs sm:text-sm line-clamp-1">{lightboxImage.titulo || "Capa da Publicação"}</h4>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    Orientação: <strong className="capitalize">{lightboxImage.formato === "paisagem" ? "Paisagem (Horizontal 16:9)" : "Retrato (Vertical 3:4)"}</strong>
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setLightboxImage(null)}
+                className="p-1.5 rounded-lg hover:bg-slate-200/70 text-slate-400 hover:text-slate-700 transition-colors"
+                title="Fechar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-4 flex-1 overflow-auto flex items-center justify-center bg-slate-900/5 min-h-[300px]">
+              <img 
+                src={lightboxImage.url} 
+                alt={lightboxImage.titulo || "Capa"} 
+                className="max-h-[70vh] w-auto max-w-full object-contain rounded-lg shadow-md border border-slate-200"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

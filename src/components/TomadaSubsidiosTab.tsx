@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Plus, Edit3, Trash2, Check, X, FileText, MessageSquare, Save, ArrowLeft, ArrowRight, CornerDownRight, Search, ArrowUpDown, ArrowUp, ArrowDown, Users, Lock, AlertTriangle, RefreshCw, FileCode, PlusCircle, Wrench, Paperclip, Upload, CheckCircle2, ChevronDown, ChevronUp, CheckCircle, Eye, Sparkles, BarChart2, PieChart as PieChartIcon, FileSpreadsheet, Download, ScrollText, Copy, Printer, CheckCheck } from "lucide-react";
+import { Plus, Edit3, Trash2, Check, X, FileText, MessageSquare, Save, ArrowLeft, ArrowRight, CornerDownRight, Search, ArrowUpDown, ArrowUp, ArrowDown, Users, Lock, AlertTriangle, RefreshCw, FileCode, PlusCircle, Wrench, Paperclip, Upload, CheckCircle2, ChevronDown, ChevronUp, CheckCircle, Eye, EyeOff, Columns, Sparkles, BarChart2, PieChart as PieChartIcon, FileSpreadsheet, Download, ScrollText, Copy, Printer, CheckCheck, RotateCcw, Table as TableIcon, FileCheck, Info } from "lucide-react";
 import * as XLSX from "xlsx";
 import * as diff from "diff";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { cn } from "../lib/utils";
 import { useAuth } from "../lib/auth";
+import { RegulatoryTableEditor } from "./RegulatoryTableEditor";
+import { RegulatoryTableView } from "./RegulatoryTableView";
+import { TableModalPreview } from "./TableModalPreview";
+import { RegulatoryTable, isTableJson, parseTableData, serializeTableData, DEFAULT_TABLE_TEMPLATES, formatContentForExport, formatContentForPdf } from "../lib/tableStructure";
+import { generateMinutaDocxBlob, isChapterOrSectionHeader, isChapterSubtitle, parseNormativePrefix } from "../lib/exportMinutaDocx";
 
 
 export const getSmartDiff = (oldText: string, newText: string) => {
@@ -111,6 +116,7 @@ export interface Article {
   id: string | number;
   tomadaId: string | number;
   order: number;
+  contentType?: 'text' | 'table';
   originalText: string;
   proposedText?: string;
   finalText?: string;
@@ -131,9 +137,19 @@ export interface Contribution {
   createdAt: string;
 }
 
-export const renderDiffInline = (originalText?: string, proposedText?: string) => {
+export const renderDiffInline = (originalText?: string, proposedText?: string, articleContentType?: 'text' | 'table') => {
   const orig = (originalText || "").trim();
   const prop = (proposedText !== undefined && proposedText !== null ? proposedText : originalText || "").trim();
+
+  // If content is a table or JSON table structure
+  if (articleContentType === 'table' || isTableJson(orig) || isTableJson(prop)) {
+    return (
+      <RegulatoryTableView 
+        data={prop || orig} 
+        originalData={orig && orig !== prop ? orig : undefined} 
+      />
+    );
+  }
 
   if (!orig && !prop) return <span className="text-slate-400 italic">Sem texto cadastrado</span>;
   if (!orig) return <span className="whitespace-pre-wrap">{prop}</span>;
@@ -192,7 +208,8 @@ interface ContributionAnalysisItemProps {
 
 const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, article, handleUpdateAnalysis }) => {
   const originalText = article.proposedText || article.originalText || "";
-  const diffParts = getSmartDiff(originalText, c.proposedText);
+  const isTable = article.contentType === 'table' || isTableJson(c.proposedText) || isTableJson(originalText);
+  const diffParts = !isTable ? getSmartDiff(originalText, c.proposedText || "") : [];
   
   const [isEditingAnalysis, setIsEditingAnalysis] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
@@ -336,18 +353,41 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
       
       <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
         <div className="p-4">
-          <span className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-3">Texto da Contribuição Sugerida (Com destaques)</span>
-          <div className="text-xs text-slate-800 font-medium whitespace-pre-wrap leading-relaxed">
-            {diffParts.map((part, pIdx) => {
-              if (part.added) {
-                return <span key={pIdx} className="bg-emerald-100 text-emerald-950 font-bold px-1 rounded mx-0.5 border border-emerald-300">{part.value}</span>;
-              }
-              if (part.removed) {
-                return <span key={pIdx} className="bg-rose-100 text-rose-950 px-1 rounded mx-0.5 line-through decoration-rose-500 border border-rose-300">{part.value}</span>;
-              }
-              return <span key={pIdx}>{part.value}</span>;
-            })}
-          </div>
+          <span className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-3">
+            {isTable ? "Tabela da Contribuição Sugerida (Com destaques)" : "Texto da Contribuição Sugerida (Com destaques)"}
+          </span>
+          {isTable ? (
+            c.isSuppressing || !c.proposedText?.trim() ? (
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-3">
+                <div className="flex items-center gap-2 text-rose-700 font-bold text-xs">
+                  <span className="px-2 py-0.5 bg-rose-100 border border-rose-300 rounded text-[10px] font-black uppercase tracking-wider">
+                    Sugestão de Supressão
+                  </span>
+                  <span>O participante sugeriu a exclusão integral desta tabela.</span>
+                </div>
+                <div className="opacity-60">
+                  <RegulatoryTableView data={originalText} />
+                </div>
+              </div>
+            ) : (
+              <RegulatoryTableView 
+                data={c.proposedText || originalText} 
+                originalData={originalText && originalText !== c.proposedText ? originalText : undefined} 
+              />
+            )
+          ) : (
+            <div className="text-xs text-slate-800 font-medium whitespace-pre-wrap leading-relaxed">
+              {diffParts.map((part, pIdx) => {
+                if (part.added) {
+                  return <span key={pIdx} className="bg-emerald-100 text-emerald-950 font-bold px-1 rounded mx-0.5 border border-emerald-300">{part.value}</span>;
+                }
+                if (part.removed) {
+                  return <span key={pIdx} className="bg-rose-100 text-rose-950 px-1 rounded mx-0.5 line-through decoration-rose-500 border border-rose-300">{part.value}</span>;
+                }
+                return <span key={pIdx}>{part.value}</span>;
+              })}
+            </div>
+          )}
         </div>
         <div className="p-4 bg-slate-50 flex flex-col gap-4">
           <div>
@@ -474,18 +514,22 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
-                  Texto Atual (Vigente)
+                  {article.contentType === 'table' || isTableJson(article.originalText) ? "Tabela Atual (Vigente)" : "Texto Atual (Vigente)"}
                 </span>
               </div>
-              <div className="text-xs text-slate-500 font-medium whitespace-pre-wrap leading-relaxed bg-slate-100 p-3 rounded-xl border border-slate-200">
-                {article.originalText}
-              </div>
+              {article.contentType === 'table' || isTableJson(article.originalText) ? (
+                <RegulatoryTableView data={article.originalText} />
+              ) : (
+                <div className="text-xs text-slate-500 font-medium whitespace-pre-wrap leading-relaxed bg-slate-100 p-3 rounded-xl border border-slate-200">
+                  {article.originalText}
+                </div>
+              )}
             </div>
           )}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
-                Texto Proposto em Consulta (Minuta)
+                {article.contentType === 'table' || isTableJson(article.proposedText || article.originalText) ? "Tabela Proposta em Consulta (Minuta)" : "Texto Proposto em Consulta (Minuta)"}
               </span>
               {isFullyAnalyzed && (
                 <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-xs font-black uppercase tracking-wider px-3 py-1.5 rounded-full">
@@ -493,11 +537,18 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
                 </span>
               )}
             </div>
-            <div className="text-xs text-slate-700 font-medium whitespace-pre-wrap leading-relaxed bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
-              {tipoResolucao === "alteracao" && article.originalText
-                ? renderDiffInline(article.originalText, article.proposedText)
-                : (article.proposedText !== undefined ? article.proposedText : article.originalText)}
-            </div>
+            {article.contentType === 'table' || isTableJson(article.proposedText || article.originalText) ? (
+              <RegulatoryTableView
+                data={article.proposedText !== undefined ? article.proposedText : article.originalText}
+                originalData={tipoResolucao === "alteracao" && article.originalText ? article.originalText : undefined}
+              />
+            ) : (
+              <div className="text-xs text-slate-700 font-medium whitespace-pre-wrap leading-relaxed bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                {tipoResolucao === "alteracao" && article.originalText
+                  ? renderDiffInline(article.originalText, article.proposedText, article.contentType)
+                  : (article.proposedText !== undefined ? article.proposedText : article.originalText)}
+              </div>
+            )}
           </div>
         </div>
         {handleDeleteArticle && (
@@ -567,7 +618,11 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
                   setRepeatProposed(checked);
                   if (checked) {
                     setFinalText(article.proposedText !== undefined ? article.proposedText : (article.originalText || ""));
-                    setFinalJustification("Texto Final do Dispositivo igual ao Texto Proposto em Consulta. Sem contribuições recebidas");
+                    setFinalJustification(
+                      article.contentType === 'table' || isTableJson(article.proposedText || article.originalText)
+                        ? "Tabela Final do Dispositivo mantida conforme Proposta em Consulta. Sem alterações acatadas."
+                        : "Texto Final do Dispositivo igual ao Texto Proposto em Consulta. Sem contribuições recebidas"
+                    );
                   } else {
                     setFinalText(article.finalText || "");
                     setFinalJustification(article.finalJustification || "");
@@ -576,18 +631,36 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
                 className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-600 cursor-pointer"
               />
               <label htmlFor={`repeat-${article.id}`} className="text-[11px] font-bold text-slate-700 cursor-pointer select-none">
-                Repetir Texto Proposto como Texto Final?
+                {article.contentType === 'table' || isTableJson(article.proposedText || article.originalText)
+                  ? "Repetir Tabela Proposta como Tabela Final?"
+                  : "Repetir Texto Proposto como Texto Final?"}
               </label>
             </div>
             <div>
-              <label className="block text-xs font-black text-slate-800 uppercase tracking-widest mb-2">Texto Final do Dispositivo</label>
-              <textarea
-                value={finalText}
-                onChange={(e) => setFinalText(e.target.value)}
-                rows={10}
-                className="w-full bg-white px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800 font-medium"
-                placeholder="Insira como ficará o texto final..."
-              />
+              <label className="block text-xs font-black text-slate-800 uppercase tracking-widest mb-2">
+                {article.contentType === 'table' || isTableJson(finalText || article.proposedText || article.originalText)
+                  ? "Tabela Final do Dispositivo"
+                  : "Texto Final do Dispositivo"}
+              </label>
+              {article.contentType === 'table' || isTableJson(finalText || article.proposedText || article.originalText) ? (
+                <div className="border border-indigo-100 rounded-xl p-3 bg-indigo-50/20">
+                  <RegulatoryTableEditor 
+                    initialData={parseTableData(finalText || article.proposedText || article.originalText || "")}
+                    originalData={parseTableData(article.proposedText || article.originalText || "")}
+                    onChange={(table) => {
+                      setFinalText(serializeTableData(table));
+                    }}
+                  />
+                </div>
+              ) : (
+                <textarea
+                  value={finalText}
+                  onChange={(e) => setFinalText(e.target.value)}
+                  rows={10}
+                  className="w-full bg-white px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800 font-medium"
+                  placeholder="Insira como ficará o texto final..."
+                />
+              )}
             </div>
             <div>
               <label className="block text-xs font-black text-slate-800 uppercase tracking-widest mb-2">Justificativa Técnica Final</label>
@@ -611,11 +684,20 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <span className="block text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">Texto Final do Dispositivo</span>
+              <span className="block text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">
+                {article.contentType === 'table' || isTableJson(article.finalText) ? "Tabela Final do Dispositivo" : "Texto Final do Dispositivo"}
+              </span>
               {article.finalText ? (
-                <div className="bg-white p-3 rounded-xl border border-indigo-100 text-xs text-indigo-950 font-medium whitespace-pre-wrap shadow-2xs">
-                  {article.finalText}
-                </div>
+                article.contentType === 'table' || isTableJson(article.finalText) ? (
+                  <RegulatoryTableView 
+                    data={article.finalText}
+                    originalData={article.proposedText || article.originalText}
+                  />
+                ) : (
+                  <div className="bg-white p-3 rounded-xl border border-indigo-100 text-xs text-indigo-950 font-medium whitespace-pre-wrap shadow-2xs">
+                    {article.finalText}
+                  </div>
+                )
               ) : (
                 <div className="text-xs text-slate-400 italic">Pendente...</div>
               )}
@@ -684,6 +766,26 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [minutaVigencia, setMinutaVigencia] = useState<string>("Esta Resolução entra em vigor na data de sua publicação.");
   const [minutaAssinante, setMinutaAssinante] = useState<string>("RAIMUNDO RIBEIRO");
   const [minutaCopied, setMinutaCopied] = useState<boolean>(false);
+  const [isExportingWord, setIsExportingWord] = useState<boolean>(false);
+  const [customTemplateFile, setCustomTemplateFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(() => {
+    try {
+      const savedName = localStorage.getItem("minuta_custom_template_name");
+      const savedBase64 = localStorage.getItem("minuta_custom_template_base64");
+      if (savedName && savedBase64) {
+        const binaryString = window.atob(savedBase64);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        return { name: savedName, buffer: bytes.buffer };
+      }
+    } catch (e) {
+      console.warn("Could not load stored word template:", e);
+    }
+    return null;
+  });
+  const [showTemplateHelp, setShowTemplateHelp] = useState<boolean>(false);
   const [minutaClassificationOverrides, setMinutaClassificationOverrides] = useState<Record<string | number, "acrescido" | "alterado">>({});
   const [minutaSubunitOverrides, setMinutaSubunitOverrides] = useState<Record<string, "acrescido" | "alterado" | "ignorar">>({});
   const [showGranularBreakdown, setShowGranularBreakdown] = useState<boolean>(true);
@@ -900,6 +1002,200 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [participantFilter, setParticipantFilter] = useState<string>("all");
   const [publicContributionsView, setPublicContributionsView] = useState<"minhas" | "todas">("minhas");
   const [contributionsSortConfig, setContributionsSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+
+  // Column Resizing Configurations & State
+  const DEFAULT_CONTRIBUTIONS_COL_WIDTHS: Record<string, number> = {
+    data: 110,
+    texto_atual: 260,
+    dispositivo: 280,
+    texto_contribuicao: 280,
+    justificativa: 240,
+    participante: 180,
+    parecer: 150,
+    justificativa_tecnica: 260,
+    texto_final: 280,
+  };
+
+  const DEFAULT_CONSOLIDADO_COL_WIDTHS: Record<string, number> = {
+    num: 60,
+    texto_atual: 260,
+    minuta: 300,
+    texto_final: 320,
+    justificativa: 280,
+    contribuicoes: 140,
+  };
+
+  const [contributionsColWidths, setContributionsColWidths] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem("adasa_contributions_col_widths");
+      if (saved) return { ...DEFAULT_CONTRIBUTIONS_COL_WIDTHS, ...JSON.parse(saved) };
+    } catch (e) {}
+    return DEFAULT_CONTRIBUTIONS_COL_WIDTHS;
+  });
+
+  const [consolidadoColWidths, setConsolidadoColWidths] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem("adasa_consolidado_col_widths");
+      if (saved) return { ...DEFAULT_CONSOLIDADO_COL_WIDTHS, ...JSON.parse(saved) };
+    } catch (e) {}
+    return DEFAULT_CONSOLIDADO_COL_WIDTHS;
+  });
+
+  // Column Visibility Configurations & State
+  const [contributionsHiddenCols, setContributionsHiddenCols] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem("adasa_contributions_hidden_cols");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {};
+  });
+
+  const [consolidadoHiddenCols, setConsolidadoHiddenCols] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem("adasa_consolidado_hidden_cols");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {};
+  });
+
+  const [openColMenu, setOpenColMenu] = useState<"contributions" | "consolidado" | null>(null);
+
+  const toggleContributionCol = (colKey: string) => {
+    setContributionsHiddenCols(prev => {
+      const updated = { ...prev, [colKey]: !prev[colKey] };
+      try {
+        localStorage.setItem("adasa_contributions_hidden_cols", JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  const toggleConsolidadoCol = (colKey: string) => {
+    setConsolidadoHiddenCols(prev => {
+      const updated = { ...prev, [colKey]: !prev[colKey] };
+      try {
+        localStorage.setItem("adasa_consolidado_hidden_cols", JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  const showAllCols = (table: "contributions" | "consolidado") => {
+    if (table === "contributions") {
+      setContributionsHiddenCols({});
+      try {
+        localStorage.removeItem("adasa_contributions_hidden_cols");
+      } catch (e) {}
+    } else {
+      setConsolidadoHiddenCols({});
+      try {
+        localStorage.removeItem("adasa_consolidado_hidden_cols");
+      } catch (e) {}
+    }
+  };
+
+  const handleColResizeStart = (
+    e: React.MouseEvent,
+    table: "contributions" | "consolidado",
+    colKey: string,
+    minWidth = 70
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const startX = e.clientX;
+    const currentMap = table === "contributions" ? contributionsColWidths : consolidadoColWidths;
+    const defaultMap = table === "contributions" ? DEFAULT_CONTRIBUTIONS_COL_WIDTHS : DEFAULT_CONSOLIDADO_COL_WIDTHS;
+    const startWidth = currentMap[colKey] || defaultMap[colKey] || 150;
+
+    const originalCursor = document.body.style.cursor;
+    const originalUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    let latestWidth = startWidth;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      latestWidth = Math.max(minWidth, Math.round(startWidth + delta));
+      if (table === "contributions") {
+        setContributionsColWidths(prev => ({ ...prev, [colKey]: latestWidth }));
+      } else {
+        setConsolidadoColWidths(prev => ({ ...prev, [colKey]: latestWidth }));
+      }
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = originalCursor;
+      document.body.style.userSelect = originalUserSelect;
+
+      try {
+        if (table === "contributions") {
+          setContributionsColWidths(prev => {
+            const updated = { ...prev, [colKey]: latestWidth };
+            localStorage.setItem("adasa_contributions_col_widths", JSON.stringify(updated));
+            return updated;
+          });
+        } else {
+          setConsolidadoColWidths(prev => {
+            const updated = { ...prev, [colKey]: latestWidth };
+            localStorage.setItem("adasa_consolidado_col_widths", JSON.stringify(updated));
+            return updated;
+          });
+        }
+      } catch (err) {}
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  };
+
+  const handleResetColWidths = (table: "contributions" | "consolidado") => {
+    if (table === "contributions") {
+      setContributionsColWidths(DEFAULT_CONTRIBUTIONS_COL_WIDTHS);
+      try {
+        localStorage.removeItem("adasa_contributions_col_widths");
+      } catch (e) {}
+    } else {
+      setConsolidadoColWidths(DEFAULT_CONSOLIDADO_COL_WIDTHS);
+      try {
+        localStorage.removeItem("adasa_consolidado_col_widths");
+      } catch (e) {}
+    }
+  };
+
+  const totalContributionsTableWidth = useMemo(() => {
+    const isAlteracao = selectedTomada?.tipoResolucao === "alteracao";
+    let total = 0;
+    if (!contributionsHiddenCols.data) total += contributionsColWidths.data || DEFAULT_CONTRIBUTIONS_COL_WIDTHS.data;
+    if (isAlteracao && !contributionsHiddenCols.texto_atual) {
+      total += contributionsColWidths.texto_atual || DEFAULT_CONTRIBUTIONS_COL_WIDTHS.texto_atual;
+    }
+    if (!contributionsHiddenCols.dispositivo) total += contributionsColWidths.dispositivo || DEFAULT_CONTRIBUTIONS_COL_WIDTHS.dispositivo;
+    if (!contributionsHiddenCols.texto_contribuicao) total += contributionsColWidths.texto_contribuicao || DEFAULT_CONTRIBUTIONS_COL_WIDTHS.texto_contribuicao;
+    if (!contributionsHiddenCols.justificativa) total += contributionsColWidths.justificativa || DEFAULT_CONTRIBUTIONS_COL_WIDTHS.justificativa;
+    if (!contributionsHiddenCols.participante) total += contributionsColWidths.participante || DEFAULT_CONTRIBUTIONS_COL_WIDTHS.participante;
+    if (!contributionsHiddenCols.parecer) total += contributionsColWidths.parecer || DEFAULT_CONTRIBUTIONS_COL_WIDTHS.parecer;
+    if (!contributionsHiddenCols.justificativa_tecnica) total += contributionsColWidths.justificativa_tecnica || DEFAULT_CONTRIBUTIONS_COL_WIDTHS.justificativa_tecnica;
+    if (!contributionsHiddenCols.texto_final) total += contributionsColWidths.texto_final || DEFAULT_CONTRIBUTIONS_COL_WIDTHS.texto_final;
+    return Math.max(total, 500);
+  }, [contributionsColWidths, contributionsHiddenCols, selectedTomada?.tipoResolucao]);
+
+  const totalConsolidadoTableWidth = useMemo(() => {
+    const isAlteracao = selectedTomada?.tipoResolucao === "alteracao";
+    let total = 0;
+    if (!consolidadoHiddenCols.num) total += consolidadoColWidths.num || DEFAULT_CONSOLIDADO_COL_WIDTHS.num;
+    if (isAlteracao && !consolidadoHiddenCols.texto_atual) {
+      total += consolidadoColWidths.texto_atual || DEFAULT_CONSOLIDADO_COL_WIDTHS.texto_atual;
+    }
+    if (!consolidadoHiddenCols.minuta) total += consolidadoColWidths.minuta || DEFAULT_CONSOLIDADO_COL_WIDTHS.minuta;
+    if (!consolidadoHiddenCols.texto_final) total += consolidadoColWidths.texto_final || DEFAULT_CONSOLIDADO_COL_WIDTHS.texto_final;
+    if (!consolidadoHiddenCols.justificativa) total += consolidadoColWidths.justificativa || DEFAULT_CONSOLIDADO_COL_WIDTHS.justificativa;
+    if (!consolidadoHiddenCols.contribuicoes) total += consolidadoColWidths.contribuicoes || DEFAULT_CONSOLIDADO_COL_WIDTHS.contribuicoes;
+    return Math.max(total, 500);
+  }, [consolidadoColWidths, consolidadoHiddenCols, selectedTomada?.tipoResolucao]);
   const [proposedText, setProposedText] = useState("");
   const [isSuppressing, setIsSuppressing] = useState(false);
   const [justification, setJustification] = useState("");
@@ -1482,7 +1778,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     const currentArt = articles.find(a => String(a.id) === currentArtIdStr);
     let finalProposedText = proposedText;
 
-    if (currentArt && !isSuppressing) {
+    if (currentArt && !isSuppressing && currentArt.contentType !== 'table' && !isTableJson(proposedText)) {
       const originalTextForArt = currentArt.originalText || "";
       const baseMatch = originalTextForArt.match(/(?:^|\n)\s*(?:Art\.|Artigo)\s*(\d+)/i);
       if (baseMatch) {
@@ -1678,7 +1974,32 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     }
   };
 
-  const renderUserContributionComparison = (baseText: string, suggestedText: string) => {
+  const renderUserContributionComparison = (baseText: string, suggestedText: string, contentType?: 'text' | 'table') => {
+    const isTable = contentType === 'table' || isTableJson(baseText) || isTableJson(suggestedText);
+
+    if (isTable) {
+      return (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100/90 px-3.5 py-2.5 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-2">
+              <TableIcon size={15} className="text-emerald-700 shrink-0" />
+              <span className="text-xs font-black uppercase tracking-wider text-slate-800">
+                Comparativo de Matriz Regulada: Tabela da Minuta × Proposta de Alteração
+              </span>
+            </div>
+            <span className="text-[10px] font-bold text-slate-500">
+              Células modificadas pelo cidadão são destacadas em verde
+            </span>
+          </div>
+
+          <RegulatoryTableView
+            data={suggestedText || baseText}
+            originalData={baseText}
+          />
+        </div>
+      );
+    }
+
     const diffParts = getSmartDiff(baseText || "", suggestedText || "");
     const hasAdded = diffParts.some(p => p.added);
     const hasRemoved = diffParts.some(p => p.removed);
@@ -1770,7 +2091,15 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     );
   };
 
-  const renderArticleDiff = (original: string, proposed: string) => {
+  const renderArticleDiff = (original: string, proposed: string, contentType?: 'text' | 'table') => {
+    if (contentType === 'table' || isTableJson(original) || isTableJson(proposed)) {
+      return (
+        <div className="mt-4">
+          <RegulatoryTableView data={proposed || original} originalData={original && original !== proposed ? original : undefined} />
+        </div>
+      );
+    }
+
     const diffResult = getSmartDiff(original, proposed);
 
     return (
@@ -1805,7 +2134,15 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     );
   };
 
-  const renderDiff = (original: string, proposed: string) => {
+  const renderDiff = (original: string, proposed: string, contentType?: 'text' | 'table') => {
+    if (contentType === 'table' || isTableJson(original) || isTableJson(proposed)) {
+      return (
+        <div className="mt-2">
+          <RegulatoryTableView data={proposed || original} originalData={original && original !== proposed ? original : undefined} />
+        </div>
+      );
+    }
+
     const diffResult = getSmartDiff(original, proposed);
 
     return (
@@ -2166,66 +2503,162 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       </button>
                     </div>
 
-                    <div className={cn("grid gap-4", isAlteracao ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
-                      {isAlteracao && (
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-200/60">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          Formato do Dispositivo:
+                        </span>
+                        <div className="inline-flex rounded-lg p-0.5 bg-slate-200/70 border border-slate-300/60">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newArts = [...(previewArticles || [])];
+                              newArts[i].contentType = 'text';
+                              setPreviewArticles(newArts);
+                            }}
+                            className={cn(
+                              "px-2.5 py-1 text-[11px] font-bold rounded-md transition-all flex items-center gap-1.5",
+                              art.contentType !== 'table'
+                                ? "bg-white text-indigo-700 shadow-xs"
+                                : "text-slate-600 hover:text-slate-900"
+                            )}
+                          >
+                            <FileText size={12} /> Texto Normativo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newArts = [...(previewArticles || [])];
+                              newArts[i].contentType = 'table';
+                              if (!isTableJson(art.proposedText || art.originalText)) {
+                                const parsedT = parseTableData(art.proposedText || art.originalText || "Item\tDescrição\tValor\n1\tTarifa Base\t100,00");
+                                newArts[i].proposedText = serializeTableData(parsedT);
+                              }
+                              setPreviewArticles(newArts);
+                            }}
+                            className={cn(
+                              "px-2.5 py-1 text-[11px] font-bold rounded-md transition-all flex items-center gap-1.5",
+                              art.contentType === 'table'
+                                ? "bg-indigo-600 text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900"
+                            )}
+                          >
+                            <TableIcon size={12} /> Tabela (Matriz Regulada)
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {art.contentType === 'table' ? (
+                      <div className="space-y-4">
+                        {isAlteracao && (
+                          <div className="space-y-1.5">
                             <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
-                              Texto Atual Vigente da Resolução <span className="text-rose-500 font-black">*</span>
+                              Tabela Atual Vigente da Resolução <span className="text-rose-500 font-black">*</span>
                             </label>
-                            <button
-                              type="button"
-                              onClick={() => {
+                            <RegulatoryTableEditor
+                              initialData={parseTableData(art.originalText || "")}
+                              onChange={(table) => {
                                 const newArts = [...(previewArticles || [])];
-                                const textToCopy = (art.proposedText !== undefined && art.proposedText !== null && art.proposedText !== "")
-                                  ? art.proposedText
-                                  : (art.originalText || "");
-                                newArts[i].originalText = textToCopy;
+                                newArts[i].originalText = serializeTableData(table);
                                 setPreviewArticles(newArts);
                               }}
-                              className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 hover:underline"
-                              title="Copiar texto proposto deste dispositivo para o texto original vigente"
-                            >
-                              <Copy size={11} /> Repetir proposto
-                            </button>
+                            />
                           </div>
-                          <textarea 
-                            className={cn(
-                              "w-full bg-white border rounded-lg p-3 resize-y text-sm font-medium whitespace-pre-wrap transition-all outline-none",
-                              isMissingOriginal 
-                                ? "border-amber-400 focus:ring-2 focus:ring-amber-300 text-slate-700 bg-amber-50/20" 
-                                : "border-slate-200 focus:ring-2 focus:ring-slate-400 text-slate-600"
+                        )}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
+                              Tabela Proposta (Área Técnica)
+                            </label>
+                            {isAlteracao && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newArts = [...(previewArticles || [])];
+                                  newArts[i].proposedText = art.originalText || "";
+                                  setPreviewArticles(newArts);
+                                }}
+                                className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 hover:underline cursor-pointer bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200"
+                                title="Copiar estrutura e dados da tabela atual vigente para a tabela proposta"
+                              >
+                                <Copy size={11} /> Copiar Tabela Atual para Tabela Proposta
+                              </button>
                             )}
-                            value={art.originalText || ""}
+                          </div>
+                          <RegulatoryTableEditor
+                            initialData={parseTableData(art.proposedText || art.originalText || "")}
+                            originalData={isAlteracao && art.originalText ? parseTableData(art.originalText) : undefined}
+                            onChange={(table) => {
+                              const newArts = [...(previewArticles || [])];
+                              newArts[i].proposedText = serializeTableData(table);
+                              setPreviewArticles(newArts);
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={cn("grid gap-4", isAlteracao ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
+                        {isAlteracao && (
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                                Texto Atual Vigente da Resolução <span className="text-rose-500 font-black">*</span>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newArts = [...(previewArticles || [])];
+                                  const textToCopy = (art.proposedText !== undefined && art.proposedText !== null && art.proposedText !== "")
+                                    ? art.proposedText
+                                    : (art.originalText || "");
+                                  newArts[i].originalText = textToCopy;
+                                  setPreviewArticles(newArts);
+                                }}
+                                className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 hover:underline"
+                                title="Copiar texto proposto deste dispositivo para o texto original vigente"
+                              >
+                                <Copy size={11} /> Repetir proposto
+                              </button>
+                            </div>
+                            <textarea 
+                              className={cn(
+                                "w-full bg-white border rounded-lg p-3 resize-y text-sm font-medium whitespace-pre-wrap transition-all outline-none",
+                                isMissingOriginal 
+                                  ? "border-amber-400 focus:ring-2 focus:ring-amber-300 text-slate-700 bg-amber-50/20" 
+                                  : "border-slate-200 focus:ring-2 focus:ring-slate-400 text-slate-600"
+                              )}
+                              value={art.originalText || ""}
+                              onChange={e => {
+                                const newArts = [...(previewArticles || [])];
+                                newArts[i].originalText = e.target.value;
+                                setPreviewArticles(newArts);
+                              }}
+                              rows={Math.max(12, (art.proposedText || art.originalText || "").split('\n').length)}
+                              placeholder="Insira o texto atual vigente deste dispositivo (obrigatório)..."
+                            />
+                            {isMissingOriginal && (
+                              <p className="text-[10px] text-amber-700 font-bold mt-1">
+                                * Campo obrigatório para alteração de norma.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-1">Texto Proposto (Área Técnica)</label>
+                          <textarea 
+                            className="w-full bg-white border border-indigo-200 rounded-lg p-3 resize-y focus:ring-2 focus:ring-indigo-600 text-sm font-medium text-slate-800 whitespace-pre-wrap outline-none"
+                            value={art.proposedText !== undefined ? art.proposedText : art.originalText}
                             onChange={e => {
                               const newArts = [...(previewArticles || [])];
-                              newArts[i].originalText = e.target.value;
+                              newArts[i].proposedText = e.target.value;
                               setPreviewArticles(newArts);
                             }}
                             rows={Math.max(12, (art.proposedText || art.originalText || "").split('\n').length)}
-                            placeholder="Insira o texto atual vigente deste dispositivo (obrigatório)..."
                           />
-                          {isMissingOriginal && (
-                            <p className="text-[10px] text-amber-700 font-bold mt-1">
-                              * Campo obrigatório para alteração de norma.
-                            </p>
-                          )}
                         </div>
-                      )}
-                      <div>
-                        <label className="block text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-1">Texto Proposto (Área Técnica)</label>
-                        <textarea 
-                          className="w-full bg-white border border-indigo-200 rounded-lg p-3 resize-y focus:ring-2 focus:ring-indigo-600 text-sm font-medium text-slate-800 whitespace-pre-wrap outline-none"
-                          value={art.proposedText !== undefined ? art.proposedText : art.originalText}
-                          onChange={e => {
-                            const newArts = [...(previewArticles || [])];
-                            newArts[i].proposedText = e.target.value;
-                            setPreviewArticles(newArts);
-                          }}
-                          rows={Math.max(12, (art.proposedText || art.originalText || "").split('\n').length)}
-                        />
                       </div>
-                    </div>
+                    )}
 
                     <div className="mt-4 pt-4 border-t border-slate-200/60 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                       <button type="button" onClick={() => insertPreviewArticle(i)} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 rounded-lg transition-all shadow-sm bg-white">
@@ -2278,6 +2711,9 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       try {
         // Sheet 1: Quadro Consolidado
         const consolidadoRows = currentArticles.map((art, idx) => {
+          const isOriginalTable = art.contentType === 'table' || isTableJson(art.originalText);
+          const isPropostaTable = art.contentType === 'table' || isTableJson(art.proposedText || art.originalText);
+          const isTableFinal = art.contentType === 'table' || isTableJson(art.finalText);
           const cArt = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
           const a = cArt.filter(c => c.decision === "Acatada" || c.decision === "Acatada Parcialmente").length;
           const na = cArt.filter(c => c.decision === "Não Acatada" || c.decision === "Prejudicada" || c.decision === "Retida para Estudos Adicionais").length;
@@ -2290,10 +2726,10 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
             "Nº Dispositivo": idx + 1,
           };
           if (selectedTomada.tipoResolucao === "alteracao") {
-            row["Texto Atual (Vigente)"] = art.originalText || "Sem texto original cadastrado";
+            row["Texto Atual (Vigente)"] = formatContentForExport(art.originalText, false, isOriginalTable) || "Sem texto original cadastrado";
           }
-          row["Texto Proposto em Consulta (Minuta)"] = origText;
-          row["Texto Final do Dispositivo"] = fText;
+          row["Texto Proposto em Consulta (Minuta)"] = formatContentForExport(origText, false, isPropostaTable);
+          row["Texto Final do Dispositivo"] = formatContentForExport(fText, false, isTableFinal);
           row["Status da Redação"] = isAlterada ? "Alterada pós-contribuições" : "Inalterada (Texto Original Mantido)";
           row["Justificativa Técnica Final"] = art.finalJustification || "Sem justificativa final cadastrada";
           row["Total de Contribuições"] = cArt.length;
@@ -2307,19 +2743,24 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
         // Sheet 2: Detalhamento de Contribuições
         const contribuicoesRows: any[] = [];
         currentArticles.forEach((art, idx) => {
+          const isOriginalTable = art.contentType === 'table' || isTableJson(art.originalText);
+          const isPropostaTable = art.contentType === 'table' || isTableJson(art.proposedText || art.originalText);
+          const origText = art.proposedText || art.originalText || "";
           const cArt = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
           cArt.forEach(c => {
+            const isTableContrib = art.contentType === 'table' || isTableJson(c.proposedText) || isTableJson(origText);
+            const isSuppressingContrib = c.isSuppressing || !c.proposedText?.trim();
             const row: any = {
               "Nº Dispositivo": idx + 1,
             };
             if (selectedTomada.tipoResolucao === "alteracao") {
-              row["Texto Atual (Vigente)"] = art.originalText || "Sem texto original cadastrado";
+              row["Texto Atual (Vigente)"] = formatContentForExport(art.originalText, false, isOriginalTable) || "Sem texto original cadastrado";
             }
-            row["Texto Proposto em Consulta (Minuta)"] = art.proposedText || art.originalText || "";
+            row["Texto Proposto em Consulta (Minuta)"] = formatContentForExport(art.proposedText || art.originalText || "", false, isPropostaTable);
             row["Participante"] = c.authorName;
             row["E-mail do Participante"] = c.authorEmail || "";
             row["Data da Contribuição"] = formatDateBr(c.createdAt);
-            row["Texto Proposto pelo Participante"] = c.proposedText;
+            row["Texto Proposto pelo Participante"] = formatContentForExport(c.proposedText, isSuppressingContrib, isTableContrib);
             row["Justificativa do Participante"] = c.justification;
             row["Parecer Técnico"] = c.decision || "Aguardando Análise";
             row["Complexidade"] = c.complexity || "";
@@ -2425,22 +2866,28 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
         `;
 
         currentArticles.forEach((art, idx) => {
+          const isOriginalTable = art.contentType === 'table' || isTableJson(art.originalText);
+          const isPropostaTable = art.contentType === 'table' || isTableJson(art.proposedText || art.originalText);
+          const isTableFinal = art.contentType === 'table' || isTableJson(art.finalText);
+          const origText = art.proposedText || art.originalText || "";
+          const fText = art.finalText || origText;
+
           const cArt = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
           const a = cArt.filter(c => c.decision === "Acatada" || c.decision === "Acatada Parcialmente").length;
           const na = cArt.filter(c => c.decision === "Não Acatada" || c.decision === "Prejudicada" || c.decision === "Retida para Estudos Adicionais").length;
           const pend = cArt.filter(c => !c.decision).length;
           
-          const origText = escapeHtml(art.proposedText || art.originalText || "");
-          const origTextVigente = escapeHtml(art.originalText || "Sem texto original cadastrado");
-          const fText = escapeHtml(art.finalText || art.proposedText || art.originalText || "");
+          const origTextHtml = formatContentForPdf(origText, false, isPropostaTable);
+          const origTextVigenteHtml = formatContentForPdf(art.originalText || "Sem texto original cadastrado", false, isOriginalTable);
+          const fTextHtml = formatContentForPdf(fText, false, isTableFinal, origText);
           const fJust = escapeHtml(art.finalJustification || "-");
           
           html += `
             <tr>
               <td>${idx + 1}</td>
-              ${selectedTomada.tipoResolucao === "alteracao" ? `<td><pre>${origTextVigente}</pre></td>` : ''}
-              <td><pre>${origText}</pre></td>
-              <td><pre>${fText}</pre></td>
+              ${selectedTomada.tipoResolucao === "alteracao" ? `<td>${origTextVigenteHtml}</td>` : ''}
+              <td>${origTextHtml}</td>
+              <td>${fTextHtml}</td>
               <td><pre>${fJust}</pre></td>
               <td>
                 Total: <b>${cArt.length}</b><br>
@@ -2712,30 +3159,41 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       <div className="mb-4">
                         <div className="flex items-center gap-2 mb-3">
                           <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
-                            Texto Atual (Vigente)
+                            {art.contentType === 'table' || isTableJson(art.originalText) ? "Tabela Atual (Vigente)" : "Texto Atual (Vigente)"}
                           </span>
                         </div>
-                        <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 shadow-2xs">
-                          <div className="text-sm font-medium text-slate-600 whitespace-pre-wrap leading-relaxed">
-                            {art.originalText}
+                        {art.contentType === 'table' || isTableJson(art.originalText) ? (
+                          <RegulatoryTableView data={art.originalText} />
+                        ) : (
+                          <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 shadow-2xs">
+                            <div className="text-sm font-medium text-slate-600 whitespace-pre-wrap leading-relaxed">
+                              {art.originalText}
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     )}
                     
                     <div className="mb-4 mt-4">
                       <div className="flex items-center gap-2 mb-3">
                         <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
-                          Texto Proposto em Consulta (Minuta)
+                          {art.contentType === 'table' || isTableJson(art.proposedText || art.originalText) ? "Tabela Proposta em Consulta (Minuta)" : "Texto Proposto em Consulta (Minuta)"}
                         </span>
                       </div>
-                      <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-4 shadow-2xs">
-                        <div className="text-sm font-medium text-slate-800 whitespace-pre-wrap leading-relaxed">
-                          {selectedTomada.tipoResolucao === "alteracao" && art.originalText
-                            ? renderDiffInline(art.originalText, art.proposedText)
-                            : (art.proposedText !== undefined ? art.proposedText : art.originalText)}
+                      {art.contentType === 'table' || isTableJson(art.proposedText || art.originalText) ? (
+                        <RegulatoryTableView 
+                          data={art.proposedText || art.originalText}
+                          originalData={selectedTomada.tipoResolucao === "alteracao" && art.originalText ? art.originalText : undefined}
+                        />
+                      ) : (
+                        <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-4 shadow-2xs">
+                          <div className="text-sm font-medium text-slate-800 whitespace-pre-wrap leading-relaxed">
+                            {selectedTomada.tipoResolucao === "alteracao" && art.originalText
+                              ? renderDiffInline(art.originalText, art.proposedText, art.contentType)
+                              : (art.proposedText !== undefined ? art.proposedText : art.originalText)}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* Comparativo Texto Proposto X Contribuição Sugerida */}
@@ -2745,7 +3203,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           (art.proposedText !== undefined && art.proposedText !== null && art.proposedText.trim() !== "")
                             ? art.proposedText
                             : (art.originalText || ""),
-                          userArticleContribs[0].proposedText
+                          userArticleContribs[0].proposedText,
+                          art.contentType
                         )}
                         
                         <div className="mb-4">
@@ -2858,7 +3317,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           <div className="flex items-center justify-between gap-4 flex-wrap mb-3">
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
-                                Texto da Contribuição Sugerida
+                                {art.contentType === 'table' || isTableJson(art.proposedText || art.originalText) ? "Matriz da Contribuição Sugerida" : "Texto da Contribuição Sugerida"}
                               </span>
                             </div>
                             <div className="flex items-center gap-2 bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-200 shadow-sm">
@@ -2877,17 +3336,35 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                               </label>
                             </div>
                           </div>
-                          <textarea 
-                            className={cn(
-                              "w-full px-4 py-3 border rounded-xl text-sm font-medium shadow-2xs transition-all",
-                              isSuppressing ? "bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200" : "bg-white border-slate-300 focus:ring-2 focus:ring-emerald-600 text-slate-800"
-                            )}
-                            rows={10}
-                            value={proposedText}
-                            onChange={e => setProposedText(e.target.value)}
-                            disabled={isSuppressing}
-                            placeholder={isSuppressing ? "Dispositivo será excluído integralmente." : "Insira a redação que você propõe para este dispositivo..."}
-                          />
+
+                          {art.contentType === 'table' || isTableJson(art.proposedText || art.originalText) ? (
+                            isSuppressing ? (
+                              <div className="p-4 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-400 italic">
+                                Tabela suprimida integralmente na proposta.
+                              </div>
+                            ) : (
+                              <RegulatoryTableEditor
+                                initialData={parseTableData(proposedText || art.proposedText || art.originalText || "")}
+                                originalData={parseTableData(art.proposedText || art.originalText || "")}
+                                isContributionMode={true}
+                                onChange={(table) => {
+                                  setProposedText(serializeTableData(table));
+                                }}
+                              />
+                            )
+                          ) : (
+                            <textarea 
+                              className={cn(
+                                "w-full px-4 py-3 border rounded-xl text-sm font-medium shadow-2xs transition-all",
+                                isSuppressing ? "bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200" : "bg-white border-slate-300 focus:ring-2 focus:ring-emerald-600 text-slate-800"
+                              )}
+                              rows={10}
+                              value={proposedText}
+                              onChange={e => setProposedText(e.target.value)}
+                              disabled={isSuppressing}
+                              placeholder={isSuppressing ? "Dispositivo será excluído integralmente." : "Insira a redação que você propõe para este dispositivo..."}
+                            />
+                          )}
                         </div>
 
                         <div>
@@ -2912,7 +3389,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                               (art.proposedText !== undefined && art.proposedText !== null && art.proposedText.trim() !== "")
                                 ? art.proposedText
                                 : (art.originalText || ""),
-                              proposedText
+                              proposedText,
+                              art.contentType
                             )}
                           </div>
                         )}
@@ -3092,20 +3570,26 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       const rows = sortedContributions.map((c) => {
                           const artIndex = currentArticles.findIndex(a => String(a.id) === String(c.articleId));
                           const originalArticle = artIndex !== -1 ? currentArticles[artIndex] : undefined;
+                          const originalText = originalArticle ? (originalArticle.proposedText !== undefined ? originalArticle.proposedText : originalArticle.originalText) : "";
+                          const isOriginalTable = originalArticle?.contentType === 'table' || isTableJson(originalArticle?.originalText);
+                          const isPropostaTable = originalArticle?.contentType === 'table' || isTableJson(originalText);
+                          const isTableFinal = originalArticle?.contentType === 'table' || isTableJson(originalArticle?.finalText);
+                          const isTableContrib = originalArticle?.contentType === 'table' || isTableJson(c.proposedText) || isTableJson(originalText);
+                          const isSuppressingContrib = c.isSuppressing || !c.proposedText?.trim();
                           
                           const row: any = {
                               "Data": formatDateBr(c.createdAt),
                           };
                           if (selectedTomada?.tipoResolucao === "alteracao") {
-                              row["Texto Atual (Vigente)"] = originalArticle?.originalText || "Sem texto original cadastrado";
+                              row["Texto Atual (Vigente)"] = formatContentForExport(originalArticle?.originalText, false, isOriginalTable) || "Sem texto original cadastrado";
                           }
-                          row["Texto Proposto em Consulta (Minuta)"] = originalArticle?.proposedText !== undefined ? originalArticle.proposedText : (originalArticle?.originalText || "");
-                          row["Texto da Contribuição Sugerida"] = c.proposedText || "";
+                          row["Texto Proposto em Consulta (Minuta)"] = formatContentForExport(originalArticle?.proposedText !== undefined ? originalArticle.proposedText : (originalArticle?.originalText || ""), false, isPropostaTable);
+                          row["Texto da Contribuição Sugerida"] = formatContentForExport(c.proposedText, isSuppressingContrib, isTableContrib);
                           row["Justificativa da Contribuição"] = c.justification || "";
                           row["Participante"] = c.authorName || "";
                           row["Parecer"] = c.decision || "Aguardando Análise";
                           row["Justificativa Técnica"] = c.technicalJustification || originalArticle?.finalJustification || "";
-                          row["Texto Final do Dispositivo"] = originalArticle?.finalText || originalArticle?.proposedText || originalArticle?.originalText || "";
+                          row["Texto Final do Dispositivo"] = formatContentForExport(originalArticle?.finalText || originalArticle?.proposedText || originalArticle?.originalText || "", false, isTableFinal);
                           return row;
                       });
 
@@ -3190,28 +3674,54 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       sortedContributions.forEach((c) => {
                           const artIndex = currentArticles.findIndex(a => String(a.id) === String(c.articleId));
                           const originalArticle = artIndex !== -1 ? currentArticles[artIndex] : undefined;
+                          const originalText = originalArticle ? (originalArticle.proposedText !== undefined ? originalArticle.proposedText : originalArticle.originalText) : "";
+                          const isOriginalTable = originalArticle?.contentType === 'table' || isTableJson(originalArticle?.originalText);
+                          const isPropostaTable = originalArticle?.contentType === 'table' || isTableJson(originalText);
+                          const isTableFinal = originalArticle?.contentType === 'table' || isTableJson(originalArticle?.finalText);
+                          const isTableContrib = originalArticle?.contentType === 'table' || isTableJson(c.proposedText) || isTableJson(originalText);
+                          const isSuppressingContrib = c.isSuppressing || !c.proposedText?.trim();
                           
                           const dataStr = escapeHtml(formatDateBr(c.createdAt));
-                          const vigStr = escapeHtml(originalArticle?.originalText || "Sem texto original cadastrado");
-                          const minStr = escapeHtml(originalArticle?.proposedText !== undefined ? originalArticle.proposedText : (originalArticle?.originalText || ""));
-                          const sugStr = escapeHtml(c.proposedText || "");
+                          const vigStr = formatContentForPdf(originalArticle?.originalText || "Sem texto original cadastrado", false, isOriginalTable);
+                          const minStr = formatContentForPdf(originalArticle?.proposedText !== undefined ? originalArticle.proposedText : (originalArticle?.originalText || ""), false, isPropostaTable);
+                          
+                          let sugStr = "";
+                          if (isTableContrib) {
+                            sugStr = formatContentForPdf(c.proposedText || originalText, isSuppressingContrib, true, originalText);
+                          } else if (isSuppressingContrib) {
+                            sugStr = formatContentForPdf("", true, false, originalText);
+                          } else {
+                            const diffParts = getSmartDiff(originalText, c.proposedText || "");
+                            sugStr = `<div style="white-space: pre-wrap; font-family: inherit; font-size: 11px; line-height: 1.4;">` +
+                              diffParts.map(part => {
+                                if (part.added) {
+                                  return `<span style="background-color: #d1fae5; color: #064e3b; font-weight: bold; padding: 1px 4px; border-radius: 3px; border: 1px solid #6ee7b7; margin: 0 1px;">${escapeHtml(part.value)}</span>`;
+                                }
+                                if (part.removed) {
+                                  return `<span style="background-color: #ffe4e6; color: #881337; text-decoration: line-through; padding: 1px 4px; border-radius: 3px; border: 1px solid #fda4af; margin: 0 1px;">${escapeHtml(part.value)}</span>`;
+                                }
+                                return escapeHtml(part.value);
+                              }).join('') +
+                            `</div>`;
+                          }
+
                           const justStr = escapeHtml(c.justification || "");
                           const partStr = escapeHtml(c.authorName || "");
                           const parStr = escapeHtml(c.decision || "Aguardando Análise");
                           const jTechStr = escapeHtml(c.technicalJustification || originalArticle?.finalJustification || "");
-                          const finStr = escapeHtml(originalArticle?.finalText || originalArticle?.proposedText || originalArticle?.originalText || "");
+                          const finStr = formatContentForPdf(originalArticle?.finalText || originalArticle?.proposedText || originalArticle?.originalText || "", false, isTableFinal, originalText);
 
                           html += `
                           <tr>
                             <td>${dataStr}</td>
-                            ${selectedTomada?.tipoResolucao === "alteracao" ? `<td><pre>${vigStr}</pre></td>` : ''}
-                            <td><pre>${minStr}</pre></td>
-                            <td><pre>${sugStr}</pre></td>
+                            ${selectedTomada?.tipoResolucao === "alteracao" ? `<td>${vigStr}</td>` : ''}
+                            <td>${minStr}</td>
+                            <td>${sugStr}</td>
                             <td><pre>${justStr}</pre></td>
                             <td>${partStr}</td>
                             <td>${parStr}</td>
                             <td><pre>${jTechStr}</pre></td>
-                            <td><pre>${finStr}</pre></td>
+                            <td>${finStr}</td>
                           </tr>
                           `;
                       });
@@ -3238,12 +3748,112 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
               return (
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mt-6">
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 flex-wrap gap-3">
                     <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
                       <FileText size={18} className="text-indigo-600" />
                       {publicContributionsView === "minhas" ? "Minhas Contribuições" : "Todas as Contribuições"}
                     </h3>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Column Visibility Popover */}
+                      <div className="relative">
+                        <button
+                          onClick={() => setOpenColMenu(openColMenu === "contributions" ? null : "contributions")}
+                          className={cn(
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold shadow-xs hover:shadow transition-all group",
+                            Object.values(contributionsHiddenCols).filter(Boolean).length > 0
+                              ? "border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                              : "border-slate-200 bg-white hover:bg-slate-100 text-slate-700"
+                          )}
+                          title="Gerenciar visibilidade das colunas"
+                        >
+                          <Columns size={13} className={Object.values(contributionsHiddenCols).filter(Boolean).length > 0 ? "text-indigo-600" : "text-slate-500"} />
+                          <span>Colunas</span>
+                          {Object.values(contributionsHiddenCols).filter(Boolean).length > 0 && (
+                            <span className="ml-0.5 px-1.5 py-0.5 bg-indigo-600 text-white rounded-full text-[10px] font-black leading-none">
+                              {Object.values(contributionsHiddenCols).filter(Boolean).length} oculta{Object.values(contributionsHiddenCols).filter(Boolean).length > 1 ? "s" : ""}
+                            </span>
+                          )}
+                        </button>
+
+                        {openColMenu === "contributions" && (
+                          <>
+                            <div 
+                              className="fixed inset-0 z-20 cursor-default" 
+                              onClick={() => setOpenColMenu(null)} 
+                            />
+                            <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 z-30 p-3 animate-in fade-in zoom-in-95 duration-100">
+                              <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                                <div className="flex items-center gap-1.5 text-xs font-black text-slate-800 uppercase tracking-tight">
+                                  <Columns size={14} className="text-indigo-600" />
+                                  <span>Exibir/Ocultar Colunas</span>
+                                </div>
+                                {Object.values(contributionsHiddenCols).filter(Boolean).length > 0 && (
+                                  <button
+                                    onClick={() => showAllCols("contributions")}
+                                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
+                                  >
+                                    Mostrar Todas
+                                  </button>
+                                )}
+                              </div>
+                              <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
+                                {[
+                                  { key: "data", label: "Data" },
+                                  ...(selectedTomada?.tipoResolucao === "alteracao" ? [{ key: "texto_atual", label: "Texto Atual (Vigente)" }] : []),
+                                  { key: "dispositivo", label: "Texto Proposto (Minuta)" },
+                                  { key: "texto_contribuicao", label: "Texto da Contribuição" },
+                                  { key: "justificativa", label: "Justificativa da Contribuição" },
+                                  { key: "participante", label: "Participante" },
+                                  { key: "parecer", label: "Parecer" },
+                                  { key: "justificativa_tecnica", label: "Justificativa Técnica" },
+                                  { key: "texto_final", label: "Texto Final do Dispositivo" },
+                                ].map(col => {
+                                  const isHidden = !!contributionsHiddenCols[col.key];
+                                  return (
+                                    <button
+                                      key={col.key}
+                                      type="button"
+                                      onClick={() => toggleContributionCol(col.key)}
+                                      className={cn(
+                                        "w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors text-left",
+                                        isHidden 
+                                          ? "text-slate-400 bg-slate-50 hover:bg-slate-100" 
+                                          : "text-slate-700 hover:bg-indigo-50/60 hover:text-indigo-900"
+                                      )}
+                                    >
+                                      <div className="flex items-center gap-2 min-w-0 pr-2">
+                                        <div className={cn(
+                                          "w-4 h-4 rounded-md border flex items-center justify-center transition-colors shrink-0",
+                                          !isHidden ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-300 bg-white"
+                                        )}>
+                                          {!isHidden && <Check size={11} strokeWidth={3} />}
+                                        </div>
+                                        <span className={cn("truncate", isHidden && "line-through opacity-75")}>
+                                          {col.label}
+                                        </span>
+                                      </div>
+                                      {isHidden ? (
+                                        <EyeOff size={13} className="text-slate-400 shrink-0" />
+                                      ) : (
+                                        <Eye size={13} className="text-indigo-500 shrink-0" />
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => handleResetColWidths("contributions")}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold shadow-xs hover:shadow transition-all group"
+                        title="Restaurar a largura padrão das colunas"
+                      >
+                        <RotateCcw size={13} className="text-slate-500 group-hover:rotate-[-45deg] transition-transform" />
+                        <span>Redefinir Colunas</span>
+                      </button>
                       <button
                         onClick={handleExportContributionsPDF}
                         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm hover:shadow transition-all group"
@@ -3263,20 +3873,354 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                     </div>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-200 text-left min-w-[1300px]">
+                    <table 
+                      className="divide-y divide-slate-200 text-left border-collapse"
+                      style={{ tableLayout: "fixed", width: `${totalContributionsTableWidth}px`, minWidth: "100%" }}
+                    >
                       <thead className="bg-slate-50">
                         <tr>
-                          <th scope="col" onClick={() => handleSort('data')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-24">Data{getSortIcon('data')}</th>
-                          {selectedTomada?.tipoResolucao === "alteracao" && (
-                            <th scope="col" onClick={() => handleSort('texto_atual')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Texto Atual (Vigente){getSortIcon('texto_atual')}</th>
+                          {!contributionsHiddenCols.data && (
+                            <th 
+                              scope="col" 
+                              onClick={() => handleSort('data')} 
+                              style={{ width: `${contributionsColWidths.data}px`, minWidth: `${contributionsColWidths.data}px` }}
+                              className="relative group cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider select-none"
+                            >
+                              <div className="flex items-center justify-between pr-2">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="truncate">Data</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleContributionCol('data');
+                                    }}
+                                    title="Ocultar coluna Data"
+                                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                  >
+                                    <EyeOff size={11} />
+                                  </button>
+                                </div>
+                                {getSortIcon('data')}
+                              </div>
+                              <div
+                                onMouseDown={(e) => handleColResizeStart(e, 'contributions', 'data', 70)}
+                                onClick={(e) => e.stopPropagation()}
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  setContributionsColWidths(prev => ({ ...prev, data: DEFAULT_CONTRIBUTIONS_COL_WIDTHS.data }));
+                                }}
+                                title="Arraste para redimensionar (duplo clique para restaurar)"
+                                className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                              >
+                                <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                              </div>
+                            </th>
                           )}
-                          <th scope="col" onClick={() => handleSort('dispositivo')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Texto Proposto em Consulta (Minuta){getSortIcon('dispositivo')}</th>
-                          <th scope="col" onClick={() => handleSort('texto_contribuicao')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Texto da Contribuição Sugerida{getSortIcon('texto_contribuicao')}</th>
-                          <th scope="col" onClick={() => handleSort('justificativa')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-48">Justificativa da Contribuição{getSortIcon('justificativa')}</th>
-                          <th scope="col" onClick={() => handleSort('participante')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-40">Participante{getSortIcon('participante')}</th>
-                          <th scope="col" onClick={() => handleSort('parecer')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-36">Parecer{getSortIcon('parecer')}</th>
-                          <th scope="col" onClick={() => handleSort('justificativa_tecnica')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Justificativa Técnica{getSortIcon('justificativa_tecnica')}</th>
-                          <th scope="col" onClick={() => handleSort('texto_final')} className="cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider w-1/5">Texto Final do Dispositivo{getSortIcon('texto_final')}</th>
+                          {selectedTomada?.tipoResolucao === "alteracao" && !contributionsHiddenCols.texto_atual && (
+                            <th 
+                              scope="col" 
+                              onClick={() => handleSort('texto_atual')} 
+                              style={{ width: `${contributionsColWidths.texto_atual}px`, minWidth: `${contributionsColWidths.texto_atual}px` }}
+                              className="relative group cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider select-none"
+                            >
+                              <div className="flex items-center justify-between pr-2">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="truncate">Texto Atual (Vigente)</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleContributionCol('texto_atual');
+                                    }}
+                                    title="Ocultar coluna Texto Atual"
+                                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                  >
+                                    <EyeOff size={11} />
+                                  </button>
+                                </div>
+                                {getSortIcon('texto_atual')}
+                              </div>
+                              <div
+                                onMouseDown={(e) => handleColResizeStart(e, 'contributions', 'texto_atual', 120)}
+                                onClick={(e) => e.stopPropagation()}
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  setContributionsColWidths(prev => ({ ...prev, texto_atual: DEFAULT_CONTRIBUTIONS_COL_WIDTHS.texto_atual }));
+                                }}
+                                title="Arraste para redimensionar (duplo clique para restaurar)"
+                                className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                              >
+                                <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                              </div>
+                            </th>
+                          )}
+                          {!contributionsHiddenCols.dispositivo && (
+                            <th 
+                              scope="col" 
+                              onClick={() => handleSort('dispositivo')} 
+                              style={{ width: `${contributionsColWidths.dispositivo}px`, minWidth: `${contributionsColWidths.dispositivo}px` }}
+                              className="relative group cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider select-none"
+                            >
+                              <div className="flex items-center justify-between pr-2">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="truncate">Texto Proposto em Consulta (Minuta)</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleContributionCol('dispositivo');
+                                    }}
+                                    title="Ocultar coluna Texto Proposto"
+                                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                  >
+                                    <EyeOff size={11} />
+                                  </button>
+                                </div>
+                                {getSortIcon('dispositivo')}
+                              </div>
+                              <div
+                                onMouseDown={(e) => handleColResizeStart(e, 'contributions', 'dispositivo', 120)}
+                                onClick={(e) => e.stopPropagation()}
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  setContributionsColWidths(prev => ({ ...prev, dispositivo: DEFAULT_CONTRIBUTIONS_COL_WIDTHS.dispositivo }));
+                                }}
+                                title="Arraste para redimensionar (duplo clique para restaurar)"
+                                className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                              >
+                                <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                              </div>
+                            </th>
+                          )}
+                          {!contributionsHiddenCols.texto_contribuicao && (
+                            <th 
+                              scope="col" 
+                              onClick={() => handleSort('texto_contribuicao')} 
+                              style={{ width: `${contributionsColWidths.texto_contribuicao}px`, minWidth: `${contributionsColWidths.texto_contribuicao}px` }}
+                              className="relative group cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider select-none"
+                            >
+                              <div className="flex items-center justify-between pr-2">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="truncate">Texto da Contribuição Sugerida</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleContributionCol('texto_contribuicao');
+                                    }}
+                                    title="Ocultar coluna Texto da Contribuição"
+                                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                  >
+                                    <EyeOff size={11} />
+                                  </button>
+                                </div>
+                                {getSortIcon('texto_contribuicao')}
+                              </div>
+                              <div
+                                onMouseDown={(e) => handleColResizeStart(e, 'contributions', 'texto_contribuicao', 120)}
+                                onClick={(e) => e.stopPropagation()}
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  setContributionsColWidths(prev => ({ ...prev, texto_contribuicao: DEFAULT_CONTRIBUTIONS_COL_WIDTHS.texto_contribuicao }));
+                                }}
+                                title="Arraste para redimensionar (duplo clique para restaurar)"
+                                className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                              >
+                                <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                              </div>
+                            </th>
+                          )}
+                          {!contributionsHiddenCols.justificativa && (
+                            <th 
+                              scope="col" 
+                              onClick={() => handleSort('justificativa')} 
+                              style={{ width: `${contributionsColWidths.justificativa}px`, minWidth: `${contributionsColWidths.justificativa}px` }}
+                              className="relative group cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider select-none"
+                            >
+                              <div className="flex items-center justify-between pr-2">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="truncate">Justificativa da Contribuição</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleContributionCol('justificativa');
+                                    }}
+                                    title="Ocultar coluna Justificativa da Contribuição"
+                                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                  >
+                                    <EyeOff size={11} />
+                                  </button>
+                                </div>
+                                {getSortIcon('justificativa')}
+                              </div>
+                              <div
+                                onMouseDown={(e) => handleColResizeStart(e, 'contributions', 'justificativa', 120)}
+                                onClick={(e) => e.stopPropagation()}
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  setContributionsColWidths(prev => ({ ...prev, justificativa: DEFAULT_CONTRIBUTIONS_COL_WIDTHS.justificativa }));
+                                }}
+                                title="Arraste para redimensionar (duplo clique para restaurar)"
+                                className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                              >
+                                <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                              </div>
+                            </th>
+                          )}
+                          {!contributionsHiddenCols.participante && (
+                            <th 
+                              scope="col" 
+                              onClick={() => handleSort('participante')} 
+                              style={{ width: `${contributionsColWidths.participante}px`, minWidth: `${contributionsColWidths.participante}px` }}
+                              className="relative group cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider select-none"
+                            >
+                              <div className="flex items-center justify-between pr-2">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="truncate">Participante</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleContributionCol('participante');
+                                    }}
+                                    title="Ocultar coluna Participante"
+                                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                  >
+                                    <EyeOff size={11} />
+                                  </button>
+                                </div>
+                                {getSortIcon('participante')}
+                              </div>
+                              <div
+                                onMouseDown={(e) => handleColResizeStart(e, 'contributions', 'participante', 100)}
+                                onClick={(e) => e.stopPropagation()}
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  setContributionsColWidths(prev => ({ ...prev, participante: DEFAULT_CONTRIBUTIONS_COL_WIDTHS.participante }));
+                                }}
+                                title="Arraste para redimensionar (duplo clique para restaurar)"
+                                className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                              >
+                                <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                              </div>
+                            </th>
+                          )}
+                          {!contributionsHiddenCols.parecer && (
+                            <th 
+                              scope="col" 
+                              onClick={() => handleSort('parecer')} 
+                              style={{ width: `${contributionsColWidths.parecer}px`, minWidth: `${contributionsColWidths.parecer}px` }}
+                              className="relative group cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider select-none"
+                            >
+                              <div className="flex items-center justify-between pr-2">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="truncate">Parecer</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleContributionCol('parecer');
+                                    }}
+                                    title="Ocultar coluna Parecer"
+                                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                  >
+                                    <EyeOff size={11} />
+                                  </button>
+                                </div>
+                                {getSortIcon('parecer')}
+                              </div>
+                              <div
+                                onMouseDown={(e) => handleColResizeStart(e, 'contributions', 'parecer', 90)}
+                                onClick={(e) => e.stopPropagation()}
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  setContributionsColWidths(prev => ({ ...prev, parecer: DEFAULT_CONTRIBUTIONS_COL_WIDTHS.parecer }));
+                                }}
+                                title="Arraste para redimensionar (duplo clique para restaurar)"
+                                className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                              >
+                                <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                              </div>
+                            </th>
+                          )}
+                          {!contributionsHiddenCols.justificativa_tecnica && (
+                            <th 
+                              scope="col" 
+                              onClick={() => handleSort('justificativa_tecnica')} 
+                              style={{ width: `${contributionsColWidths.justificativa_tecnica}px`, minWidth: `${contributionsColWidths.justificativa_tecnica}px` }}
+                              className="relative group cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider select-none"
+                            >
+                              <div className="flex items-center justify-between pr-2">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="truncate">Justificativa Técnica</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleContributionCol('justificativa_tecnica');
+                                    }}
+                                    title="Ocultar coluna Justificativa Técnica"
+                                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                  >
+                                    <EyeOff size={11} />
+                                  </button>
+                                </div>
+                                {getSortIcon('justificativa_tecnica')}
+                              </div>
+                              <div
+                                onMouseDown={(e) => handleColResizeStart(e, 'contributions', 'justificativa_tecnica', 120)}
+                                onClick={(e) => e.stopPropagation()}
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  setContributionsColWidths(prev => ({ ...prev, justificativa_tecnica: DEFAULT_CONTRIBUTIONS_COL_WIDTHS.justificativa_tecnica }));
+                                }}
+                                title="Arraste para redimensionar (duplo clique para restaurar)"
+                                className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                              >
+                                <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                              </div>
+                            </th>
+                          )}
+                          {!contributionsHiddenCols.texto_final && (
+                            <th 
+                              scope="col" 
+                              onClick={() => handleSort('texto_final')} 
+                              style={{ width: `${contributionsColWidths.texto_final}px`, minWidth: `${contributionsColWidths.texto_final}px` }}
+                              className="relative group cursor-pointer hover:bg-slate-100 transition-colors px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider select-none"
+                            >
+                              <div className="flex items-center justify-between pr-2">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="truncate">Texto Final do Dispositivo</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleContributionCol('texto_final');
+                                    }}
+                                    title="Ocultar coluna Texto Final"
+                                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                  >
+                                    <EyeOff size={11} />
+                                  </button>
+                                </div>
+                                {getSortIcon('texto_final')}
+                              </div>
+                              <div
+                                onMouseDown={(e) => handleColResizeStart(e, 'contributions', 'texto_final', 120)}
+                                onClick={(e) => e.stopPropagation()}
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  setContributionsColWidths(prev => ({ ...prev, texto_final: DEFAULT_CONTRIBUTIONS_COL_WIDTHS.texto_final }));
+                                }}
+                                title="Arraste para redimensionar (duplo clique para restaurar)"
+                                className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                              >
+                                <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                              </div>
+                            </th>
+                          )}
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-slate-200">
@@ -3284,120 +4228,194 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           const artIndex = currentArticles.findIndex(a => String(a.id) === String(c.articleId));
                           const originalArticle = artIndex !== -1 ? currentArticles[artIndex] : undefined;
                           const originalText = originalArticle ? (originalArticle.proposedText !== undefined ? originalArticle.proposedText : originalArticle.originalText) : "Artigo não encontrado";
-                          const diffResult = getSmartDiff(originalText, c.proposedText || "");
+                          const isTableContrib = originalArticle?.contentType === 'table' || isTableJson(c.proposedText) || isTableJson(originalText);
                           
+                          const diffResult = !isTableContrib ? getSmartDiff(originalText, c.proposedText || "") : [];
                           const fText = originalArticle?.finalText || originalText;
-                          const finalDiffParts = getSmartDiff(originalText, fText);
+                          const isTableFinal = originalArticle?.contentType === 'table' || isTableJson(originalArticle?.finalText);
+                          const finalDiffParts = !isTableFinal ? getSmartDiff(originalText, fText) : [];
                           
+                          const isOriginalTable = originalArticle?.contentType === 'table' || isTableJson(originalArticle?.originalText);
+                          const isPropostaTable = originalArticle?.contentType === 'table' || isTableJson(originalText);
+                          const isSuppressingContrib = c.isSuppressing || !c.proposedText?.trim();
+
                           return (
                             <tr key={c.id} className="hover:bg-slate-50/40 transition-colors align-top">
-                              <td className="px-4 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">
-                                {formatDateBr(c.createdAt)}
-                              </td>
-                              {selectedTomada?.tipoResolucao === "alteracao" && (
-                                <td className="px-4 py-4 text-xs text-slate-600 whitespace-pre-wrap leading-relaxed font-normal">
-                                  {originalArticle?.originalText || <span className="text-slate-400 italic">Sem texto original cadastrado</span>}
+                              {!contributionsHiddenCols.data && (
+                                <td className="px-4 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">
+                                  {formatDateBr(c.createdAt)}
                                 </td>
                               )}
-                              <td className="px-4 py-4 text-xs">
-                                <div className="mb-1.5">
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200 uppercase tracking-wider">
-                                    Dispositivo #{artIndex !== -1 ? artIndex + 1 : "?"}
-                                  </span>
-                                </div>
-                                <div className="text-slate-700 whitespace-pre-wrap leading-relaxed font-normal">
-                                  {selectedTomada?.tipoResolucao === "alteracao" && originalArticle?.originalText
-                                    ? renderDiffInline(originalArticle.originalText, originalArticle.proposedText)
-                                    : originalText}
-                                </div>
-                              </td>
-                              <td className="px-4 py-4 text-xs">
-                                <div className="text-slate-800 font-medium whitespace-pre-wrap leading-relaxed">
-                                  {diffResult.map((part, index) => {
-                                    if (part.added) {
-                                      return (
-                                        <span key={index} className="text-emerald-950 font-bold bg-emerald-100 border border-emerald-300 px-1 py-0.5 rounded mx-0.5 inline-block">
-                                          {part.value}
-                                        </span>
-                                      );
-                                    }
-                                    if (part.removed) {
-                                      return (
-                                        <span key={index} className="text-rose-950 bg-rose-100 border border-rose-300 px-1 py-0.5 rounded line-through decoration-rose-600 mx-0.5 inline-block font-medium">
-                                          {part.value}
-                                        </span>
-                                      );
-                                    }
-                                    return <span key={index}>{part.value}</span>;
-                                  })}
-                                </div>
-                              </td>
-                              <td className="px-4 py-4 text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
-                                {c.justification}
-                              </td>
-                              <td className="px-4 py-4 text-xs font-bold text-slate-800">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center text-[11px] font-black text-slate-700 shrink-0">
-                                    {c.authorName.charAt(0).toUpperCase()}
+                              {selectedTomada?.tipoResolucao === "alteracao" && !contributionsHiddenCols.texto_atual && (
+                                <td className="px-4 py-4 text-xs text-slate-600 leading-relaxed font-normal">
+                                  {isOriginalTable ? (
+                                    <TableModalPreview 
+                                      data={originalArticle?.originalText}
+                                      variant="vigente"
+                                      badgeLabel="Vigente"
+                                      title={parseTableData(originalArticle?.originalText).title || `Tabela Vigente - Disp. #${artIndex !== -1 ? artIndex + 1 : "?"}`}
+                                      buttonText="Ver Tabela Atual"
+                                    />
+                                  ) : (
+                                    <div className="whitespace-pre-wrap">
+                                      {originalArticle?.originalText || <span className="text-slate-400 italic">Sem texto original cadastrado</span>}
+                                    </div>
+                                  )}
+                                </td>
+                              )}
+                              {!contributionsHiddenCols.dispositivo && (
+                                <td className="px-4 py-4 text-xs">
+                                  <div className="mb-1.5">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200 uppercase tracking-wider">
+                                      Dispositivo #{artIndex !== -1 ? artIndex + 1 : "?"}
+                                    </span>
                                   </div>
-                                  <div className="min-w-0">
-                                    <div className="line-clamp-1 text-slate-900 font-bold">{c.authorName}</div>
-                                    {c.authorEmail && (
-                                      <div className="text-[10px] text-slate-400 font-normal truncate">{c.authorEmail}</div>
-                                    )}
+                                  {isPropostaTable ? (
+                                    <TableModalPreview 
+                                      data={originalArticle?.proposedText !== undefined ? originalArticle.proposedText : originalText}
+                                      originalData={selectedTomada?.tipoResolucao === "alteracao" && originalArticle?.originalText ? originalArticle.originalText : undefined}
+                                      variant="proposta"
+                                      badgeLabel="Minuta"
+                                      title={parseTableData(originalArticle?.proposedText || originalText).title || `Tabela Minuta - Disp. #${artIndex !== -1 ? artIndex + 1 : "?"}`}
+                                      buttonText="Ver Tabela da Minuta"
+                                    />
+                                  ) : (
+                                    <div className="text-slate-700 whitespace-pre-wrap leading-relaxed font-normal">
+                                      {selectedTomada?.tipoResolucao === "alteracao" && originalArticle?.originalText
+                                        ? renderDiffInline(originalArticle.originalText, originalArticle.proposedText, originalArticle?.contentType)
+                                        : originalText}
+                                    </div>
+                                  )}
+                                </td>
+                              )}
+                              {!contributionsHiddenCols.texto_contribuicao && (
+                                <td className="px-4 py-4 text-xs">
+                                  {isTableContrib ? (
+                                    isSuppressingContrib ? (
+                                      <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-bold flex items-center gap-1.5">
+                                        <X size={14} className="text-rose-600 shrink-0" />
+                                        <span>Supressão Integral da Tabela</span>
+                                      </div>
+                                    ) : (
+                                      <TableModalPreview 
+                                        data={c.proposedText || originalText}
+                                        originalData={originalText && originalText !== c.proposedText ? originalText : undefined}
+                                        variant="contribuicao"
+                                        badgeLabel="Sugestão"
+                                        title={parseTableData(c.proposedText || originalText).title || `Sugestão de Tabela - Disp. #${artIndex !== -1 ? artIndex + 1 : "?"}`}
+                                        buttonText="Ver Sugestão & Destaques"
+                                      />
+                                    )
+                                  ) : (
+                                    <div className="text-slate-800 font-medium whitespace-pre-wrap leading-relaxed">
+                                      {diffResult.map((part, index) => {
+                                        if (part.added) {
+                                          return (
+                                            <span key={index} className="text-emerald-950 font-bold bg-emerald-100 border border-emerald-300 px-1 py-0.5 rounded mx-0.5 inline-block">
+                                              {part.value}
+                                            </span>
+                                          );
+                                        }
+                                        if (part.removed) {
+                                          return (
+                                            <span key={index} className="text-rose-950 bg-rose-100 border border-rose-300 px-1 py-0.5 rounded line-through decoration-rose-600 mx-0.5 inline-block font-medium">
+                                              {part.value}
+                                            </span>
+                                          );
+                                        }
+                                        return <span key={index}>{part.value}</span>;
+                                      })}
+                                    </div>
+                                  )}
+                                </td>
+                              )}
+                              {!contributionsHiddenCols.justificativa && (
+                                <td className="px-4 py-4 text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                  {c.justification}
+                                </td>
+                              )}
+                              {!contributionsHiddenCols.participante && (
+                                <td className="px-4 py-4 text-xs font-bold text-slate-800">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center text-[11px] font-black text-slate-700 shrink-0">
+                                      {c.authorName.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="line-clamp-1 text-slate-900 font-bold">{c.authorName}</div>
+                                      {c.authorEmail && (
+                                        <div className="text-[10px] text-slate-400 font-normal truncate">{c.authorEmail}</div>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              </td>
-                              <td className="px-4 py-4 text-xs">
-                                {c.decision ? (
-                                  <span className={cn(
-                                    "inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border whitespace-nowrap",
-                                    c.decision === "Acatada" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                                    c.decision === "Acatada Parcialmente" ? "bg-amber-50 text-amber-700 border-amber-200" :
-                                    c.decision === "Não Acatada" ? "bg-rose-50 text-rose-700 border-rose-200" :
-                                    c.decision === "Prejudicada" ? "bg-slate-100 text-slate-700 border-slate-300" :
-                                    c.decision === "Retida para Estudos Adicionais" ? "bg-indigo-50 text-indigo-700 border-indigo-200" :
-                                    "bg-slate-100 text-slate-600 border-slate-200"
-                                  )}>
-                                    {c.decision === "Acatada" || c.decision === "Acatada Parcialmente" ? (
-                                      <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
-                                    ) : c.decision === "Não Acatada" ? (
-                                      <X size={12} className="text-rose-600 shrink-0" />
-                                    ) : null}
-                                    {c.decision}
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 italic bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 whitespace-nowrap">
-                                    Aguardando Análise
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-4 py-4 text-xs">
-                                {(c.technicalJustification || originalArticle?.finalJustification) ? (
-                                  <div className="text-slate-700 whitespace-pre-wrap leading-relaxed">
-                                    {c.technicalJustification || originalArticle?.finalJustification}
-                                  </div>
-                                ) : (
-                                  <span className="text-slate-400 italic text-[11px]">Pendente de justificativa técnica</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-4 text-xs">
-                                {originalArticle?.finalText ? (
-                                  <div className="text-slate-800 font-medium whitespace-pre-wrap leading-relaxed bg-indigo-50/30 p-2.5 rounded-lg border border-indigo-100/60">
-                                    {finalDiffParts.map((part, pIdx) => {
-                                      if (part.added) {
-                                        return <span key={pIdx} className="bg-emerald-100 text-emerald-950 font-bold px-1 rounded mx-0.5 border border-emerald-300">{part.value}</span>;
-                                      }
-                                      if (part.removed) {
-                                        return <span key={pIdx} className="bg-rose-100 text-rose-950 px-1 rounded mx-0.5 line-through decoration-rose-500 border border-rose-300">{part.value}</span>;
-                                      }
-                                      return <span key={pIdx}>{part.value}</span>;
-                                    })}
-                                  </div>
-                                ) : (
-                                  <span className="text-slate-400 italic text-[11px] font-normal">Aguardando revisão final</span>
-                                )}
-                              </td>
+                                </td>
+                              )}
+                              {!contributionsHiddenCols.parecer && (
+                                <td className="px-4 py-4 text-xs">
+                                  {c.decision ? (
+                                    <span className={cn(
+                                      "inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border whitespace-nowrap",
+                                      c.decision === "Acatada" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                                      c.decision === "Acatada Parcialmente" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                                      c.decision === "Não Acatada" ? "bg-rose-50 text-rose-700 border-rose-200" :
+                                      c.decision === "Prejudicada" ? "bg-slate-100 text-slate-700 border-slate-300" :
+                                      c.decision === "Retida para Estudos Adicionais" ? "bg-indigo-50 text-indigo-700 border-indigo-200" :
+                                      "bg-slate-100 text-slate-600 border-slate-200"
+                                    )}>
+                                      {c.decision === "Acatada" || c.decision === "Acatada Parcialmente" ? (
+                                        <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                                      ) : c.decision === "Não Acatada" ? (
+                                        <X size={12} className="text-rose-600 shrink-0" />
+                                      ) : null}
+                                      {c.decision}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 italic bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 whitespace-nowrap">
+                                      Aguardando Análise
+                                    </span>
+                                  )}
+                                </td>
+                              )}
+                              {!contributionsHiddenCols.justificativa_tecnica && (
+                                <td className="px-4 py-4 text-xs">
+                                  {(c.technicalJustification || originalArticle?.finalJustification) ? (
+                                    <div className="text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                      {c.technicalJustification || originalArticle?.finalJustification}
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 italic text-[11px]">Pendente de justificativa técnica</span>
+                                  )}
+                                </td>
+                              )}
+                              {!contributionsHiddenCols.texto_final && (
+                                <td className="px-4 py-4 text-xs">
+                                  {originalArticle?.finalText ? (
+                                    isTableFinal ? (
+                                      <TableModalPreview 
+                                        data={originalArticle.finalText}
+                                        originalData={originalText}
+                                        variant="final"
+                                        badgeLabel="Texto Final"
+                                        title={parseTableData(originalArticle.finalText).title || `Tabela Final - Disp. #${artIndex !== -1 ? artIndex + 1 : "?"}`}
+                                        buttonText="Ver Tabela Final"
+                                      />
+                                    ) : (
+                                      <div className="text-slate-800 font-medium whitespace-pre-wrap leading-relaxed bg-indigo-50/30 p-2.5 rounded-lg border border-indigo-100/60">
+                                        {finalDiffParts.map((part, pIdx) => {
+                                          if (part.added) {
+                                            return <span key={pIdx} className="bg-emerald-100 text-emerald-950 font-bold px-1 rounded mx-0.5 border border-emerald-300">{part.value}</span>;
+                                          }
+                                          if (part.removed) {
+                                            return <span key={pIdx} className="bg-rose-100 text-rose-950 px-1 rounded mx-0.5 line-through decoration-rose-500 border border-rose-300">{part.value}</span>;
+                                          }
+                                          return <span key={pIdx}>{part.value}</span>;
+                                        })}
+                                      </div>
+                                    )
+                                  ) : (
+                                    <span className="text-slate-400 italic text-[11px] font-normal">Aguardando revisão final</span>
+                                  )}
+                                </td>
+                              )}
                             </tr>
                           );
                         })}
@@ -3900,7 +4918,106 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           Comparativo detalhado entre a minuta em consulta e o texto final aprovado.
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Popover de Personalizar Colunas */}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setOpenColMenu(openColMenu === "consolidado" ? null : "consolidado")}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold shadow-xs hover:shadow transition-all group shrink-0",
+                              Object.values(consolidadoHiddenCols).filter(Boolean).length > 0
+                                ? "bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100"
+                                : "bg-white border-slate-200 text-slate-700 hover:bg-slate-100"
+                            )}
+                            title="Personalizar visibilidade das colunas"
+                          >
+                            <Columns size={13} className={Object.values(consolidadoHiddenCols).filter(Boolean).length > 0 ? "text-amber-600" : "text-slate-500"} />
+                            <span>Colunas</span>
+                            {Object.values(consolidadoHiddenCols).filter(Boolean).length > 0 && (
+                              <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black flex items-center justify-center">
+                                {Object.values(consolidadoHiddenCols).filter(Boolean).length}
+                              </span>
+                            )}
+                          </button>
+
+                          {openColMenu === "consolidado" && (
+                            <>
+                              <div 
+                                className="fixed inset-0 z-40" 
+                                onClick={() => setOpenColMenu(null)} 
+                              />
+                              <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50 animate-in fade-in zoom-in-95 duration-150">
+                                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                    <Columns size={13} className="text-indigo-600" />
+                                    Exibir/Ocultar Colunas
+                                  </span>
+                                  {Object.values(consolidadoHiddenCols).filter(Boolean).length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => showAllCols("consolidado")}
+                                      className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
+                                    >
+                                      Exibir Todas
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="space-y-1 max-h-60 overflow-y-auto pr-0.5">
+                                  {[
+                                    { key: "num", label: "Nº do Dispositivo" },
+                                    ...(selectedTomada?.tipoResolucao === "alteracao" ? [{ key: "texto_atual", label: "Texto Atual (Vigente)" }] : []),
+                                    { key: "minuta", label: "Texto Proposto (Minuta)" },
+                                    { key: "texto_final", label: "Texto Final do Dispositivo" },
+                                    { key: "justificativa", label: "Justificativa Técnica" },
+                                    { key: "contribuicoes", label: "Contribuições Recebidas" },
+                                  ].map(col => {
+                                    const isHidden = !!consolidadoHiddenCols[col.key];
+                                    return (
+                                      <button
+                                        key={col.key}
+                                        type="button"
+                                        onClick={() => toggleConsolidadoCol(col.key)}
+                                        className={cn(
+                                          "w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors text-left",
+                                          isHidden 
+                                            ? "text-slate-400 bg-slate-50 hover:bg-slate-100" 
+                                            : "text-slate-700 hover:bg-indigo-50/60 hover:text-indigo-900"
+                                        )}
+                                      >
+                                        <div className="flex items-center gap-2 min-w-0 pr-2">
+                                          <div className={cn(
+                                            "w-4 h-4 rounded-md border flex items-center justify-center transition-colors shrink-0",
+                                            !isHidden ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-300 bg-white"
+                                          )}>
+                                            {!isHidden && <Check size={11} strokeWidth={3} />}
+                                          </div>
+                                          <span className={cn("truncate", isHidden && "line-through opacity-75")}>
+                                            {col.label}
+                                          </span>
+                                        </div>
+                                        {isHidden ? (
+                                          <EyeOff size={13} className="text-slate-400 shrink-0" />
+                                        ) : (
+                                          <Eye size={13} className="text-indigo-500 shrink-0" />
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => handleResetColWidths("consolidado")}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold shadow-xs hover:shadow transition-all group shrink-0"
+                          title="Restaurar a largura padrão das colunas"
+                        >
+                          <RotateCcw size={13} className="text-slate-500 group-hover:rotate-[-45deg] transition-transform" />
+                          <span>Redefinir Colunas</span>
+                        </button>
                         <button
                           onClick={handleExportConsolidadoPDF}
                           className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold shadow-sm hover:shadow transition-all group shrink-0"
@@ -3920,17 +5037,222 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       </div>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse min-w-[800px]">
+                      <table 
+                        className="text-left border-collapse"
+                        style={{ tableLayout: "fixed", width: `${totalConsolidadoTableWidth}px`, minWidth: "100%" }}
+                      >
                         <thead>
                           <tr className="bg-white border-b border-slate-200">
-                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-16">Nº</th>
-                            {selectedTomada?.tipoResolucao === "alteracao" && (
-                              <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-1/5">Texto Atual (Vigente)</th>
+                            {!consolidadoHiddenCols.num && (
+                              <th 
+                                style={{ width: `${consolidadoColWidths.num}px`, minWidth: `${consolidadoColWidths.num}px` }}
+                                className="relative group px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none"
+                              >
+                                <div className="flex items-center justify-between pr-2">
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    <span>Nº</span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleConsolidadoCol('num');
+                                      }}
+                                      title="Ocultar coluna Nº"
+                                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                    >
+                                      <EyeOff size={11} />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div
+                                  onMouseDown={(e) => handleColResizeStart(e, 'consolidado', 'num', 40)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    setConsolidadoColWidths(prev => ({ ...prev, num: DEFAULT_CONSOLIDADO_COL_WIDTHS.num }));
+                                  }}
+                                  title="Arraste para redimensionar (duplo clique para restaurar)"
+                                  className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                                >
+                                  <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                                </div>
+                              </th>
                             )}
-                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-1/4">Texto Proposto em Consulta (Minuta)</th>
-                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-1/4">Texto Final do Dispositivo</th>
-                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-1/4">Justificativa Técnica</th>
-                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">Contribuições</th>
+                            {selectedTomada?.tipoResolucao === "alteracao" && !consolidadoHiddenCols.texto_atual && (
+                              <th 
+                                style={{ width: `${consolidadoColWidths.texto_atual}px`, minWidth: `${consolidadoColWidths.texto_atual}px` }}
+                                className="relative group px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none"
+                              >
+                                <div className="flex items-center justify-between pr-2">
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    <span className="truncate">Texto Atual (Vigente)</span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleConsolidadoCol('texto_atual');
+                                      }}
+                                      title="Ocultar coluna Texto Atual"
+                                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                    >
+                                      <EyeOff size={11} />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div
+                                  onMouseDown={(e) => handleColResizeStart(e, 'consolidado', 'texto_atual', 120)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    setConsolidadoColWidths(prev => ({ ...prev, texto_atual: DEFAULT_CONSOLIDADO_COL_WIDTHS.texto_atual }));
+                                  }}
+                                  title="Arraste para redimensionar (duplo clique para restaurar)"
+                                  className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                                >
+                                  <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                                </div>
+                              </th>
+                            )}
+                            {!consolidadoHiddenCols.minuta && (
+                              <th 
+                                style={{ width: `${consolidadoColWidths.minuta}px`, minWidth: `${consolidadoColWidths.minuta}px` }}
+                                className="relative group px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none"
+                              >
+                                <div className="flex items-center justify-between pr-2">
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    <span className="truncate">Texto Proposto em Consulta (Minuta)</span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleConsolidadoCol('minuta');
+                                      }}
+                                      title="Ocultar coluna Texto Proposto"
+                                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                    >
+                                      <EyeOff size={11} />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div
+                                  onMouseDown={(e) => handleColResizeStart(e, 'consolidado', 'minuta', 120)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    setConsolidadoColWidths(prev => ({ ...prev, minuta: DEFAULT_CONSOLIDADO_COL_WIDTHS.minuta }));
+                                  }}
+                                  title="Arraste para redimensionar (duplo clique para restaurar)"
+                                  className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                                >
+                                  <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                                </div>
+                              </th>
+                            )}
+                            {!consolidadoHiddenCols.texto_final && (
+                              <th 
+                                style={{ width: `${consolidadoColWidths.texto_final}px`, minWidth: `${consolidadoColWidths.texto_final}px` }}
+                                className="relative group px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none"
+                              >
+                                <div className="flex items-center justify-between pr-2">
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    <span className="truncate">Texto Final do Dispositivo</span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleConsolidadoCol('texto_final');
+                                      }}
+                                      title="Ocultar coluna Texto Final"
+                                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                    >
+                                      <EyeOff size={11} />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div
+                                  onMouseDown={(e) => handleColResizeStart(e, 'consolidado', 'texto_final', 120)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    setConsolidadoColWidths(prev => ({ ...prev, texto_final: DEFAULT_CONSOLIDADO_COL_WIDTHS.texto_final }));
+                                  }}
+                                  title="Arraste para redimensionar (duplo clique para restaurar)"
+                                  className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                                >
+                                  <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                                </div>
+                              </th>
+                            )}
+                            {!consolidadoHiddenCols.justificativa && (
+                              <th 
+                                style={{ width: `${consolidadoColWidths.justificativa}px`, minWidth: `${consolidadoColWidths.justificativa}px` }}
+                                className="relative group px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none"
+                              >
+                                <div className="flex items-center justify-between pr-2">
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    <span className="truncate">Justificativa Técnica</span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleConsolidadoCol('justificativa');
+                                      }}
+                                      title="Ocultar coluna Justificativa"
+                                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                    >
+                                      <EyeOff size={11} />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div
+                                  onMouseDown={(e) => handleColResizeStart(e, 'consolidado', 'justificativa', 120)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    setConsolidadoColWidths(prev => ({ ...prev, justificativa: DEFAULT_CONSOLIDADO_COL_WIDTHS.justificativa }));
+                                  }}
+                                  title="Arraste para redimensionar (duplo clique para restaurar)"
+                                  className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                                >
+                                  <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                                </div>
+                              </th>
+                            )}
+                            {!consolidadoHiddenCols.contribuicoes && (
+                              <th 
+                                style={{ width: `${consolidadoColWidths.contribuicoes}px`, minWidth: `${consolidadoColWidths.contribuicoes}px` }}
+                                className="relative group px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none"
+                              >
+                                <div className="flex items-center justify-between pr-2">
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    <span className="truncate">Contribuições</span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleConsolidadoCol('contribuicoes');
+                                      }}
+                                      title="Ocultar coluna Contribuições"
+                                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 transition-all"
+                                    >
+                                      <EyeOff size={11} />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div
+                                  onMouseDown={(e) => handleColResizeStart(e, 'consolidado', 'contribuicoes', 100)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    setConsolidadoColWidths(prev => ({ ...prev, contribuicoes: DEFAULT_CONSOLIDADO_COL_WIDTHS.contribuicoes }));
+                                  }}
+                                  title="Arraste para redimensionar (duplo clique para restaurar)"
+                                  className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize select-none flex items-center justify-center hover:bg-indigo-100/70 active:bg-indigo-300 z-10"
+                                >
+                                  <div className="w-[1.5px] h-4 bg-slate-300 group-hover:bg-indigo-500 rounded-full transition-colors" />
+                                </div>
+                              </th>
+                            )}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -3940,133 +5262,215 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             const na = cArt.filter(c => c.decision === "Não Acatada" || c.decision === "Prejudicada" || c.decision === "Retida para Estudos Adicionais").length;
                             
                             const origText = art.proposedText || art.originalText || "";
+                            const isTableArt = art.contentType === 'table' || isTableJson(art.proposedText || art.originalText);
+                            const isTableFinal = art.contentType === 'table' || isTableJson(art.finalText);
                             const fText = art.finalText || origText;
-                            const diffParts = getSmartDiff(origText, fText);
+                            const diffParts = !isTableFinal ? getSmartDiff(origText, fText) : [];
+
+                            const visibleConsolidadoColsCount = [
+                              !consolidadoHiddenCols.num,
+                              selectedTomada?.tipoResolucao === "alteracao" && !consolidadoHiddenCols.texto_atual,
+                              !consolidadoHiddenCols.minuta,
+                              !consolidadoHiddenCols.texto_final,
+                              !consolidadoHiddenCols.justificativa,
+                              !consolidadoHiddenCols.contribuicoes,
+                            ].filter(Boolean).length;
 
                             return (
                               <React.Fragment key={art.id}>
                                 <tr className="hover:bg-slate-50/50 align-top transition-colors">
-                                  <td className="px-4 py-4">
-                                    <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-black">
-                                      {idx + 1}
-                                    </div>
-                                  </td>
-                                  {selectedTomada?.tipoResolucao === "alteracao" && (
-                                    <td className="px-4 py-4 text-xs text-slate-600 whitespace-pre-wrap leading-relaxed font-normal">
-                                      {art.originalText || <span className="text-slate-400 italic">Sem texto original cadastrado</span>}
+                                  {!consolidadoHiddenCols.num && (
+                                    <td className="px-4 py-4">
+                                      <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-black">
+                                        {idx + 1}
+                                      </div>
                                     </td>
                                   )}
-                                  <td className="px-4 py-4 text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">
-                                    {selectedTomada?.tipoResolucao === "alteracao" && art.originalText
-                                      ? renderDiffInline(art.originalText, art.proposedText)
-                                      : origText}
-                                  </td>
-                                  <td className="px-4 py-4 text-xs font-medium text-slate-800 whitespace-pre-wrap leading-relaxed bg-indigo-50/30">
-                                    {art.finalText ? (
-                                      diffParts.map((part, pIdx) => {
-                                        if (part.added) {
-                                          return <span key={pIdx} className="bg-emerald-100 text-emerald-950 font-bold px-1 rounded mx-0.5 border border-emerald-300">{part.value}</span>;
-                                        }
-                                        if (part.removed) {
-                                          return <span key={pIdx} className="bg-rose-100 text-rose-950 px-1 rounded mx-0.5 line-through decoration-rose-500 border border-rose-300">{part.value}</span>;
-                                        }
-                                        return <span key={pIdx}>{part.value}</span>;
-                                      })
-                                    ) : (
-                                      <span className="text-slate-400 italic text-[11px] font-normal">Aguardando revisão final</span>
-                                    )}
-                                  </td>
-                                  <td className="px-4 py-4 text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">
-                                    {art.finalJustification ? (
-                                      art.finalJustification
-                                    ) : (
-                                      <span className="text-slate-400 italic">Sem justificativa final</span>
-                                    )}
-                                  </td>
-                                  <td className="px-4 py-4">
-                                    <div className="flex flex-col gap-1.5">
-                                      <div className="flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded text-[10px] font-black text-slate-600 uppercase tracking-wider">
-                                        <MessageSquare size={12} /> {cArt.length} Total
+                                  {selectedTomada?.tipoResolucao === "alteracao" && !consolidadoHiddenCols.texto_atual && (
+                                    <td className="px-4 py-4 text-xs text-slate-600 leading-relaxed font-normal">
+                                      {art.contentType === 'table' || isTableJson(art.originalText) ? (
+                                        <TableModalPreview 
+                                          data={art.originalText} 
+                                          variant="vigente"
+                                          badgeLabel="Vigente"
+                                          title={parseTableData(art.originalText).title || `Tabela Vigente - Disp. #${idx + 1}`}
+                                          buttonText="Ver Tabela Atual"
+                                        />
+                                      ) : (
+                                        <div className="whitespace-pre-wrap">
+                                          {art.originalText || <span className="text-slate-400 italic">Sem texto original cadastrado</span>}
+                                        </div>
+                                      )}
+                                    </td>
+                                  )}
+                                  {!consolidadoHiddenCols.minuta && (
+                                    <td className="px-4 py-4 text-xs text-slate-600 leading-relaxed">
+                                      {isTableArt ? (
+                                        <TableModalPreview 
+                                          data={art.proposedText !== undefined ? art.proposedText : origText}
+                                          originalData={selectedTomada?.tipoResolucao === "alteracao" && art.originalText ? art.originalText : undefined}
+                                          variant="proposta"
+                                          badgeLabel="Minuta"
+                                          title={parseTableData(art.proposedText || origText).title || `Tabela Minuta - Disp. #${idx + 1}`}
+                                          buttonText="Ver Tabela da Minuta"
+                                        />
+                                      ) : (
+                                        <div className="whitespace-pre-wrap">
+                                          {selectedTomada?.tipoResolucao === "alteracao" && art.originalText
+                                            ? renderDiffInline(art.originalText, art.proposedText, art.contentType)
+                                            : origText}
+                                        </div>
+                                      )}
+                                    </td>
+                                  )}
+                                  {!consolidadoHiddenCols.texto_final && (
+                                    <td className="px-4 py-4 text-xs font-medium text-slate-800 leading-relaxed bg-indigo-50/30">
+                                      {art.finalText ? (
+                                        isTableFinal ? (
+                                          <TableModalPreview 
+                                            data={art.finalText}
+                                            originalData={origText}
+                                            variant="final"
+                                            badgeLabel="Texto Final"
+                                            title={parseTableData(art.finalText).title || `Tabela Final - Disp. #${idx + 1}`}
+                                            buttonText="Ver Tabela Final"
+                                          />
+                                        ) : (
+                                          <div className="whitespace-pre-wrap">
+                                            {diffParts.map((part, pIdx) => {
+                                              if (part.added) {
+                                                return <span key={pIdx} className="bg-emerald-100 text-emerald-950 font-bold px-1 rounded mx-0.5 border border-emerald-300">{part.value}</span>;
+                                              }
+                                              if (part.removed) {
+                                                return <span key={pIdx} className="bg-rose-100 text-rose-950 px-1 rounded mx-0.5 line-through decoration-rose-500 border border-rose-300">{part.value}</span>;
+                                              }
+                                              return <span key={pIdx}>{part.value}</span>;
+                                            })}
+                                          </div>
+                                        )
+                                      ) : (
+                                        <span className="text-slate-400 italic text-[11px] font-normal">Aguardando revisão final</span>
+                                      )}
+                                    </td>
+                                  )}
+                                  {!consolidadoHiddenCols.justificativa && (
+                                    <td className="px-4 py-4 text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">
+                                      {art.finalJustification ? (
+                                        art.finalJustification
+                                      ) : (
+                                        <span className="text-slate-400 italic">Sem justificativa final</span>
+                                      )}
+                                    </td>
+                                  )}
+                                  {!consolidadoHiddenCols.contribuicoes && (
+                                    <td className="px-4 py-4">
+                                      <div className="flex flex-col gap-1.5">
+                                        <div className="flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded text-[10px] font-black text-slate-600 uppercase tracking-wider">
+                                          <MessageSquare size={12} /> {cArt.length} Total
+                                        </div>
+                                        {a > 0 && (
+                                          <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-100 text-[10px] font-black uppercase tracking-wider">
+                                            <CheckCircle2 size={12} /> {a} Acatadas
+                                          </div>
+                                        )}
+                                        {na > 0 && (
+                                          <div className="flex items-center gap-1.5 bg-rose-50 text-rose-700 px-2 py-1 rounded border border-rose-100 text-[10px] font-black uppercase tracking-wider">
+                                            <X size={12} /> {na} Rejeitadas
+                                          </div>
+                                        )}
+                                        {cArt.length > 0 && (
+                                          <button 
+                                            onClick={() => setExpandedRowArtId(expandedRowArtId === art.id ? null : art.id)}
+                                            className="mt-1 flex items-center justify-center gap-1.5 px-2 py-1 rounded border border-indigo-200 bg-indigo-50 text-[10px] font-black uppercase tracking-wider transition-colors text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800"
+                                          >
+                                            {expandedRowArtId === art.id ? <ChevronUp size={12} /> : <Eye size={12} />}
+                                            {expandedRowArtId === art.id ? "Ocultar" : "Ver Contribuições"}
+                                          </button>
+                                        )}
                                       </div>
-                                      {a > 0 && (
-                                        <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-100 text-[10px] font-black uppercase tracking-wider">
-                                          <CheckCircle2 size={12} /> {a} Acatadas
-                                        </div>
-                                      )}
-                                      {na > 0 && (
-                                        <div className="flex items-center gap-1.5 bg-rose-50 text-rose-700 px-2 py-1 rounded border border-rose-100 text-[10px] font-black uppercase tracking-wider">
-                                          <X size={12} /> {na} Rejeitadas
-                                        </div>
-                                      )}
-                                      {cArt.length > 0 && (
-                                        <button 
-                                          onClick={() => setExpandedRowArtId(expandedRowArtId === art.id ? null : art.id)}
-                                          className="mt-1 flex items-center justify-center gap-1.5 px-2 py-1 rounded border border-indigo-200 bg-indigo-50 text-[10px] font-black uppercase tracking-wider transition-colors text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800"
-                                        >
-                                          {expandedRowArtId === art.id ? <ChevronUp size={12} /> : <Eye size={12} />}
-                                          {expandedRowArtId === art.id ? "Ocultar" : "Ver Contribuições"}
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
+                                    </td>
+                                  )}
                                 </tr>
                                 {expandedRowArtId === art.id && (
                                   <tr>
-                                    <td colSpan={selectedTomada?.tipoResolucao === "alteracao" ? 6 : 5} className="p-0 border-b border-slate-200 bg-slate-50/50">
+                                    <td colSpan={visibleConsolidadoColsCount || 1} className="p-0 border-b border-slate-200 bg-slate-50/50">
                                       <div className="p-6 border-t border-slate-200 shadow-inner">
                                         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Contribuições Recebidas ({cArt.length})</h4>
                                         <div className="space-y-4">
-                                          {cArt.map(c => (
-                                            <div key={c.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                                              <div className="flex items-center justify-between px-4 py-3 bg-slate-50/50 border-b border-slate-200">
-                                                <div className="flex items-center gap-2">
-                                                  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">
-                                                    {c.authorName.charAt(0).toUpperCase()}
+                                          {cArt.map(c => {
+                                            const isContribTable = art.contentType === 'table' || isTableJson(c.proposedText) || isTableJson(origText);
+                                            return (
+                                              <div key={c.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                                <div className="flex items-center justify-between px-4 py-3 bg-slate-50/50 border-b border-slate-200">
+                                                  <div className="flex items-center gap-2">
+                                                    <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">
+                                                      {c.authorName.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <span className="text-sm font-bold text-slate-700">{c.authorName}</span>
                                                   </div>
-                                                  <span className="text-sm font-bold text-slate-700">{c.authorName}</span>
-                                                </div>
-                                                <div className="flex items-center gap-4 text-[10px] font-bold">
-                                                  <div className="flex items-center gap-2 text-slate-500 uppercase">
-                                                    COMPLEXIDADE: <span className="text-slate-700">{c.complexity || "N/A"}</span>
-                                                  </div>
-                                                  <div className="flex items-center gap-2 text-slate-500 uppercase">
-                                                    PARECER TÉCNICO: <span className="text-slate-700">{c.decision || "N/A"}</span>
-                                                  </div>
-                                                  {c.decision === "Acatada" || c.decision === "Acatada Parcialmente" ? (
-                                                    <Check className="text-emerald-500" size={14} />
-                                                  ) : (c.decision ? <X className="text-rose-500" size={14} /> : null)}
-                                                </div>
-                                              </div>
-                                              <div className="grid grid-cols-1 lg:grid-cols-2">
-                                                <div className="p-4 border-b lg:border-b-0 lg:border-r border-slate-200 bg-white">
-                                                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Texto da Contribuição Sugerida (Com destaques)</span>
-                                                  <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-                                                    {(() => {
-                                                      const cOrigText = art.proposedText || art.originalText || "";
-                                                      const cDiffParts = getSmartDiff(cOrigText, c.proposedText || "");
-                                                      return cDiffParts.map((part, i) => (
-                                                        part.added ? <span key={i} className="bg-emerald-100 text-emerald-950 font-bold px-1 rounded mx-0.5 border border-emerald-300">{part.value}</span> :
-                                                        part.removed ? <span key={i} className="bg-rose-100 text-rose-950 px-1 rounded mx-0.5 line-through decoration-rose-500 border border-rose-300">{part.value}</span> :
-                                                        <span key={i}>{part.value}</span>
-                                                      ));
-                                                    })()}
+                                                  <div className="flex items-center gap-4 text-[10px] font-bold">
+                                                    <div className="flex items-center gap-2 text-slate-500 uppercase">
+                                                      COMPLEXIDADE: <span className="text-slate-700">{c.complexity || "N/A"}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-slate-500 uppercase">
+                                                      PARECER TÉCNICO: <span className="text-slate-700">{c.decision || "N/A"}</span>
+                                                    </div>
+                                                    {c.decision === "Acatada" || c.decision === "Acatada Parcialmente" ? (
+                                                      <Check className="text-emerald-500" size={14} />
+                                                    ) : (c.decision ? <X className="text-rose-500" size={14} /> : null)}
                                                   </div>
                                                 </div>
-                                                <div className="p-4 bg-slate-50/50 flex flex-col gap-4">
-                                                  <div>
-                                                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Justificativa do Participante</span>
-                                                    <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">{c.justification}</p>
+                                                <div className="grid grid-cols-1 lg:grid-cols-2">
+                                                  <div className="p-4 border-b lg:border-b-0 lg:border-r border-slate-200 bg-white">
+                                                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                                                      {isContribTable ? "Tabela da Contribuição Sugerida (Com destaques)" : "Texto da Contribuição Sugerida (Com destaques)"}
+                                                    </span>
+                                                    {isContribTable ? (
+                                                      c.isSuppressing || !c.proposedText?.trim() ? (
+                                                        <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 font-bold flex items-center gap-1.5">
+                                                          <X size={14} className="text-rose-600 shrink-0" />
+                                                          <span>Sugestão de Supressão Integral da Tabela</span>
+                                                        </div>
+                                                      ) : (
+                                                        <TableModalPreview 
+                                                          data={c.proposedText || origText}
+                                                          originalData={origText && origText !== c.proposedText ? origText : undefined}
+                                                          variant="contribuicao"
+                                                          badgeLabel="Sugestão"
+                                                          title={parseTableData(c.proposedText || origText).title || `Sugestão de Tabela - Disp. #${idx + 1}`}
+                                                          buttonText="Abrir Tabela & Destaques em Pop-up"
+                                                        />
+                                                      )
+                                                    ) : (
+                                                      <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                                        {(() => {
+                                                          const cOrigText = art.proposedText || art.originalText || "";
+                                                          const cDiffParts = getSmartDiff(cOrigText, c.proposedText || "");
+                                                          return cDiffParts.map((part, i) => (
+                                                            part.added ? <span key={i} className="bg-emerald-100 text-emerald-950 font-bold px-1 rounded mx-0.5 border border-emerald-300">{part.value}</span> :
+                                                            part.removed ? <span key={i} className="bg-rose-100 text-rose-950 px-1 rounded mx-0.5 line-through decoration-rose-500 border border-rose-300">{part.value}</span> :
+                                                            <span key={i}>{part.value}</span>
+                                                          ));
+                                                        })()}
+                                                      </div>
+                                                    )}
                                                   </div>
-                                                  <div className="pt-4 border-t border-slate-200">
-                                                    <span className="block text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1.5">Justificativa Técnica (Resposta)</span>
-                                                    <div className="bg-white p-3 rounded-xl border border-slate-200 text-sm text-slate-700 min-h-[60px] whitespace-pre-wrap leading-relaxed">
-                                                      {c.technicalJustification || <span className="text-slate-400 italic">Nenhuma justificativa técnica inserida.</span>}
+                                                  <div className="p-4 bg-slate-50/50 flex flex-col gap-4">
+                                                    <div>
+                                                      <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Justificativa do Participante</span>
+                                                      <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">{c.justification}</p>
+                                                    </div>
+                                                    <div className="pt-4 border-t border-slate-200">
+                                                      <span className="block text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1.5">Justificativa Técnica (Resposta)</span>
+                                                      <div className="bg-white p-3 rounded-xl border border-slate-200 text-sm text-slate-700 min-h-[60px] whitespace-pre-wrap leading-relaxed">
+                                                        {c.technicalJustification || <span className="text-slate-400 italic">Nenhuma justificativa técnica inserida.</span>}
+                                                      </div>
                                                     </div>
                                                   </div>
                                                 </div>
                                               </div>
-                                            </div>
-                                          ))}
+                                            );
+                                          })}
                                         </div>
                                       </div>
                                     </td>
@@ -4346,6 +5750,109 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 return `${unique.slice(0, -1).join(", ")} e ${unique[unique.length - 1]}`;
               };
 
+              // 5.1 Helper: Format Portuguese list of tables, e.g., "I e II" or "1, 2 e 3"
+              const formatTableListInPortuguese = (identifiers: string[]): string => {
+                const unique = Array.from(new Set(identifiers.filter(Boolean)));
+                if (unique.length === 0) return "Tabela";
+                if (unique.length === 1) return unique[0];
+                if (unique.length === 2) return `${unique[0]} e ${unique[1]}`;
+                return `${unique.slice(0, -1).join(", ")} e ${unique[unique.length - 1]}`;
+              };
+
+              // 5.2 Helper: Extract Table Metadata (identifier, full title, parsed content)
+              interface TableArticleInfo {
+                article: Article;
+                identifier: string;
+                title: string;
+                parsedTable: RegulatoryTable;
+              }
+
+              const toRomanNumeral = (num: number): string => {
+                const romanMap: [number, string][] = [
+                  [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]
+                ];
+                let res = "";
+                let n = num;
+                for (const [val, roman] of romanMap) {
+                  while (n >= val) {
+                    res += roman;
+                    n -= val;
+                  }
+                }
+                return res || "I";
+              };
+
+              const getTableArticleInfo = (art: Article, index: number): TableArticleInfo => {
+                const finalParsed = art.finalText ? parseTableData(art.finalText) : null;
+                const proposedParsed = art.proposedText ? parseTableData(art.proposedText) : null;
+                const origParsed = art.originalText ? parseTableData(art.originalText) : null;
+
+                const isGeneric = (t?: string) => !t || t.trim() === "" || t.trim() === "Tabela de Dispositivo" || t.trim() === "Tabela Regulada";
+
+                // Obter o valor do campo "Título / Identificação da Tabela" com prioridade máxima para a redação final pós-análise
+                let rawTitle = "";
+                if (finalParsed && !isGeneric(finalParsed.title)) {
+                  rawTitle = finalParsed.title!.trim();
+                } else if (proposedParsed && !isGeneric(proposedParsed.title)) {
+                  rawTitle = proposedParsed.title!.trim();
+                } else if (origParsed && !isGeneric(origParsed.title)) {
+                  rawTitle = origParsed.title!.trim();
+                } else if (finalParsed?.title?.trim()) {
+                  rawTitle = finalParsed.title.trim();
+                } else if (proposedParsed?.title?.trim()) {
+                  rawTitle = proposedParsed.title.trim();
+                } else if (origParsed?.title?.trim()) {
+                  rawTitle = origParsed.title.trim();
+                }
+
+                // Extrair identificador (ex: "I", "II", "1") para uso na redação legislativa do Artigo do Anexo
+                let identifier = "";
+                if (rawTitle) {
+                  const match = rawTitle.match(/^Tabela\s+([A-Za-z0-9\.\-_ºª]+)/i);
+                  if (match && match[1]) {
+                    identifier = match[1].replace(/[-–—:]$/, "").trim();
+                  }
+                }
+
+                if (!identifier) {
+                  identifier = toRomanNumeral(index + 1);
+                }
+
+                // Título oficial completo a ser exibido acima da tabela no anexo
+                let displayTitle = "";
+                if (rawTitle && !isGeneric(rawTitle)) {
+                  displayTitle = rawTitle.toUpperCase();
+                } else {
+                  displayTitle = `TABELA ${identifier}`;
+                }
+
+                const baseParsed = finalParsed || proposedParsed || origParsed || parseTableData("");
+                const activeParsedTable: RegulatoryTable = {
+                  title: displayTitle,
+                  headers: baseParsed.headers && baseParsed.headers.length > 0 ? [...baseParsed.headers] : ["Coluna 1", "Coluna 2"],
+                  rows: baseParsed.rows && baseParsed.rows.length > 0 ? baseParsed.rows.map(r => [...r]) : [["", ""]]
+                };
+
+                return {
+                  article: art,
+                  identifier,
+                  title: displayTitle,
+                  parsedTable: activeParsedTable
+                };
+              };
+
+              // 5.3 Helper: Convert Table to Markdown/Plain text for SEI / Word copy
+              const formatTableForPlainText = (table: RegulatoryTable): string => {
+                if (!table || !table.headers || table.headers.length === 0) return "";
+                let out = "";
+                out += "| " + table.headers.join(" | ") + " |\n";
+                out += "| " + table.headers.map(() => "---").join(" | ") + " |\n";
+                for (const row of table.rows) {
+                  out += "| " + table.headers.map((_, i) => (row[i] !== undefined && row[i] !== null ? String(row[i]) : "")).join(" | ") + " |\n";
+                }
+                return out;
+              };
+
               // 6. Helper: Format quoted device string with standard Adasa quotation
               const formatQuotedDevice = (rawText: string): string => {
                 const trimmed = (rawText || "").trim();
@@ -4358,8 +5865,17 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               // 7. STRICT INCLUSION FILTER: Only include articles with saved Final Text (finalText)
               const articlesWithFinalText = currentArticles.filter(art => Boolean(art.finalText && art.finalText.trim().length > 0));
 
-              // 8. Granular Decomposition & Analysis of each Article
-              const analyzedArticles: AnalyzedArticle[] = articlesWithFinalText.map((art, idx) => {
+              // 7.1 Separate text articles from table articles
+              const textArticlesWithFinalText = articlesWithFinalText.filter(art => 
+                art.contentType !== 'table' && !isTableJson(art.finalText || art.proposedText || art.originalText)
+              );
+              const tableArticlesWithFinalText = articlesWithFinalText.filter(art => 
+                art.contentType === 'table' || isTableJson(art.finalText || art.proposedText || art.originalText)
+              );
+              const tableInfos = tableArticlesWithFinalText.map((art, idx) => getTableArticleInfo(art, idx));
+
+              // 8. Granular Decomposition & Analysis of each Text Article
+              const analyzedArticles: AnalyzedArticle[] = textArticlesWithFinalText.map((art, idx) => {
                 const baseLabelSource = (art.originalText && art.originalText.trim()) || (art.finalText && art.finalText.trim()) || "";
                 const artLabel = extractArticleLabel(baseLabelSource, art.order || idx + 1);
                 
@@ -4594,10 +6110,53 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 return `Fica revogado ${combined}, da ${base}.`;
               };
 
+              // 10.8. Render normative block with centered bold chapters and bold Art. prefixes
+              const renderNormativeBlock = (text: string, isIndented = false) => {
+                if (!text || !text.trim()) return null;
+                const lines = text.split("\n");
+                
+                return (
+                  <div className="space-y-2 text-justify">
+                    {lines.map((line, idx) => {
+                      const trimmed = line.trim();
+                      if (!trimmed) {
+                        return <div key={idx} className="h-2" />;
+                      }
+
+                      if (isChapterOrSectionHeader(trimmed) || isChapterSubtitle(trimmed)) {
+                        return (
+                          <div 
+                            key={idx} 
+                            className="text-center font-bold text-slate-950 text-sm sm:text-base my-4 tracking-wide uppercase font-sans print:my-2"
+                          >
+                            {trimmed}
+                          </div>
+                        );
+                      }
+
+                      const parsed = parseNormativePrefix(trimmed);
+                      if (parsed) {
+                        return (
+                          <p key={idx} className={cn("leading-relaxed", isIndented ? "pl-2" : "indent-8")}>
+                            <strong className="font-bold text-slate-950">{parsed.prefix}</strong>
+                            <span>{parsed.rest}</span>
+                          </p>
+                        );
+                      }
+
+                      return (
+                        <p key={idx} className={cn("leading-relaxed", isIndented ? "pl-2" : "indent-8")}>
+                          {trimmed}
+                        </p>
+                      );
+                    })}
+                  </div>
+                );
+              };
+
               // 11. Build plain text for copy/export
               const generatePlainTextMinuta = () => {
-                let text = `Governo do Distrito Federal\nAgência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal\nSecretaria Geral\n\n`;
-                text += `${(minutaTipoAto || "RESOLUÇÃO").toUpperCase()} Nº ${minutaNumero}, DE ${minutaData}.\n\n`;
+                let text = `${(minutaTipoAto || "RESOLUÇÃO").toUpperCase()} Nº ${minutaNumero}, DE ${minutaData}.\n\n`;
                 text += `${effectiveEmenta}\n\n`;
                 text += `O DIRETOR-PRESIDENTE DA AGÊNCIA REGULADORA DE ÁGUAS, ENERGIA E SANEAMENTO BÁSICO DO DISTRITO FEDERAL – Adasa, Ad Referendum da Diretoria Colegiada, no uso das atribuições que lhe confere o art. 7º, inciso III, do Regimento Interno desta Agência, aprovado pela Resolução nº 16, de 17 de setembro de 2014, tendo em vista o que dispõe o art. 23, inciso II e VII, da Lei n.º 4.285, 26 de dezembro de 2008, o constante no processo SEI nº ${minutaProcessoSEI}, as contribuições da ${meiodePart} nº ${consultNumber}, e\n\n`;
                 
@@ -4612,10 +6171,10 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 text += `RESOLVE:\n\n`;
 
                 if (minutaModel === "nova") {
-                  if (articlesWithFinalText.length === 0) {
+                  if (textArticlesWithFinalText.length === 0 && tableArticlesWithFinalText.length === 0) {
                     text += `[Nenhum dispositivo com texto final cadastrado. Salve a revisão e texto final dos dispositivos na aba de Análise Técnica.]\n\n`;
                   } else {
-                    articlesWithFinalText.forEach((art) => {
+                    textArticlesWithFinalText.forEach((art) => {
                       const body = (art.finalText && art.finalText.trim()) || "";
                       text += `${body.trim()}\n\n`;
                     });
@@ -4663,6 +6222,17 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       }
                     }
 
+                    // 3.5. Tabelas Alteradas do Anexo da Norma Existente
+                    if (tableArticlesWithFinalText.length > 0) {
+                      if (tableArticlesWithFinalText.length === 1) {
+                        text += `Art. ${artigoAtoIndex}º. A Tabela ${tableInfos[0].identifier}, do Anexo da ${minutaResolucoesAlteradas}, passa a vigorar com a redação dada pelo Anexo desta Resolução.\n\n`;
+                      } else {
+                        const tableListStr = formatTableListInPortuguese(tableInfos.map(t => t.identifier));
+                        text += `Art. ${artigoAtoIndex}º. As Tabelas ${tableListStr}, do Anexo da ${minutaResolucoesAlteradas}, passam a vigorar com a redação dada pelo Anexo desta Resolução.\n\n`;
+                      }
+                      artigoAtoIndex++;
+                    }
+
                     // 4. Disposição de Vigência
                     text += `Art. ${artigoAtoIndex}º. ${minutaVigencia.trim()}\n\n`;
                   }
@@ -4670,6 +6240,18 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
                 text += `\n${minutaAssinante}\n`;
                 text += `Agência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal - Adasa\n`;
+
+                // 12. Seção de Anexo(s) com Tabelas Aprovadas
+                if (tableArticlesWithFinalText.length > 0) {
+                  text += `\n\n========================================================\n`;
+                  text += `ANEXO\n`;
+                  text += `========================================================\n\n`;
+                  tableInfos.forEach((tbl) => {
+                    text += `${tbl.title}\n\n`;
+                    text += `${formatTableForPlainText(tbl.parsedTable)}\n\n`;
+                  });
+                }
+
                 return text;
               };
 
@@ -4724,29 +6306,114 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 printWindow.document.close();
               };
 
-              const handleExportMinutaDoc = () => {
-                const text = generatePlainTextMinuta();
-                const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `Minuta_${(minutaTipoAto || "Resolucao").replace(/[^a-zA-Z0-9_-]/g, "_")}_${minutaNumero}_${(selectedTomada.numero || "participacao").replace(/[^a-zA-Z0-9_-]/g, "_")}.txt`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                showToast("Download Concluído", "Minuta exportada em formato texto (.txt) com sucesso.", "success");
+              const handleExportMinutaWord = async () => {
+                try {
+                  setIsExportingWord(true);
+                  const revogadosBlockText = articlesWithRevogados.length > 0 
+                    ? buildRevogadosText(articlesWithRevogados, minutaResolucoesAlteradas)
+                    : "";
+
+                  const acrescidosData = articlesWithAcrescidos.map(ana => ({
+                    artLabel: ana.artLabel,
+                    isEntireArticleNew: ana.isEntireArticleNew,
+                    blockText: buildAcrescidoArticleText(ana)
+                  }));
+
+                  const alteradosData = articlesWithAlterados.map(ana => ({
+                    artLabel: ana.artLabel,
+                    blockText: buildAlteradoArticleText(ana)
+                  }));
+
+                  const blob = await generateMinutaDocxBlob({
+                    tipoAto: minutaTipoAto || "Resolução",
+                    numero: minutaNumero || "001",
+                    data: minutaData || "2026",
+                    ementa: effectiveEmenta,
+                    processoSEI: minutaProcessoSEI,
+                    meioParticipacao: meiodePart,
+                    consultNumber: consultNumber,
+                    considerandos: minutaConsiderandos,
+                    model: minutaModel,
+                    resolucoesAlteradas: minutaResolucoesAlteradas,
+                    vigencia: minutaVigencia,
+                    assinante: minutaAssinante,
+                    textArticlesWithFinalText: textArticlesWithFinalText,
+                    articlesWithAcrescidos: acrescidosData,
+                    articlesWithAlterados: alteradosData,
+                    formattedAlteradosLabels: formattedAlteradosLabels,
+                    revogadosBlockText: revogadosBlockText,
+                    tableArticlesCount: tableArticlesWithFinalText.length,
+                    tableInfos: tableInfos,
+                    customTemplateBuffer: customTemplateFile?.buffer,
+                  });
+
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `Minuta_${(minutaTipoAto || "Resolucao").replace(/[^a-zA-Z0-9_-]/g, "_")}_${minutaNumero}_${(selectedTomada.numero || "participacao").replace(/[^a-zA-Z0-9_-]/g, "_")}.docx`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  showToast("Download Concluído", `Minuta exportada em formato Word (.docx)${customTemplateFile ? " utilizando seu modelo customizado" : ""}.`, "success");
+                } catch (err) {
+                  console.error("Erro ao gerar arquivo Word (.docx):", err);
+                  showToast("Erro na Exportação", "Não foi possível gerar o arquivo Word da minuta.", "error");
+                } finally {
+                  setIsExportingWord(false);
+                }
               };
 
-              // Quick helper: Populate empty final texts with proposed text if available
-              const handleFillFinalTextFromProposed = () => {
-                setArticles(prev => prev.map(art => {
-                  if (String(art.tomadaId) === String(selectedTomada.id) && (!art.finalText || !art.finalText.trim())) {
-                    return { ...art, finalText: art.proposedText || art.originalText || "" };
+              const handleCustomTemplateUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+
+                if (!file.name.endsWith(".docx") && !file.name.endsWith(".dotx")) {
+                  showToast("Formato Inválido", "Por favor selecione um arquivo do Word (.docx ou .dotx).", "error");
+                  return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = () => {
+                  try {
+                    const arrayBuffer = reader.result as ArrayBuffer;
+                    setCustomTemplateFile({
+                      name: file.name,
+                      buffer: arrayBuffer,
+                    });
+
+                    // Save to local storage for persistence across reloads (if smaller than 3MB)
+                    if (arrayBuffer.byteLength < 3 * 1024 * 1024) {
+                      let binary = "";
+                      const bytes = new Uint8Array(arrayBuffer);
+                      const len = bytes.byteLength;
+                      for (let i = 0; i < len; i++) {
+                        binary += String.fromCharCode(bytes[i]);
+                      }
+                      const base64 = window.btoa(binary);
+                      localStorage.setItem("minuta_custom_template_name", file.name);
+                      localStorage.setItem("minuta_custom_template_base64", base64);
+                    }
+
+                    showToast("Modelo Carregado", `O modelo "${file.name}" foi importado com sucesso e será usado na exportação Word.`, "success");
+                  } catch (err) {
+                    console.error("Erro ao ler modelo Word:", err);
+                    showToast("Erro", "Não foi possível processar o arquivo modelo do Word.", "error");
                   }
-                  return art;
-                }));
-                showToast("Textos Finais Atualizados", "Os textos propostos foram copiados para os textos finais dos artigos.", "success");
+                };
+                reader.readAsArrayBuffer(file);
+                e.target.value = "";
+              };
+
+              const handleRemoveCustomTemplate = () => {
+                setCustomTemplateFile(null);
+                try {
+                  localStorage.removeItem("minuta_custom_template_name");
+                  localStorage.removeItem("minuta_custom_template_base64");
+                } catch (e) {
+                  // ignore
+                }
+                showToast("Modelo Restaurado", "O gerador voltou a utilizar o layout normativo padrão da ADASA.", "info");
               };
 
               // Toggle subunit status
@@ -4784,16 +6451,6 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
                       {/* Action Buttons */}
                       <div className="flex flex-wrap items-center gap-2 shrink-0">
-                        {currentArticles.some(art => (!art.finalText || !art.finalText.trim()) && art.proposedText) && (
-                          <button
-                            onClick={handleFillFinalTextFromProposed}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold transition-all border border-amber-200 shadow-sm active:scale-95"
-                            title="Preencher textos finais vazios com a proposta inicial"
-                          >
-                            <Sparkles size={15} className="text-amber-600" />
-                            <span>Copiar Propostas para Texto Final</span>
-                          </button>
-                        )}
                         <button
                           onClick={handleCopyMinuta}
                           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all shadow-sm active:scale-95"
@@ -4803,12 +6460,13 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           <span>{minutaCopied ? "Copiado!" : "Copiar Texto"}</span>
                         </button>
                         <button
-                          onClick={handleExportMinutaDoc}
-                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all shadow-sm active:scale-95"
-                          title="Baixar arquivo de texto (.txt)"
+                          onClick={handleExportMinutaWord}
+                          disabled={isExportingWord}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-all border border-blue-200 shadow-sm active:scale-95 disabled:opacity-50"
+                          title="Baixar minuta em formato Microsoft Word (.docx)"
                         >
-                          <Download size={16} />
-                          <span>Baixar (.txt)</span>
+                          <FileText size={16} className="text-blue-600" />
+                          <span>{isExportingWord ? "Gerando Word..." : "Baixar Word (.docx)"}</span>
                         </button>
                         <button
                           onClick={handlePrintMinuta}
@@ -4824,7 +6482,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                     {/* Stats & Structure Summary in Alteration Mode */}
                     {minutaModel === "alteracao" && (
                       <div className="space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80">
                           <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
                             <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-sm">
                               {articlesWithAcrescidos.length}
@@ -4860,12 +6518,24 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           </div>
 
                           <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                            <div className="w-9 h-9 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-black text-sm">
+                              {tableArticlesWithFinalText.length}
+                            </div>
+                            <div>
+                              <div className="text-[11px] font-bold text-slate-800">Tabelas no Anexo</div>
+                              <div className="text-[10px] text-slate-500">
+                                {tableArticlesWithFinalText.length > 0 ? `${formatTableListInPortuguese(tableInfos.map(t => t.identifier))}` : "Nenhuma tabela"}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
                             <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-sm">
                               {articlesWithFinalText.length}
                             </div>
                             <div>
-                              <div className="text-[11px] font-bold text-slate-800">Artigos com Texto Final</div>
-                              <div className="text-[10px] text-slate-500">De {currentArticles.length} artigos no total</div>
+                              <div className="text-[11px] font-bold text-slate-800">Dispositivos com Texto Final</div>
+                              <div className="text-[10px] text-slate-500">De {currentArticles.length} no total</div>
                             </div>
                           </div>
 
@@ -5155,6 +6825,114 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           />
                         </div>
                       )}
+
+                      {/* Seletor de Modelo de Documento Word (.docx / .dotx) */}
+                      <div className="md:col-span-2 lg:col-span-4 pt-2 border-t border-slate-100">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-blue-50/70 via-slate-50 to-indigo-50/50 p-3.5 rounded-2xl border border-blue-100">
+                          <div className="flex items-start sm:items-center gap-3">
+                            <div className={cn(
+                              "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border shadow-xs transition-colors",
+                              customTemplateFile ? "bg-emerald-100 text-emerald-700 border-emerald-300" : "bg-blue-100 text-blue-700 border-blue-200"
+                            )}>
+                              {customTemplateFile ? <FileCheck size={20} /> : <FileText size={20} />}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-800">
+                                  {customTemplateFile ? "Modelo Word Customizado Carregado" : "Modelo Word: Layout Normativo ADASA Padrão"}
+                                </span>
+                                {customTemplateFile ? (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    Ativo
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700">
+                                    Nativo
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-0.5">
+                                {customTemplateFile
+                                  ? `Arquivo: "${customTemplateFile.name}". A minuta será gerada aplicando os estilos e numerações deste arquivo.`
+                                  : "Gera o arquivo .docx com formatação oficial da ADASA (títulos, ementa, artigos e tabelas no anexo)."}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                            <button
+                              onClick={() => setShowTemplateHelp(!showTemplateHelp)}
+                              className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 border border-slate-200 flex items-center gap-1 transition-all"
+                              title="Como funciona o modelo do Word?"
+                            >
+                              <Info size={14} className="text-blue-600" />
+                              <span>Como Usar</span>
+                            </button>
+
+                            {customTemplateFile && (
+                              <button
+                                onClick={handleRemoveCustomTemplate}
+                                className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-rose-700 hover:bg-rose-100/80 bg-rose-50 border border-rose-200 flex items-center gap-1 transition-all"
+                                title="Voltar ao modelo padrão da ADASA"
+                              >
+                                <RotateCcw size={13} />
+                                <span>Restaurar Padrão</span>
+                              </button>
+                            )}
+
+                            <label className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-blue-700 hover:bg-blue-200/80 bg-blue-100/80 border border-blue-300 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs">
+                              <Upload size={14} />
+                              <span>{customTemplateFile ? "Substituir Modelo (.docx)" : "Importar Meu Modelo (.docx)"}</span>
+                              <input
+                                type="file"
+                                accept=".docx,.dotx"
+                                onChange={handleCustomTemplateUpload}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Help / Guide Box for Custom Word Template */}
+                        {showTemplateHelp && (
+                          <div className="mt-3 p-4 bg-white rounded-2xl border border-blue-200 shadow-sm text-xs text-slate-700 space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                              <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                                <Info size={16} className="text-indigo-600" />
+                                <span>Como utilizar o seu próprio modelo do Word (.docx / .dotx):</span>
+                              </div>
+                              <button 
+                                onClick={() => setShowTemplateHelp(false)}
+                                className="text-slate-400 hover:text-slate-600 p-1"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                            <p className="text-slate-600">
+                              O sistema preenche automaticamente o seu modelo do Word preservando seus <strong>cabeçalhos com logomarca, margens, fontes e estilos de títulos/numeração automática</strong>.
+                            </p>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
+                              <div className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">
+                                Marcadores que você pode colocar no seu modelo (entre chaves):
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-[11px] font-mono text-indigo-900">
+                                <div><code className="bg-indigo-50 px-1 py-0.5 rounded border border-indigo-200">{"{numero}"}</code> - Nº da Resolução</div>
+                                <div><code className="bg-indigo-50 px-1 py-0.5 rounded border border-indigo-200">{"{data}"}</code> - Data da Norma</div>
+                                <div><code className="bg-indigo-50 px-1 py-0.5 rounded border border-indigo-200">{"{ementa}"}</code> - Ementa da Norma</div>
+                                <div><code className="bg-indigo-50 px-1 py-0.5 rounded border border-indigo-200">{"{corpo}"}</code> ou <code className="bg-indigo-50 px-1 py-0.5 rounded border border-indigo-200">{"{artigos}"}</code> - Todos os Artigos</div>
+                                <div><code className="bg-indigo-50 px-1 py-0.5 rounded border border-indigo-200">{"{preambulo}"}</code> - Preâmbulo Oficial</div>
+                                <div><code className="bg-indigo-50 px-1 py-0.5 rounded border border-indigo-200">{"{considerandos}"}</code> - Considerandos</div>
+                                <div><code className="bg-indigo-50 px-1 py-0.5 rounded border border-indigo-200">{"{processo_sei}"}</code> - Processo SEI</div>
+                                <div><code className="bg-indigo-50 px-1 py-0.5 rounded border border-indigo-200">{"{assinante}"}</code> - Nome da Autoridade</div>
+                                <div><code className="bg-indigo-50 px-1 py-0.5 rounded border border-indigo-200">{"{anexo}"}</code> - Tabelas do Anexo</div>
+                              </div>
+                            </div>
+                            <p className="text-[11px] text-slate-500 italic">
+                              * Dica: Ao carregar seu modelo, ele é salvo automaticamente na sua sessão para os próximos downloads.
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -5165,13 +6943,6 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       className="bg-white text-slate-900 shadow-2xl rounded-lg p-8 sm:p-14 max-w-4xl w-full font-serif leading-relaxed border border-slate-200 print:shadow-none print:border-none print:p-0 print:m-0 print:max-w-full"
                       style={{ minHeight: '1100px' }}
                     >
-                      {/* Header GDF / Adasa */}
-                      <div className="text-center mb-8 space-y-1">
-                        <div className="font-sans text-xs font-bold tracking-wider uppercase text-slate-700">Governo do Distrito Federal</div>
-                        <div className="font-sans text-sm font-black text-slate-900">Agência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal</div>
-                        <div className="font-sans text-xs font-semibold text-slate-600">Secretaria Geral</div>
-                      </div>
-
                       {/* Norma Title */}
                       <div className="text-center mb-8">
                         <h2 className="font-sans text-base sm:text-lg font-black tracking-wide uppercase text-slate-900">
@@ -5212,19 +6983,19 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         {minutaModel === "nova" ? (
                           <>
                             {(() => {
-                              if (articlesWithFinalText.length === 0) {
+                              if (textArticlesWithFinalText.length === 0 && tableArticlesWithFinalText.length === 0) {
                                 return (
                                   <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl text-amber-800 text-xs italic text-center font-sans">
                                     Nenhum dispositivo possui texto final cadastrado ainda. Salve o parecer/texto final nos artigos na aba "Análise das Contribuições" para que constem nesta minuta.
                                   </div>
                                 );
                               }
-                              return articlesWithFinalText.map((art) => {
+                              return textArticlesWithFinalText.map((art) => {
                                 const body = (art.finalText && art.finalText.trim()) || "";
                                 return (
                                   <div key={art.id} className="relative group">
-                                    <div className="p-2 rounded transition-colors whitespace-pre-wrap leading-relaxed">
-                                      {body.trim()}
+                                    <div className="p-2 rounded transition-colors leading-relaxed">
+                                      {renderNormativeBlock(body.trim())}
                                     </div>
                                   </div>
                                 );
@@ -5246,6 +7017,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                               const art1Index = articlesWithAcrescidos.length > 0 ? articleCounter++ : null;
                               const art2Index = articlesWithAlterados.length > 0 ? articleCounter++ : null;
                               const art3Index = articlesWithRevogados.length > 0 ? articleCounter++ : null;
+                              const artTableIndex = tableArticlesWithFinalText.length > 0 ? articleCounter++ : null;
                               const artVigenciaIndex = articleCounter;
 
                               return (
@@ -5269,8 +7041,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                                   <PlusCircle size={11} /> {ana.isEntireArticleNew ? "Artigo Integralmente Novo" : "Dispositivo(s) Acrescido(s)"}
                                                 </span>
                                               </div>
-                                              <div className="whitespace-pre-wrap leading-relaxed not-italic text-slate-900">
-                                                {blockText}
+                                              <div className="leading-relaxed not-italic text-slate-900">
+                                                {renderNormativeBlock(blockText, true)}
                                               </div>
                                             </div>
                                           );
@@ -5300,8 +7072,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                                   <Edit3 size={11} /> Nova Redação ({ana.artLabel})
                                                 </span>
                                               </div>
-                                              <div className="whitespace-pre-wrap leading-relaxed not-italic text-slate-900">
-                                                {blockText}
+                                              <div className="leading-relaxed not-italic text-slate-900">
+                                                {renderNormativeBlock(blockText, true)}
                                               </div>
                                             </div>
                                           );
@@ -5315,6 +7087,17 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                     <div className="pt-2">
                                       <p className="indent-8">
                                         <strong>Art. {art3Index}º.</strong> {buildRevogadosText(articlesWithRevogados, minutaResolucoesAlteradas)}
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {/* SEÇÃO 3.5: ARTIGO DE TABELAS DO ANEXO */}
+                                  {tableArticlesWithFinalText.length > 0 && (
+                                    <div className="pt-2">
+                                      <p className="indent-8">
+                                        <strong>Art. {artTableIndex}º.</strong> {tableArticlesWithFinalText.length === 1
+                                          ? `A Tabela ${tableInfos[0].identifier}, do Anexo da ${minutaResolucoesAlteradas}, passa a vigorar com a redação dada pelo Anexo desta Resolução.`
+                                          : `As Tabelas ${formatTableListInPortuguese(tableInfos.map(t => t.identifier))}, do Anexo da ${minutaResolucoesAlteradas}, passam a vigorar com a redação dada pelo Anexo desta Resolução.`}
                                       </p>
                                     </div>
                                   )}
@@ -5337,6 +7120,36 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         <div className="font-bold text-sm text-slate-900 uppercase">{minutaAssinante}</div>
                         <div className="text-xs text-slate-600">Agência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal - Adasa</div>
                       </div>
+
+                      {/* SEÇÃO DE ANEXO (TABELAS DA RESOLUÇÃO) */}
+                      {tableArticlesWithFinalText.length > 0 && (
+                        <div className="mt-20 pt-10 border-t-2 border-slate-300 space-y-12 font-serif text-black print:break-before-page">
+                          <div className="text-center space-y-1">
+                            <h3 className="text-base sm:text-lg font-bold uppercase tracking-wider text-black">
+                              {tableInfos.length > 1 ? "ANEXO I" : "ANEXO"}
+                            </h3>
+                          </div>
+
+                          <div className="space-y-12">
+                            {tableInfos.map((tbl, tIdx) => (
+                              <div key={tbl.article.id || tIdx} className="space-y-4">
+                                <div className="text-center">
+                                  <h4 className="text-sm sm:text-base font-bold text-black uppercase tracking-normal">
+                                    {tbl.title}
+                                  </h4>
+                                </div>
+                                <div className="w-full overflow-x-auto">
+                                  <RegulatoryTableView 
+                                    data={tbl.parsedTable} 
+                                    variant="official"
+                                    showCopyButton={false}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -5835,41 +7648,132 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           </div>
                         </div>
 
-                        <div className={cn("grid gap-4", editFormData.tipoResolucao === "alteracao" ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1")}>
-                          {editFormData.tipoResolucao === "alteracao" && (
+                        <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-200/60">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                              Formato:
+                            </span>
+                            <div className="inline-flex rounded-lg p-0.5 bg-slate-200/70 border border-slate-300/60">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, contentType: 'text' } : a));
+                                }}
+                                className={cn(
+                                  "px-2 py-0.5 text-[10px] font-bold rounded-md transition-all flex items-center gap-1",
+                                  art.contentType !== 'table'
+                                    ? "bg-white text-indigo-700 shadow-xs"
+                                    : "text-slate-600 hover:text-slate-900"
+                                )}
+                              >
+                                <FileText size={11} /> Texto
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditArticles(prev => prev.map((a, i) => {
+                                    if (i !== idx) return a;
+                                    const baseContent = a.proposedText || a.originalText || "Item\tDescrição\tValor\n1\tTarifa Base\t100,00";
+                                    const parsedT = isTableJson(baseContent) ? parseTableData(baseContent) : parseTableData(baseContent);
+                                    return {
+                                      ...a,
+                                      contentType: 'table',
+                                      proposedText: serializeTableData(parsedT)
+                                    };
+                                  }));
+                                }}
+                                className={cn(
+                                  "px-2 py-0.5 text-[10px] font-bold rounded-md transition-all flex items-center gap-1",
+                                  art.contentType === 'table'
+                                    ? "bg-indigo-600 text-white shadow-xs"
+                                    : "text-slate-600 hover:text-slate-900"
+                                )}
+                              >
+                                <TableIcon size={11} /> Tabela
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {art.contentType === 'table' ? (
+                          <div className="space-y-4">
+                            {editFormData.tipoResolucao === "alteracao" && (
+                              <div className="space-y-1.5">
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                  Tabela Vigente / Anterior (Opcional)
+                                </label>
+                                <RegulatoryTableEditor
+                                  initialData={parseTableData(art.originalText || "")}
+                                  onChange={(table) => {
+                                    setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, originalText: serializeTableData(table) } : a));
+                                  }}
+                                />
+                              </div>
+                            )}
                             <div className="space-y-1.5">
-                              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                                Texto Vigente / Anterior (Opcional)
-                              </label>
-                              <textarea
-                                rows={14}
-                                className="w-full bg-white px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-700 focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all font-mono leading-relaxed resize-y"
-                                placeholder="Texto anterior ou vigente da norma (se houver alteração)..."
-                                value={art.originalText || ""}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, originalText: val } : a));
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="block text-[11px] font-bold text-indigo-600 uppercase tracking-wider">
+                                  Tabela Proposta pela Área Técnica (Oficial)
+                                </label>
+                                {editFormData.tipoResolucao === "alteracao" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, proposedText: a.originalText || "" } : a));
+                                    }}
+                                    className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 hover:underline cursor-pointer bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200"
+                                    title="Copiar estrutura e dados da tabela vigente para a tabela proposta"
+                                  >
+                                    <Copy size={11} /> Copiar Tabela Atual para Tabela Proposta
+                                  </button>
+                                )}
+                              </div>
+                              <RegulatoryTableEditor
+                                initialData={parseTableData(art.proposedText || art.originalText || "")}
+                                originalData={editFormData.tipoResolucao === "alteracao" && art.originalText ? parseTableData(art.originalText) : undefined}
+                                onChange={(table) => {
+                                  setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, proposedText: serializeTableData(table) } : a));
                                 }}
                               />
                             </div>
-                          )}
-                          <div className="space-y-1.5">
-                            <label className="block text-[11px] font-bold text-indigo-600 uppercase tracking-wider flex items-center justify-between">
-                              <span>Texto Proposto pela Área Técnica (Oficial)</span>
-                              <span className="text-[10px] text-indigo-400 font-normal lowercase">redação proposta</span>
-                            </label>
-                            <textarea
-                              rows={14}
-                              className="w-full bg-white px-3.5 py-2.5 border border-indigo-200 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600 transition-all font-mono leading-relaxed resize-y shadow-xs"
-                              placeholder="Redação proposta oficial pela agência reguladora..."
-                              value={art.proposedText !== undefined ? art.proposedText : (art.originalText || "")}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, proposedText: val } : a));
-                              }}
-                            />
                           </div>
-                        </div>
+                        ) : (
+                          <div className={cn("grid gap-4", editFormData.tipoResolucao === "alteracao" ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1")}>
+                            {editFormData.tipoResolucao === "alteracao" && (
+                              <div className="space-y-1.5">
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                  Texto Vigente / Anterior (Opcional)
+                                </label>
+                                <textarea
+                                  rows={14}
+                                  className="w-full bg-white px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-700 focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all font-mono leading-relaxed resize-y"
+                                  placeholder="Texto anterior ou vigente da norma (se houver alteração)..."
+                                  value={art.originalText || ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, originalText: val } : a));
+                                  }}
+                                />
+                              </div>
+                            )}
+                            <div className="space-y-1.5">
+                              <label className="block text-[11px] font-bold text-indigo-600 uppercase tracking-wider flex items-center justify-between">
+                                <span>Texto Proposto pela Área Técnica (Oficial)</span>
+                                <span className="text-[10px] text-indigo-400 font-normal lowercase">redação proposta</span>
+                              </label>
+                              <textarea
+                                rows={14}
+                                className="w-full bg-white px-3.5 py-2.5 border border-indigo-200 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600 transition-all font-mono leading-relaxed resize-y shadow-xs"
+                                placeholder="Redação proposta oficial pela agência reguladora..."
+                                value={art.proposedText !== undefined ? art.proposedText : (art.originalText || "")}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, proposedText: val } : a));
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))
                   )}

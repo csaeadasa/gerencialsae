@@ -394,3 +394,54 @@ export interface RecursoRevisaoData {
   observacao?: string;
   datasEtapas?: Record<string, string>;
 }
+
+export interface Article {
+  id: string | number;
+  tomadaId: string | number;
+  order: number;
+  contentType?: 'text' | 'table';
+  originalText: string;
+  proposedText?: string;
+  finalText?: string;
+  finalJustification?: string;
+}
+
+export interface Participation {
+  id: string | number;
+  numero: string;
+  tipoResolucao?: "nova" | "alteracao";
+  meioParticipacao?: "Consulta Pública" | "Tomada de Subsídios" | string;
+  title: string;
+  objeto: string;
+  dataInicio: string;
+  dataFim: string;
+  createdAt: string;
+  anexos?: { id: string | number; name: string; url: string }[];
+}
+
+export interface Contribution {
+  id: string | number;
+  articleId: string | number;
+  userId?: string | number | null;
+  authorName: string;
+  authorEmail?: string;
+  proposedText: string;
+  justification: string;
+  decision?: string;
+  complexity?: string;
+  technicalJustification?: string;
+  createdAt: string;
+}
+
+export interface Publication {
+  id: number;
+  titulo_assunto: string;
+  descricao: string;
+  tipo_documento: string;
+  responsavel_autor: string;
+  data_publicacao: string;
+  link_acesso: string;
+  observacoes: string;
+  imagem_capa?: string;
+  formato_capa?: 'retrato' | 'paisagem';
+}

@@ -955,13 +955,15 @@ async function runStartupMigration() {
           data_publicacao VARCHAR(50),
           link_acesso TEXT,
           observacoes TEXT,
-          imagem_capa TEXT
+          imagem_capa TEXT,
+          formato_capa VARCHAR(20) DEFAULT 'retrato'
         );
       `);
       
-      // Ensure existing tables have the column
+      // Ensure existing tables have the columns
       await client.query(`
         ALTER TABLE pu_publications ADD COLUMN IF NOT EXISTS imagem_capa TEXT;
+        ALTER TABLE pu_publications ADD COLUMN IF NOT EXISTS formato_capa VARCHAR(20) DEFAULT 'retrato';
       `);
 
       // Recreate tables with 'participation' terminology and SERIAL primary keys (prefix re_)
@@ -1030,10 +1032,11 @@ async function runStartupMigration() {
         );
       `);
 
-      // Migration: Ensure final_text and final_justification exist on re_participation_articles
+      // Migration: Ensure final_text, final_justification and content_type exist on re_participation_articles
       await client.query(`
         ALTER TABLE re_participation_articles ADD COLUMN IF NOT EXISTS final_text TEXT;
         ALTER TABLE re_participation_articles ADD COLUMN IF NOT EXISTS final_justification TEXT;
+        ALTER TABLE re_participation_articles ADD COLUMN IF NOT EXISTS content_type VARCHAR(50) DEFAULT 'text';
       `);
 
       await client.query(`
@@ -3819,11 +3822,11 @@ export async function startServer(isVercel = false) {
 
   app.post("/api/publications", async (req, res) => {
     try {
-      const { titulo_assunto, descricao, tipo_documento, responsavel_autor, data_publicacao, link_acesso, observacoes, imagem_capa } = req.body;
+      const { titulo_assunto, descricao, tipo_documento, responsavel_autor, data_publicacao, link_acesso, observacoes, imagem_capa, formato_capa } = req.body;
       const pool = getDbPool();
       const result = await pool.query(
-        "INSERT INTO pu_publications (titulo_assunto, descricao, tipo_documento, responsavel_autor, data_publicacao, link_acesso, observacoes, imagem_capa) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
-        [titulo_assunto || "", descricao || "", tipo_documento || "", responsavel_autor || "", data_publicacao || "", link_acesso || "", observacoes || "", imagem_capa || ""]
+        "INSERT INTO pu_publications (titulo_assunto, descricao, tipo_documento, responsavel_autor, data_publicacao, link_acesso, observacoes, imagem_capa, formato_capa) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
+        [titulo_assunto || "", descricao || "", tipo_documento || "", responsavel_autor || "", data_publicacao || "", link_acesso || "", observacoes || "", imagem_capa || "", formato_capa || "retrato"]
       );
       res.json({ success: true, data: result.rows[0] });
     } catch (error: any) {
@@ -3835,11 +3838,11 @@ export async function startServer(isVercel = false) {
   app.put("/api/publications/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { titulo_assunto, descricao, tipo_documento, responsavel_autor, data_publicacao, link_acesso, observacoes, imagem_capa } = req.body;
+      const { titulo_assunto, descricao, tipo_documento, responsavel_autor, data_publicacao, link_acesso, observacoes, imagem_capa, formato_capa } = req.body;
       const pool = getDbPool();
       const result = await pool.query(
-        "UPDATE pu_publications SET titulo_assunto = $1, descricao = $2, tipo_documento = $3, responsavel_autor = $4, data_publicacao = $5, link_acesso = $6, observacoes = $7, imagem_capa = $8 WHERE id = $9 RETURNING *",
-        [titulo_assunto || "", descricao || "", tipo_documento || "", responsavel_autor || "", data_publicacao || "", link_acesso || "", observacoes || "", imagem_capa || "", id]
+        "UPDATE pu_publications SET titulo_assunto = $1, descricao = $2, tipo_documento = $3, responsavel_autor = $4, data_publicacao = $5, link_acesso = $6, observacoes = $7, imagem_capa = $8, formato_capa = $9 WHERE id = $10 RETURNING *",
+        [titulo_assunto || "", descricao || "", tipo_documento || "", responsavel_autor || "", data_publicacao || "", link_acesso || "", observacoes || "", imagem_capa || "", formato_capa || "retrato", id]
       );
       if (result.rows.length === 0) {
         return res.status(404).json({ success: false, error: "Publicação não encontrada" });
@@ -5327,9 +5330,9 @@ const createParticipationHandler = async (req: express.Request, res: express.Res
     if (articles && articles.length > 0) {
       for (const art of articles) {
         await client.query(
-          `INSERT INTO re_participation_articles (participation_id, order_index, original_text, proposed_text)
-           VALUES ($1, $2, $3, $4)`,
-          [participationId, art.order || 0, art.originalText, art.proposedText || null]
+          `INSERT INTO re_participation_articles (participation_id, order_index, content_type, original_text, proposed_text)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [participationId, art.order || 0, art.contentType || 'text', art.originalText, art.proposedText || null]
         );
       }
     }
@@ -5408,7 +5411,8 @@ const getArticlesHandler = async (req: express.Request, res: express.Response) =
     const { id } = req.params;
     const { rows } = await dbPool.query(
       `SELECT id, participation_id as "tomadaId", participation_id as "participationId", 
-              order_index as "order", original_text as "originalText", 
+              order_index as "order", COALESCE(content_type, 'text') as "contentType",
+              original_text as "originalText", 
               proposed_text as "proposedText", final_text as "finalText", 
               final_justification as "finalJustification" 
        FROM re_participation_articles 
@@ -5586,7 +5590,7 @@ const updateArticleHandler = async (req: express.Request, res: express.Response)
   if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
   try {
     const { id } = req.params;
-    const { originalText, proposedText, order, finalText, finalJustification } = req.body;
+    const { originalText, proposedText, order, finalText, finalJustification, contentType } = req.body;
     
     await dbPool.query(
       `UPDATE re_participation_articles 
@@ -5594,14 +5598,16 @@ const updateArticleHandler = async (req: express.Request, res: express.Response)
            proposed_text = COALESCE($2, proposed_text),
            order_index = COALESCE($3, order_index),
            final_text = CASE WHEN $4::text IS NOT NULL THEN $4 ELSE final_text END,
-           final_justification = CASE WHEN $5::text IS NOT NULL THEN $5 ELSE final_justification END
-       WHERE id = $6`,
+           final_justification = CASE WHEN $5::text IS NOT NULL THEN $5 ELSE final_justification END,
+           content_type = CASE WHEN $6::text IS NOT NULL THEN $6 ELSE content_type END
+       WHERE id = $7`,
       [
         originalText !== undefined ? originalText : null, 
         proposedText !== undefined ? proposedText : null, 
         order !== undefined ? order : null,
         finalText !== undefined ? finalText : null,
         finalJustification !== undefined ? finalJustification : null,
+        contentType !== undefined ? contentType : null,
         Number(id)
       ]
     );
@@ -5660,15 +5666,15 @@ const updateParticipationArticlesBatchHandler = async (req: express.Request, res
         if (art.id && !String(art.id).startsWith('temp-') && !String(art.id).startsWith('new_')) {
           await dbPool.query(
             `UPDATE re_participation_articles 
-             SET original_text = $1, proposed_text = $2, order_index = $3
-             WHERE id = $4 AND participation_id = $5`,
-            [art.originalText || null, art.proposedText || null, art.order || 0, Number(art.id), Number(id)]
+             SET original_text = $1, proposed_text = $2, order_index = $3, content_type = $4
+             WHERE id = $5 AND participation_id = $6`,
+            [art.originalText || null, art.proposedText || null, art.order || 0, art.contentType || 'text', Number(art.id), Number(id)]
           );
         } else {
           await dbPool.query(
-            `INSERT INTO re_participation_articles (participation_id, order_index, original_text, proposed_text)
-             VALUES ($1, $2, $3, $4)`,
-            [Number(id), art.order || 0, art.originalText || null, art.proposedText || null]
+            `INSERT INTO re_participation_articles (participation_id, order_index, content_type, original_text, proposed_text)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [Number(id), art.order || 0, art.contentType || 'text', art.originalText || null, art.proposedText || null]
           );
         }
       }

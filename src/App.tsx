@@ -501,26 +501,43 @@ export default function App() {
 
   // Health check on startup to verify DB connection
   useEffect(() => {
-    fetch("/api/db-status")
-      .then(async res => {
-        const text = await res.text();
-        try {
-          return JSON.parse(text);
-        } catch (e) {
-          console.error("[HEALTH CHECK] Resposta não-JSON do servidor:", text, "Status:", res.status);
-          throw new Error("Invalid JSON response");
-        }
-      })
-      .then(data => {
-        if (data.success) {
-          console.log("[HEALTH CHECK] Banco de dados conectado com sucesso! Status:", data.data);
-        } else {
-          console.warn("[HEALTH CHECK] Falha ao conectar no banco de dados:", data.error);
-        }
-      })
-      .catch(err => {
-        console.error("[HEALTH CHECK] Erro na requisição de verificação do banco de dados:", err);
-      });
+    let attempts = 0;
+    let isMounted = true;
+
+    const checkDb = () => {
+      fetch("/api/db-status")
+        .then(async res => {
+          const contentType = res.headers.get("content-type");
+          if (!contentType || !contentType.includes("application/json")) {
+            if (attempts < 5 && isMounted) {
+              attempts++;
+              setTimeout(checkDb, 2000);
+              return null;
+            }
+            return null;
+          }
+          return res.json();
+        })
+        .then(data => {
+          if (!data || !isMounted) return;
+          if (data.success) {
+            console.log("[HEALTH CHECK] Banco de dados conectado com sucesso! Status:", data.data);
+          } else {
+            console.warn("[HEALTH CHECK] Aviso do banco de dados:", data.error);
+          }
+        })
+        .catch(err => {
+          if (attempts < 5 && isMounted) {
+            attempts++;
+            setTimeout(checkDb, 2000);
+          }
+        });
+    };
+
+    checkDb();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Public access support to share dashboards without prompting for login

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useState, useEffect } from "react";
-import { Plus, Edit2, Trash2, ArrowUpRight, Search, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet, BookOpen, Filter, ArrowUpDown, ArrowDown, ArrowUp } from "lucide-react";
+import { Plus, Edit2, Trash2, ArrowUpRight, Search, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet, BookOpen, Filter, ArrowUpDown, ArrowDown, ArrowUp, Image as ImageIcon, Smartphone, Monitor, Check } from "lucide-react";
 
 interface Publication {
   id: number;
@@ -12,6 +12,7 @@ interface Publication {
   link_acesso: string;
   observacoes: string;
   imagem_capa?: string;
+  formato_capa?: 'retrato' | 'paisagem';
 }
 
 interface PublicationsTabProps {
@@ -43,6 +44,7 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
   const [formDataPub, setFormDataPub] = useState("");
   const [formLink, setFormLink] = useState("");
   const [formImagemCapa, setFormImagemCapa] = useState("");
+  const [formFormatoCapa, setFormFormatoCapa] = useState<'retrato' | 'paisagem'>('retrato');
   const [formObservacoes, setFormObservacoes] = useState("");
 
   const [csvText, setCsvText] = useState("");
@@ -101,6 +103,7 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
     setFormDataPub("");
     setFormLink("");
     setFormImagemCapa("");
+    setFormFormatoCapa("retrato");
     setFormObservacoes("");
     setIsModalOpen(true);
   };
@@ -114,6 +117,7 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
     setFormDataPub(pub.data_publicacao);
     setFormLink(pub.link_acesso);
     setFormImagemCapa(pub.imagem_capa || "");
+    setFormFormatoCapa(pub.formato_capa || "retrato");
     setFormObservacoes(pub.observacoes);
     setIsModalOpen(true);
   };
@@ -122,15 +126,30 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 2 * 1024 * 1024) { // 2MB limite
-      showToast("Arquivo muito grande", "A imagem deve ter no máximo 2MB.", "error");
+    if (file.size > 3 * 1024 * 1024) { // 3MB limite
+      showToast("Arquivo muito grande", "A imagem deve ter no máximo 3MB.", "error");
       return;
     }
 
     const reader = new FileReader();
     reader.onload = (event) => {
       if (event.target?.result) {
-        setFormImagemCapa(event.target.result as string);
+        const base64 = event.target.result as string;
+        setFormImagemCapa(base64);
+
+        // Auto-detect image aspect ratio
+        const img = new Image();
+        img.onload = () => {
+          const ratio = img.naturalWidth / (img.naturalHeight || 1);
+          if (ratio > 1.15) {
+            setFormFormatoCapa("paisagem");
+            showToast("Formato detectado", `Imagem horizontal identificada (${img.naturalWidth}x${img.naturalHeight}px). Ajustado para Paisagem.`, "info");
+          } else {
+            setFormFormatoCapa("retrato");
+            showToast("Formato detectado", `Imagem vertical identificada (${img.naturalWidth}x${img.naturalHeight}px). Ajustado para Retrato.`, "info");
+          }
+        };
+        img.src = base64;
       }
     };
     reader.readAsDataURL(file);
@@ -151,7 +170,8 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
       data_publicacao: formDataPub,
       link_acesso: formLink,
       observacoes: formObservacoes,
-      imagem_capa: formImagemCapa
+      imagem_capa: formImagemCapa,
+      formato_capa: formFormatoCapa
     };
 
     try {
@@ -443,9 +463,32 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
                   return (
                     <tr key={pub.id} className="hover:bg-slate-50/40 transition-colors group align-top">
                       <td className="px-5 py-4 font-semibold text-slate-700 max-w-[416px]">
-                        <div className="flex flex-col">
-                          <span className="text-xs text-indigo-600 font-bold uppercase tracking-widest">{pub.tipo_documento || "Documento"}</span>
-                          <span className="text-sm font-bold text-slate-800 line-clamp-2 md:line-clamp-none">{pub.titulo_assunto}</span>
+                        <div className="flex items-start gap-3">
+                          {pub.imagem_capa ? (
+                            <div className="shrink-0 mt-0.5 relative group/img">
+                              {pub.formato_capa === "paisagem" ? (
+                                <div className="w-14 h-8 rounded-md overflow-hidden border border-slate-200 shadow-2xs bg-slate-100">
+                                  <img src={pub.imagem_capa} alt="" className="w-full h-full object-cover" />
+                                </div>
+                              ) : (
+                                <div className="w-8 h-11 rounded-md overflow-hidden border border-slate-200 shadow-2xs bg-slate-100">
+                                  <img src={pub.imagem_capa} alt="" className="w-full h-full object-cover" />
+                                </div>
+                              )}
+                              <span className="sr-only">{pub.formato_capa || "retrato"}</span>
+                            </div>
+                          ) : null}
+                          <div className="flex flex-col flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[11px] text-indigo-600 font-bold uppercase tracking-wider">{pub.tipo_documento || "Documento"}</span>
+                              {pub.imagem_capa && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                                  {pub.formato_capa === "paisagem" ? "Paisagem 16:9" : "Retrato 3:4"}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-sm font-bold text-slate-800 line-clamp-2 md:line-clamp-none">{pub.titulo_assunto}</span>
+                          </div>
                         </div>
                       </td>
                       <td className="px-5 py-4 text-xs font-semibold text-slate-500">
@@ -622,25 +665,115 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
                   />
                 </div>
 
-                {/* Imagem de Capa (Upload / URL) */}
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-xs font-bold text-slate-700">Imagem de Capa (Upload ou URL)</label>
+                {/* Imagem de Capa (Upload / URL) e Orientação */}
+                <div className="space-y-3 md:col-span-2 p-4 bg-slate-50/80 border border-slate-200/80 rounded-2xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <ImageIcon size={16} className="text-indigo-600" />
+                        Imagem da Capa
+                      </label>
+                      <p className="text-[11px] text-slate-500">
+                        Envie uma imagem em formato <strong>Retrato</strong> ou <strong>Paisagem</strong> para o documento.
+                      </p>
+                    </div>
+
+                    {/* Format Selector Pills */}
+                    <div className="inline-flex bg-slate-200/80 p-1 rounded-xl gap-1 self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => setFormFormatoCapa("retrato")}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                          formFormatoCapa === "retrato"
+                            ? "bg-white text-indigo-700 shadow-xs ring-1 ring-black/5"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        <Smartphone size={13} className="rotate-0" />
+                        <span>Retrato (Vertical)</span>
+                        {formFormatoCapa === "retrato" && <Check size={12} className="text-indigo-600" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormFormatoCapa("paisagem")}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                          formFormatoCapa === "paisagem"
+                            ? "bg-white text-indigo-700 shadow-xs ring-1 ring-black/5"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        <Monitor size={13} />
+                        <span>Paisagem (Horizontal)</span>
+                        {formFormatoCapa === "paisagem" && <Check size={12} className="text-indigo-600" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Specification Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div 
+                      onClick={() => setFormFormatoCapa("retrato")}
+                      className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                        formFormatoCapa === "retrato"
+                          ? "bg-indigo-50/60 border-indigo-250 ring-2 ring-indigo-500/20"
+                          : "bg-white border-slate-200/90 hover:border-slate-300 opacity-75 hover:opacity-100"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-bold text-slate-800 mb-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-3.5 border-2 border-indigo-600 rounded-xs inline-block"></span>
+                          Formato Retrato
+                        </span>
+                        <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-indigo-100/80 text-indigo-700 font-mono">
+                          600 × 850 px
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        Proporção <strong>~3:4 ou A4</strong>. Recomendado para relatórios técnicos, cartilhas, livros e guias oficiais.
+                      </p>
+                    </div>
+
+                    <div 
+                      onClick={() => setFormFormatoCapa("paisagem")}
+                      className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                        formFormatoCapa === "paisagem"
+                          ? "bg-indigo-50/60 border-indigo-250 ring-2 ring-indigo-500/20"
+                          : "bg-white border-slate-200/90 hover:border-slate-300 opacity-75 hover:opacity-100"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-bold text-slate-800 mb-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-4 h-2.5 border-2 border-indigo-600 rounded-xs inline-block"></span>
+                          Formato Paisagem
+                        </span>
+                        <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-indigo-100/80 text-indigo-700 font-mono">
+                          1200 × 675 px
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        Proporção <strong>16:9 Widescreen</strong>. Recomendado para informativos, banners de divulgação, apresentações e infográficos.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Input & Upload Controls */}
                   <div className="flex flex-col sm:flex-row gap-3">
                     <div className="relative flex-1">
                       <input
                         type="url"
                         value={formImagemCapa}
                         onChange={(e) => setFormImagemCapa(e.target.value)}
-                        placeholder="Opcional. Ex: https://exemplo.com/capa.jpg"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-semibold text-slate-700 pr-10"
+                        placeholder="Insira URL ou faça upload ao lado (Ex: https://...)"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-xs font-medium text-slate-700 pr-10"
                       />
                       {formImagemCapa && (
                         <button
                           type="button"
                           onClick={() => setFormImagemCapa("")}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 transition-colors p-1"
+                          title="Remover imagem"
                         >
-                          <X size={16} />
+                          <X size={15} />
                         </button>
                       )}
                     </div>
@@ -650,17 +783,79 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
                         type="file"
                         accept="image/*"
                         onChange={handleImageUpload}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                       />
-                      <div className="px-4 py-2.5 bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors max-h-[42px]">
-                        <Upload size={16} />
-                        <span className="text-xs font-bold">Fazer Upload</span>
+                      <div className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors text-xs shadow-xs">
+                        <Upload size={15} />
+                        <span>Carregar Arquivo</span>
                       </div>
                     </div>
                   </div>
-                  {formImagemCapa && (
-                    <div className="mt-2 border border-slate-200 rounded-xl overflow-hidden bg-slate-50 inline-block">
-                      <img src={formImagemCapa} alt="Preview da Capa" className="h-32 object-contain" />
+
+                  {/* Live Visual Preview */}
+                  {formImagemCapa ? (
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl flex flex-col sm:flex-row items-center gap-4">
+                      <div className="relative group shrink-0">
+                        {formFormatoCapa === "retrato" ? (
+                          <div className="w-28 h-38 md:w-32 md:h-44 rounded-lg overflow-hidden border border-slate-200 shadow-sm bg-slate-900/5 relative">
+                            <img
+                              src={formImagemCapa}
+                              alt="Prévia da Capa"
+                              className="w-full h-full object-cover"
+                            />
+                            <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/70 text-white text-[9px] font-bold font-mono">
+                              Retrato
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="w-56 h-32 md:w-64 md:h-36 rounded-lg overflow-hidden border border-slate-200 shadow-sm bg-slate-900/5 relative">
+                            <img
+                              src={formImagemCapa}
+                              alt="Prévia da Capa"
+                              className="w-full h-full object-cover"
+                            />
+                            <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/70 text-white text-[9px] font-bold font-mono">
+                              Paisagem 16:9
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="text-xs text-slate-600 space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-800">Prévia da Capa ({formFormatoCapa === "retrato" ? "Vertical" : "Horizontal"})</span>
+                          <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-extrabold rounded text-[10px]">
+                            {formFormatoCapa === "retrato" ? "Proporção 3:4" : "Proporção 16:9"}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                          A imagem será exibida no Acervo Bibliográfico com este enquadramento. Você pode alternar a orientação acima se desejar.
+                        </p>
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setFormFormatoCapa(formFormatoCapa === "retrato" ? "paisagem" : "retrato")}
+                            className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 underline flex items-center gap-1"
+                          >
+                            Alternar para {formFormatoCapa === "retrato" ? "Paisagem (Horizontal)" : "Retrato (Vertical)"}
+                          </button>
+                          <span className="text-slate-300">•</span>
+                          <button
+                            type="button"
+                            onClick={() => setFormImagemCapa("")}
+                            className="text-[11px] font-bold text-rose-600 hover:text-rose-800 underline"
+                          >
+                            Remover Capa
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 border border-dashed border-slate-200 rounded-xl bg-slate-100/50 flex items-center justify-between text-xs text-slate-500">
+                      <div className="flex items-center gap-2">
+                        <ImageIcon size={16} className="text-slate-400" />
+                        <span>Nenhuma imagem selecionada. Uma capa padrão no formato <strong>{formFormatoCapa}</strong> será gerada no acervo.</span>
+                      </div>
                     </div>
                   )}
                 </div>
