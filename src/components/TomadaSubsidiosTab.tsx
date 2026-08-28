@@ -826,6 +826,20 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
   );
 };
 
+const renderCustomizedPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, value }: any) => {
+  const RADIAN = Math.PI / 180;
+  // Position outside the pie chart
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.5 + 45; 
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  return (
+    <text x={x} y={y} fill="#475569" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize="11" fontWeight="bold">
+      {value} ({(percent * 100).toFixed(1).replace(/\.0$/, '')}%)
+    </text>
+  );
+};
+
 export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToast, currentUser }) => {
   const auth = useAuth();
   const effectiveUser = currentUser || auth?.currentUser;
@@ -5225,7 +5239,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         <div className="h-64">
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
-                              <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={78} stroke="none">
+                              <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={78} stroke="none" label={renderCustomizedPieLabel} labelLine={false}>
                                 {pieData.map((entry, index) => (
                                   <Cell key={`cell-${index}`} fill={entry.color} />
                                 ))}
@@ -5275,7 +5289,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         <div className="h-64">
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
-                              <Pie data={complexityPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={78} stroke="none">
+                              <Pie data={complexityPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={78} stroke="none" label={renderCustomizedPieLabel} labelLine={false}>
                                 {complexityPieData.map((entry, index) => (
                                   <Cell key={`comp-cell-${index}`} fill={entry.color} />
                                 ))}
