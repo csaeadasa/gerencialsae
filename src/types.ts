@@ -430,6 +430,7 @@ export interface Contribution {
   decision?: string;
   complexity?: string;
   technicalJustification?: string;
+  notes?: string;
   createdAt: string;
 }
 

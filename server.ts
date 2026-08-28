@@ -1057,6 +1057,7 @@ async function runStartupMigration() {
         ALTER TABLE re_participation_contributions ADD COLUMN IF NOT EXISTS decision VARCHAR(50) DEFAULT NULL;
         ALTER TABLE re_participation_contributions ADD COLUMN IF NOT EXISTS complexity VARCHAR(50) DEFAULT NULL;
         ALTER TABLE re_participation_contributions ADD COLUMN IF NOT EXISTS technical_justification TEXT DEFAULT NULL;
+        ALTER TABLE re_participation_contributions ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT NULL;
       `);
 
       // Migration: Ensure user_id column exists, backfill from author_name if present, drop author_name column
@@ -5437,6 +5438,7 @@ const getContributionsHandler = async (req: express.Request, res: express.Respon
               COALESCE(u.email, '') as "authorEmail",
               c.proposed_text as "proposedText", c.justification, 
               c.decision, c.complexity, c.technical_justification as "technicalJustification",
+              c.notes,
               c.created_at as "createdAt"
        FROM re_participation_contributions c
        JOIN re_participation_articles a ON c.article_id = a.id
@@ -5539,21 +5541,39 @@ const updateContributionAnalysisHandler = async (req: express.Request, res: expr
   if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
   try {
     const { id } = req.params;
-    const { decision, complexity, technicalJustification } = req.body;
+    const { decision, complexity, technicalJustification, notes } = req.body;
     
-    await dbPool.query(
-      `UPDATE re_participation_contributions
-       SET decision = $1,
-           complexity = $2,
-           technical_justification = $3
-       WHERE id = $4`,
-      [
-        decision !== undefined ? decision : null, 
-        complexity !== undefined ? complexity : null,
-        technicalJustification !== undefined ? technicalJustification : null,
-        Number(id)
-      ]
-    );
+    // Check which fields are provided to only update those
+    const updates = [];
+    const values: any[] = [];
+    let queryIndex = 1;
+
+    if (decision !== undefined) {
+      updates.push(`decision = $${queryIndex++}`);
+      values.push(decision);
+    }
+    if (complexity !== undefined) {
+      updates.push(`complexity = $${queryIndex++}`);
+      values.push(complexity);
+    }
+    if (technicalJustification !== undefined) {
+      updates.push(`technical_justification = $${queryIndex++}`);
+      values.push(technicalJustification);
+    }
+    if (notes !== undefined) {
+      updates.push(`notes = $${queryIndex++}`);
+      values.push(notes);
+    }
+
+    if (updates.length > 0) {
+      values.push(Number(id));
+      await dbPool.query(
+        `UPDATE re_participation_contributions
+         SET ${updates.join(', ')}
+         WHERE id = $${queryIndex}`,
+        values
+      );
+    }
     
     res.json({ success: true });
   } catch (error) {
@@ -5640,6 +5660,37 @@ const updateArticleFinalAnalysisHandler = async (req: express.Request, res: expr
   }
 };
 
+const moveArticlesHandler = async (req: express.Request, res: express.Response) => {
+  if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
+  try {
+    const { articleIds, targetTomadaId } = req.body;
+    
+    if (!Array.isArray(articleIds) || articleIds.length === 0 || !targetTomadaId) {
+      return res.status(400).json({ error: "Invalid parameters" });
+    }
+
+    const idsToMove = articleIds
+        .filter(id => id && !String(id).startsWith('temp-') && !String(id).startsWith('new_'))
+        .map(id => Number(id));
+
+    if (idsToMove.length === 0) {
+      return res.json({ success: true, message: "No existing articles to move" });
+    }
+
+    await dbPool.query(
+      `UPDATE re_participation_articles
+       SET participation_id = $1
+       WHERE id = ANY($2::int[])`,
+      [Number(targetTomadaId), idsToMove]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error moving articles:", error);
+    res.status(500).json({ error: "Failed to move articles" });
+  }
+};
+
 const updateParticipationArticlesBatchHandler = async (req: express.Request, res: express.Response) => {
   if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
   try {
@@ -5707,6 +5758,7 @@ app.get("/api/reg/tomadas/:id/articles", getArticlesHandler);
 
 app.put("/api/reg/participations/:id/articles", updateParticipationArticlesBatchHandler);
 app.put("/api/reg/tomadas/:id/articles", updateParticipationArticlesBatchHandler);
+app.post("/api/reg/articles/move", moveArticlesHandler);
 
 app.put("/api/reg/articles/:id", updateArticleHandler);
 app.put("/api/reg/articles/:id/final-analysis", updateArticleFinalAnalysisHandler);
@@ -5745,27 +5797,46 @@ Forneça a resposta em formato JSON estrito com os seguintes campos:
 - "complexity": "Alta", "Média" ou "Baixa"
 - "technicalJustification": Um texto técnico, impessoal e claro, com a justificativa técnica para a decisão tomada.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-lite",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            decision: { type: Type.STRING },
-            complexity: { type: Type.STRING },
-            technicalJustification: { type: Type.STRING }
-          },
-          required: ["decision", "complexity", "technicalJustification"]
+    let response;
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        response = await ai.models.generateContent({
+          model: "gemini-3.1-flash-lite",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                decision: { type: Type.STRING },
+                complexity: { type: Type.STRING },
+                technicalJustification: { type: Type.STRING }
+              },
+              required: ["decision", "complexity", "technicalJustification"]
+            }
+          }
+        });
+        break;
+      } catch (err: any) {
+        if (err?.status === 503 || err?.message?.includes("503") || err?.message?.includes("high demand") || err?.status === 429) {
+          retries--;
+          if (retries === 0) throw err;
+          await new Promise(r => setTimeout(r, 2000));
+        } else {
+          throw err;
         }
       }
-    });
+    }
 
-    res.json(JSON.parse(response.text));
-  } catch (error) {
+    if (response && response.text) {
+      res.json(JSON.parse(response.text));
+    } else {
+      throw new Error("No response from AI");
+    }
+  } catch (error: any) {
     console.error("AI Analysis Error:", error);
-    res.status(500).json({ error: "Failed to generate AI analysis" });
+    res.status(error?.status === 503 ? 503 : 500).json({ error: error?.message || "Failed to generate AI analysis" });
   }
 });
 
@@ -5801,26 +5872,45 @@ Forneça a resposta em formato JSON estrito com os seguintes campos:
 - "finalText": O texto consolidado do dispositivo.
 - "finalJustification": Um texto técnico, impessoal e claro, justificando como as contribuições moldaram a redação final.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-lite",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            finalText: { type: Type.STRING },
-            finalJustification: { type: Type.STRING }
-          },
-          required: ["finalText", "finalJustification"]
+    let response;
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        response = await ai.models.generateContent({
+          model: "gemini-3.1-flash-lite",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                finalText: { type: Type.STRING },
+                finalJustification: { type: Type.STRING }
+              },
+              required: ["finalText", "finalJustification"]
+            }
+          }
+        });
+        break;
+      } catch (err: any) {
+        if (err?.status === 503 || err?.message?.includes("503") || err?.message?.includes("high demand") || err?.status === 429) {
+          retries--;
+          if (retries === 0) throw err;
+          await new Promise(r => setTimeout(r, 2000));
+        } else {
+          throw err;
         }
       }
-    });
+    }
 
-    res.json(JSON.parse(response.text));
-  } catch (error) {
+    if (response && response.text) {
+      res.json(JSON.parse(response.text));
+    } else {
+      throw new Error("No response from AI");
+    }
+  } catch (error: any) {
     console.error("AI Article Analysis Error:", error);
-    res.status(500).json({ error: "Failed to generate AI article analysis" });
+    res.status(error?.status === 503 ? 503 : 500).json({ error: error?.message || "Failed to generate AI article analysis" });
   }
 });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Plus, Edit3, Trash2, Check, X, FileText, MessageSquare, Save, ArrowLeft, ArrowRight, CornerDownRight, Search, ArrowUpDown, ArrowUp, ArrowDown, Users, Lock, AlertTriangle, RefreshCw, FileCode, PlusCircle, Wrench, Paperclip, Upload, CheckCircle2, ChevronDown, ChevronUp, CheckCircle, Eye, EyeOff, Columns, Sparkles, BarChart2, PieChart as PieChartIcon, FileSpreadsheet, Download, ScrollText, Copy, Printer, CheckCheck, RotateCcw, Table as TableIcon, FileCheck, Info } from "lucide-react";
+import { Plus, Edit3, Trash2, Check, X, FileText, MessageSquare, Save, ArrowLeft, ArrowRight, CornerDownRight, Search, ArrowUpDown, ArrowUp, ArrowDown, Users, Lock, AlertTriangle, AlertCircle, RefreshCw, FileCode, PlusCircle, Wrench, Paperclip, Upload, CheckCircle2, ChevronDown, ChevronUp, CheckCircle, Eye, EyeOff, Columns, Sparkles, BarChart2, PieChart as PieChartIcon, FileSpreadsheet, Download, ScrollText, Copy, Printer, CheckCheck, RotateCcw, Table as TableIcon, FileCheck, Info, Move } from "lucide-react";
 import * as XLSX from "xlsx";
 import * as diff from "diff";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
@@ -134,6 +134,7 @@ export interface Contribution {
   decision?: string;
   complexity?: string;
   technicalJustification?: string;
+  notes?: string;
   createdAt: string;
 }
 
@@ -195,18 +196,20 @@ interface TechnicalAnalysisArticleProps {
   article: Article;
   tipoResolucao?: "nova" | "alteracao";
   contributions: Contribution[];
-  handleUpdateAnalysis: (contributionId: string | number, decision: string, complexity: string, technicalJustification: string) => void;
+  handleUpdateAnalysis: (contributionId: string | number, decision: string, complexity: string, technicalJustification: string, notes?: string) => void;
   handleUpdateFinalAnalysis: (articleId: string | number, finalText: string, finalJustification: string) => void;
   handleDeleteArticle?: (articleId: string | number, hasContributions: boolean) => void;
+  showToast: (title: string, message: string, type: "success" | "error" | "warning" | "info") => void;
 }
 
 interface ContributionAnalysisItemProps {
   c: Contribution;
   article: Article;
-  handleUpdateAnalysis: (contributionId: string | number, decision: string, complexity: string, technicalJustification: string) => void;
+  handleUpdateAnalysis: (contributionId: string | number, decision: string, complexity: string, technicalJustification: string, notes?: string) => void;
+  showToast: (title: string, message: string, type: "success" | "error" | "warning" | "info") => void;
 }
 
-const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, article, handleUpdateAnalysis }) => {
+const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, article, handleUpdateAnalysis, showToast }) => {
   const originalText = article.proposedText || article.originalText || "";
   const isTable = article.contentType === 'table' || isTableJson(c.proposedText) || isTableJson(originalText);
   const diffParts = !isTable ? getSmartDiff(originalText, c.proposedText || "") : [];
@@ -216,11 +219,14 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
   const [decision, setDecision] = useState(c.decision || "");
   const [complexity, setComplexity] = useState(c.complexity || "");
   const [technicalJustification, setTechnicalJustification] = useState(c.technicalJustification || "");
+  const [notes, setNotes] = useState(c.notes || "");
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
 
   useEffect(() => {
     setDecision(c.decision || "");
     setComplexity(c.complexity || "");
     setTechnicalJustification(c.technicalJustification || "");
+    setNotes(c.notes || "");
   }, [c]);
 
   const handleSuggestAI = async () => {
@@ -241,16 +247,21 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
         setComplexity(data.complexity || "Média");
         setTechnicalJustification(data.technicalJustification || "");
         setIsEditingAnalysis(true);
+      } else {
+        let msg = "Erro ao gerar análise com IA.";
+        try { const errData = await res.json(); if (errData.error) msg = errData.error; } catch(e) {}
+        showToast("Falha na IA", msg, "error");
       }
     } catch (e) {
       console.error("AI suggestion failed", e);
+      showToast("Falha na IA", "Erro de conexão ou instabilidade no servidor.", "error");
     } finally {
       setIsGeneratingAI(false);
     }
   };
 
   const handleSave = () => {
-    handleUpdateAnalysis(c.id, decision, complexity, technicalJustification);
+    handleUpdateAnalysis(c.id, decision, complexity, technicalJustification, notes);
     setIsEditingAnalysis(false);
   };
 
@@ -258,6 +269,7 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
     setDecision(c.decision || "");
     setComplexity(c.complexity || "");
     setTechnicalJustification(c.technicalJustification || "");
+    setNotes(c.notes || "");
     setIsEditingAnalysis(false);
   };
 
@@ -271,6 +283,14 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
           <span className="text-xs font-bold text-slate-700">{c.authorName}</span>
         </div>
         <div className="flex flex-wrap items-center gap-4 flex-1 justify-end">
+          <button 
+            onClick={() => setIsNotesModalOpen(true)}
+            className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded transition-colors"
+            title="Anotações com Formatação"
+          >
+            <FileText size={14} /> Anotações
+          </button>
+          
           {isEditingAnalysis ? (
             <>
               <div className="flex items-center gap-2">
@@ -415,13 +435,75 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
               )}
             </div>
           )}
+
+          {c.notes && !isEditingAnalysis && (
+            <div className="pt-4 border-t border-slate-200">
+              <div className="flex items-center gap-2 mb-3">
+                <FileText size={14} className="text-emerald-600" />
+                <span className="block text-xs font-black text-emerald-700 uppercase tracking-wider">Anotações Internas</span>
+              </div>
+              <div 
+                className="text-xs text-slate-700 leading-relaxed bg-emerald-50/50 p-3 rounded-lg border border-emerald-100 shadow-sm prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1"
+                dangerouslySetInnerHTML={{ __html: c.notes }}
+              />
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Notes Modal */}
+      {isNotesModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[99999] animate-fadeIn" style={{ zIndex: 99999 }}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-[95vw] h-[90vh] flex flex-col">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                <FileText size={18} className="text-indigo-600" />
+                Anotações (Formatadas) - {c.authorName}
+              </h3>
+              <button onClick={() => setIsNotesModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1 flex flex-col">
+              <div className="flex gap-2 mb-2 bg-slate-100 p-2 rounded-lg border border-slate-200 shrink-0">
+                <button onClick={() => document.execCommand('bold', false, '')} className="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-white hover:text-indigo-600 rounded shadow-sm font-serif font-bold transition-colors">B</button>
+                <button onClick={() => document.execCommand('italic', false, '')} className="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-white hover:text-indigo-600 rounded shadow-sm font-serif italic transition-colors">I</button>
+                <button onClick={() => document.execCommand('underline', false, '')} className="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-white hover:text-indigo-600 rounded shadow-sm font-serif underline transition-colors">U</button>
+                <div className="w-px bg-slate-300 mx-1"></div>
+                <button onClick={() => document.execCommand('insertUnorderedList', false, '')} className="px-2 h-8 flex items-center justify-center text-slate-700 hover:bg-white hover:text-indigo-600 rounded shadow-sm text-xs font-bold transition-colors">Lista (Bolinha)</button>
+                <button onClick={() => document.execCommand('insertOrderedList', false, '')} className="px-2 h-8 flex items-center justify-center text-slate-700 hover:bg-white hover:text-indigo-600 rounded shadow-sm text-xs font-bold transition-colors">Lista (Número)</button>
+              </div>
+              <div 
+                contentEditable
+                suppressContentEditableWarning
+                className="w-full flex-1 overflow-y-auto border border-slate-300 rounded-lg p-4 text-sm focus:outline-indigo-500 bg-white shadow-inner prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: notes }}
+                onBlur={(e) => setNotes(e.currentTarget.innerHTML)}
+              />
+              <p className="text-[10px] text-slate-500 mt-2 font-medium shrink-0">As anotações são salvas internamente e podem conter destaques, listas e itálico.</p>
+            </div>
+            <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 rounded-b-2xl shrink-0">
+              <button onClick={() => { setNotes(c.notes || ""); setIsNotesModalOpen(false); }} className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-xl transition-colors">
+                Cancelar
+              </button>
+              <button 
+                onClick={() => { 
+                  handleUpdateAnalysis(c.id, decision, complexity, technicalJustification, notes);
+                  setIsNotesModalOpen(false);
+                }} 
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors shadow-sm flex items-center gap-2"
+              >
+                <Check size={16} /> Salvar Anotações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ article, tipoResolucao, contributions, handleUpdateAnalysis, handleUpdateFinalAnalysis, handleDeleteArticle }) => {
+const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ article, tipoResolucao, contributions, handleUpdateAnalysis, handleUpdateFinalAnalysis, handleDeleteArticle, showToast }) => {
   const [finalText, setFinalText] = useState(article.finalText || "");
   const [finalJustification, setFinalJustification] = useState(article.finalJustification || "");
   const [isEditing, setIsEditing] = useState(false);
@@ -490,9 +572,14 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
         setFinalText(data.finalText || "");
         setFinalJustification(data.finalJustification || "");
         setIsEditing(true);
+      } else {
+        let msg = "Erro ao gerar consolidação com IA.";
+        try { const errData = await res.json(); if (errData.error) msg = errData.error; } catch(e) {}
+        showToast("Falha na IA", msg, "error");
       }
     } catch (e) {
       console.error("AI article suggestion failed", e);
+      showToast("Falha na IA", "Erro de conexão ou instabilidade no servidor.", "error");
     } finally {
       setIsGeneratingAI(false);
     }
@@ -581,6 +668,7 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
               c={c} 
               article={article} 
               handleUpdateAnalysis={handleUpdateAnalysis} 
+              showToast={showToast}
             />
           ))
         )}
@@ -817,6 +905,9 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [extractedArticles, setExtractedArticles] = useState<string[]>([]);
   const [selectedExtractedArticles, setSelectedExtractedArticles] = useState<boolean[]>([]);
   const [isExtractingText, setIsExtractingText] = useState(false);
+  const [inputMode, setInputMode] = useState<"text" | "spreadsheet">("text");
+  const [isExtractingSpreadsheet, setIsExtractingSpreadsheet] = useState(false);
+  const [spreadsheetFileName, setSpreadsheetFileName] = useState("");
 
   const handleExtractText = async (file: File) => {
     setIsExtractingText(true);
@@ -872,6 +963,58 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     setExtractedArticles([]);
     setSelectedExtractedArticles([]);
     showToast("Sucesso", "Artigos carregados na minuta.", "success");
+  };
+
+  const handleExtractSpreadsheet = async (file: File) => {
+    setIsExtractingSpreadsheet(true);
+    setSpreadsheetFileName(file.name);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const json: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+      const newArticles: Article[] = [];
+      let order = 1;
+
+      for (const row of json) {
+        const keys = Object.keys(row);
+        let origKey = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '').includes('textooriginal'));
+        let propKey = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '').includes('textoproposto'));
+        
+        // If exact keywords not found, fallback to columns 0 and 1 if alteracao
+        if (!origKey && keys.length >= 2) origKey = keys[0];
+        if (!propKey && keys.length >= 2) propKey = keys[1];
+        if (!propKey && keys.length === 1) propKey = keys[0];
+
+        const origVal = origKey ? row[origKey] : '';
+        const propVal = propKey ? row[propKey] : '';
+
+        if (String(origVal).trim() || String(propVal).trim()) {
+          newArticles.push({
+            id: crypto.randomUUID(),
+            tomadaId: "",
+            order: order++,
+            originalText: origVal ? String(origVal).trim() : "",
+            proposedText: propVal ? String(propVal).trim() : ""
+          });
+        }
+      }
+
+      if (newArticles.length === 0) {
+        showToast("Erro", "Nenhuma linha válida encontrada na planilha.", "error");
+        setPreviewArticles([]);
+      } else {
+        setPreviewArticles(newArticles);
+        showToast("Planilha Carregada", `${newArticles.length} artigos carregados com sucesso.`, "success");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Erro", "Erro ao processar a planilha.", "error");
+    } finally {
+      setIsExtractingSpreadsheet(false);
+    }
   };
 
   useEffect(() => {
@@ -993,6 +1136,9 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       anexos: []
     });
     setPreviewArticles([]);
+    setInputMode("text");
+    setSpreadsheetFileName("");
+    setIsExtractingSpreadsheet(false);
     setActiveView("create_step1");
   };
 
@@ -1255,8 +1401,19 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     dataFim: ""
   });
   const [editArticles, setEditArticles] = useState<Article[]>([]);
+  const [selectedArticlesToMove, setSelectedArticlesToMove] = useState<(string | number)[]>([]);
+  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+  const [targetTomadaIdToMove, setTargetTomadaIdToMove] = useState<string>("");
+  const [isMovingArticles, setIsMovingArticles] = useState(false);
   const [editAnexos, setEditAnexos] = useState<{ id: string | number; name: string; url: string }[]>([]);
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+
+  // Duplicate Modal State
+  const [duplicateModalTomada, setDuplicateModalTomada] = useState<TomadaSubsidio | null>(null);
+  const [duplicateArticles, setDuplicateArticles] = useState<Article[]>([]);
+  const [duplicateSelectedArticles, setDuplicateSelectedArticles] = useState<string[]>([]);
+  const [duplicateMode, setDuplicateMode] = useState<"proposed" | "final">("proposed");
+  const [isDuplicating, setIsDuplicating] = useState(false);
 
   // Delete Confirmation Modal State (Safe for Sandboxed iFrames)
   const [deletingTomada, setDeletingTomada] = useState<TomadaSubsidio | null>(null);
@@ -1474,13 +1631,36 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       showToast("Aviso", "Preencha o título da Participação Social.", "warning");
       return;
     }
-    if (!formData.rawText.trim()) {
-      showToast("Aviso", "Cole o texto da minuta para processar.", "warning");
-      return;
+    
+    if (inputMode === "text") {
+      if (!formData.rawText.trim()) {
+        showToast("Aviso", "Cole o texto da minuta para processar.", "warning");
+        return;
+      }
+      const parsed = parseRawTextToArticles(formData.rawText);
+      setPreviewArticles(parsed);
+    } else {
+      if (!previewArticles || previewArticles.length === 0) {
+        showToast("Aviso", "Carregue uma planilha com os artigos para processar.", "warning");
+        return;
+      }
+      // If we are altering a norm, ensure at least one article has original text
+      if (formData.tipoResolucao === "alteracao") {
+        const hasOriginalText = previewArticles.some(art => art.originalText?.trim());
+        if (!hasOriginalText) {
+           showToast("Aviso", "Para Alteração de Norma, a planilha deve conter o Texto Original.", "warning");
+           return;
+        }
+      } else {
+        // If it is a new norm, ensure at least one article has proposed text
+        const hasProposedText = previewArticles.some(art => art.proposedText?.trim());
+        if (!hasProposedText) {
+           showToast("Aviso", "Para Nova Norma, a planilha deve conter o Texto Proposto.", "warning");
+           return;
+        }
+      }
     }
-
-    const parsed = parseRawTextToArticles(formData.rawText);
-    setPreviewArticles(parsed);
+    
     setActiveView("create_step2");
   };
 
@@ -1644,6 +1824,46 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     }
   };
 
+  const handleMoveArticles = async () => {
+    if (!targetTomadaIdToMove || selectedArticlesToMove.length === 0) {
+      showToast("Aviso", "Selecione a participação de destino e ao menos um dispositivo.", "warning");
+      return;
+    }
+
+    setIsMovingArticles(true);
+    try {
+      const response = await fetch('/api/reg/articles/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleIds: selectedArticlesToMove,
+          targetTomadaId: targetTomadaIdToMove
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao mover dispositivos');
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        showToast("Sucesso", "Dispositivos movidos com sucesso.", "success");
+        // Remove moved articles from editArticles
+        setEditArticles(prev => prev.filter(a => !selectedArticlesToMove.includes(a.id as string | number)));
+        setSelectedArticlesToMove([]);
+        setIsMoveModalOpen(false);
+        setTargetTomadaIdToMove("");
+      } else {
+        throw new Error(data.message || 'Falha ao mover dispositivos');
+      }
+    } catch (error) {
+      console.error(error);
+      showToast("Erro", "Erro ao tentar mover os dispositivos.", "error");
+    } finally {
+      setIsMovingArticles(false);
+    }
+  };
+
   const handleOpenDeleteConfirm = (tomada: TomadaSubsidio, e: React.MouseEvent) => {
     e.stopPropagation();
     setDeletingTomada(tomada);
@@ -1689,6 +1909,83 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     setPublicContributionsView("minhas");
     
     setActiveView("public_view");
+  };
+
+  const handleOpenDuplicate = async (tomada: TomadaSubsidio, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDuplicateModalTomada(tomada);
+    setDuplicateMode("proposed");
+    try {
+      const res = await fetch(`/api/reg/participations/${tomada.id}/articles`);
+      if (res.ok) {
+        const data = await res.json();
+        setDuplicateArticles(data);
+        setDuplicateSelectedArticles(data.map((a: Article) => String(a.id)));
+      } else {
+        const local = articles.filter(a => String(a.tomadaId) === String(tomada.id));
+        setDuplicateArticles(local);
+        setDuplicateSelectedArticles(local.map((a: Article) => String(a.id)));
+      }
+    } catch (err) {
+      const local = articles.filter(a => String(a.tomadaId) === String(tomada.id));
+      setDuplicateArticles(local);
+      setDuplicateSelectedArticles(local.map((a: Article) => String(a.id)));
+    }
+  };
+
+  const handleConfirmDuplicate = async () => {
+    if (!duplicateModalTomada) return;
+    setIsDuplicating(true);
+    
+    const autoNumero = getNextSequentialNumber(duplicateModalTomada.meioParticipacao || "Consulta Pública", tomadas);
+    
+    const duplicateArticlesData = duplicateArticles
+      .filter(a => duplicateSelectedArticles.includes(String(a.id)))
+      .map(a => {
+        return {
+          ...a,
+          id: crypto.randomUUID(),
+          tomadaId: "",
+          proposedText: duplicateMode === "final" && a.finalText ? a.finalText : a.proposedText,
+          finalText: "", 
+        };
+      });
+
+    const newTomada = {
+      id: crypto.randomUUID(),
+      numero: autoNumero,
+      tipoResolucao: duplicateModalTomada.tipoResolucao,
+      meioParticipacao: duplicateModalTomada.meioParticipacao,
+      title: duplicateModalTomada.title + " (Cópia)",
+      objeto: duplicateModalTomada.objeto,
+      dataInicio: new Date().toISOString().split('T')[0],
+      dataFim: new Date().toISOString().split('T')[0],
+      createdAt: new Date().toISOString(),
+      anexos: duplicateModalTomada.anexos ? [...duplicateModalTomada.anexos] : [],
+      articles: duplicateArticlesData
+    };
+
+    newTomada.articles = newTomada.articles.map((a: any) => ({ ...a, tomadaId: newTomada.id }));
+
+    try {
+      const res = await fetch('/api/reg/tomadas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTomada)
+      });
+        
+      if (res.ok) {
+        setDuplicateModalTomada(null);
+        showToast("Sucesso", "Participação Social duplicada com sucesso!", "success");
+        fetchTomadas();
+      } else {
+        showToast("Erro", "Falha ao duplicar registro.", "error");
+      }
+    } catch (e) {
+      showToast("Erro", "Erro no servidor", "error");
+    } finally {
+      setIsDuplicating(false);
+    }
   };
 
   const handleAddContribution = (article: Article) => {
@@ -1909,15 +2206,15 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     }
   };
 
-  const handleUpdateAnalysis = async (contributionId: string | number, decision: string, complexity: string, technicalJustification: string) => {
+  const handleUpdateAnalysis = async (contributionId: string | number, decision: string, complexity: string, technicalJustification: string, notes?: string) => {
     try {
       const res = await fetch(`/api/reg/contributions/${contributionId}/analysis`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ decision, complexity, technicalJustification })
+        body: JSON.stringify({ decision, complexity, technicalJustification, notes })
       });
       if (res.ok) {
-        setContributions(prev => prev.map(c => c.id === contributionId ? { ...c, decision, complexity, technicalJustification } : c));
+        setContributions(prev => prev.map(c => String(c.id) === String(contributionId) ? { ...c, decision, complexity, technicalJustification, notes: notes !== undefined ? notes : c.notes } : c));
         showToast("Sucesso", "Análise atualizada com sucesso.", "success");
       } else {
         showToast("Erro", "Falha ao atualizar análise.", "error");
@@ -2310,81 +2607,145 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               </ul>
             )}
           </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Importar de Arquivo (Word/PDF)</label>
-            <p className="text-xs text-slate-400 mb-2">Selecione um arquivo Word ou PDF para extrair os artigos automaticamente antes de carregar na minuta.</p>
-            <div className="flex items-center gap-3 mb-4">
-              <input 
-                type="file" 
-                accept=".docx,.pdf"
-                className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-700 transition-all text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                onChange={e => {
-                  if (e.target.files && e.target.files.length > 0) {
-                    handleExtractText(e.target.files[0]);
-                    e.target.value = ''; // Reset input
-                  }
-                }}
-              />
-              {isExtractingText && <span className="text-xs text-indigo-600 font-bold animate-pulse flex items-center gap-2"><div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div> Extraindo...</span>}
+          <div className="pt-4 border-t border-slate-200">
+            <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-3">Modo de Inserção da Minuta</label>
+            <div className="flex items-center gap-4 mb-6">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="radio" 
+                  name="inputMode" 
+                  value="text" 
+                  checked={inputMode === "text"} 
+                  onChange={() => setInputMode("text")} 
+                  className="text-indigo-600 focus:ring-indigo-600 w-4 h-4"
+                />
+                <span className="text-sm font-bold text-slate-700">Texto Livre / Word / PDF</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="radio" 
+                  name="inputMode" 
+                  value="spreadsheet" 
+                  checked={inputMode === "spreadsheet"} 
+                  onChange={() => setInputMode("spreadsheet")} 
+                  className="text-indigo-600 focus:ring-indigo-600 w-4 h-4"
+                />
+                <span className="text-sm font-bold text-slate-700">Planilha (Excel / CSV)</span>
+              </label>
             </div>
 
-            {extractedArticles.length > 0 && (
-              <div className="mb-6 p-4 bg-white border border-indigo-100 rounded-xl shadow-sm">
-                <div className="flex items-center justify-between mb-3 border-b border-indigo-50 pb-2">
-                  <h4 className="text-sm font-bold text-indigo-900 flex items-center gap-2">
-                    <FileText size={16} className="text-indigo-600"/> Artigos Identificados ({extractedArticles.length})
-                  </h4>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-600 cursor-pointer"
-                        checked={selectedExtractedArticles.every(Boolean)}
-                        onChange={e => setSelectedExtractedArticles(extractedArticles.map(() => e.target.checked))}
-                      />
-                      Selecionar Todos
-                    </label>
-                    <button 
-                      onClick={handleLoadSelectedArticles}
-                      disabled={!selectedExtractedArticles.some(Boolean)}
-                      className="px-4 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Carregar Selecionados
-                    </button>
-                  </div>
+            {inputMode === "spreadsheet" && (
+              <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Importar de Planilha (Excel/CSV)</label>
+                <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+                  Carregue uma planilha contendo as colunas <strong className="text-indigo-700">Texto Original</strong> e <strong className="text-indigo-700">Texto Proposto</strong>. 
+                  Para Nova Norma, o Texto Proposto é obrigatório. Para Alteração, o Texto Original é obrigatório.
+                </p>
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="file" 
+                    accept=".xlsx,.xls,.csv"
+                    className="flex-1 px-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 transition-all text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-indigo-100 file:text-indigo-800 hover:file:bg-indigo-200 cursor-pointer"
+                    onChange={e => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        handleExtractSpreadsheet(e.target.files[0]);
+                      }
+                    }}
+                  />
+                  {isExtractingSpreadsheet && (
+                    <span className="text-xs text-indigo-600 font-bold animate-pulse flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div> Processando...
+                    </span>
+                  )}
                 </div>
-                <div className="max-h-64 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                  {extractedArticles.map((article, i) => (
-                    <label key={i} className="flex items-start gap-3 p-3 bg-slate-50 hover:bg-indigo-50/50 rounded-lg border border-slate-200 cursor-pointer transition-colors">
-                      <input 
-                        type="checkbox" 
-                        className="mt-1 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-600 cursor-pointer"
-                        checked={selectedExtractedArticles[i] || false}
-                        onChange={e => {
-                          const newSelected = [...selectedExtractedArticles];
-                          newSelected[i] = e.target.checked;
-                          setSelectedExtractedArticles(newSelected);
-                        }}
-                      />
-                      <div className="text-xs text-slate-700 line-clamp-3 leading-relaxed">
-                        <span className="font-bold text-slate-900 mr-2">{article.split('\n')[0]}</span>
-                        {article.substring(article.indexOf('\n') + 1)}
-                      </div>
-                    </label>
-                  ))}
-                </div>
+                {spreadsheetFileName && !isExtractingSpreadsheet && (
+                  <p className="text-xs text-emerald-600 font-bold mt-2 flex items-center gap-1">
+                    <Check size={14} /> Planilha {spreadsheetFileName} processada ({previewArticles.length} artigos extraídos).
+                  </p>
+                )}
               </div>
             )}
 
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Minuta da Resolução (Cole o texto completo)</label>
-            <p className="text-xs text-slate-400 mb-2">Cole o texto do SEI ou do Word, ou carregue do arquivo acima. O sistema identificará os artigos automaticamente.</p>
-            <textarea 
-              rows={15}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-700 transition-all whitespace-pre-wrap"
-              placeholder="Art. 1º Esta Norma de Referência estabelece..."
-              value={formData.rawText}
-              onChange={e => setFormData({ ...formData, rawText: e.target.value })}
-            />
+            {inputMode === "text" && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Importar de Arquivo (Word/PDF)</label>
+                  <p className="text-xs text-slate-400 mb-2">Selecione um arquivo Word ou PDF para extrair os artigos automaticamente antes de carregar na minuta.</p>
+                  <div className="flex items-center gap-3 mb-4">
+                    <input 
+                      type="file" 
+                      accept=".docx,.pdf"
+                      className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-700 transition-all text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+                      onChange={e => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          handleExtractText(e.target.files[0]);
+                          e.target.value = ''; // Reset input
+                        }
+                      }}
+                    />
+                    {isExtractingText && <span className="text-xs text-indigo-600 font-bold animate-pulse flex items-center gap-2"><div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div> Extraindo...</span>}
+                  </div>
+
+                  {extractedArticles.length > 0 && (
+                    <div className="mb-6 p-4 bg-white border border-indigo-100 rounded-xl shadow-sm">
+                      <div className="flex items-center justify-between mb-3 border-b border-indigo-50 pb-2">
+                        <h4 className="text-sm font-bold text-indigo-900 flex items-center gap-2">
+                          <FileText size={16} className="text-indigo-600"/> Artigos Identificados ({extractedArticles.length})
+                        </h4>
+                        <div className="flex items-center gap-4">
+                          <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-600 cursor-pointer"
+                              checked={selectedExtractedArticles.every(Boolean)}
+                              onChange={e => setSelectedExtractedArticles(extractedArticles.map(() => e.target.checked))}
+                            />
+                            Selecionar Todos
+                          </label>
+                          <button 
+                            onClick={handleLoadSelectedArticles}
+                            disabled={!selectedExtractedArticles.some(Boolean)}
+                            className="px-4 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Carregar Selecionados
+                          </button>
+                        </div>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                        {extractedArticles.map((article, i) => (
+                          <label key={i} className="flex items-start gap-3 p-3 bg-slate-50 hover:bg-indigo-50/50 rounded-lg border border-slate-200 cursor-pointer transition-colors">
+                            <input 
+                              type="checkbox" 
+                              className="mt-1 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-600 cursor-pointer"
+                              checked={selectedExtractedArticles[i] || false}
+                              onChange={e => {
+                                const newSelected = [...selectedExtractedArticles];
+                                newSelected[i] = e.target.checked;
+                                setSelectedExtractedArticles(newSelected);
+                              }}
+                            />
+                            <div className="text-xs text-slate-700 line-clamp-3 leading-relaxed">
+                              <span className="font-bold text-slate-900 mr-2">{article.split('\n')[0]}</span>
+                              {article.substring(article.indexOf('\n') + 1)}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Minuta da Resolução (Cole o texto completo)</label>
+                  <p className="text-xs text-slate-400 mb-2">Cole o texto do SEI ou do Word, ou carregue do arquivo acima. O sistema identificará os artigos automaticamente.</p>
+                  <textarea 
+                    rows={15}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-700 transition-all whitespace-pre-wrap"
+                    placeholder="Art. 1º Esta Norma de Referência estabelece..."
+                    value={formData.rawText}
+                    onChange={e => setFormData({ ...formData, rawText: e.target.value })}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -4603,6 +4964,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             handleUpdateAnalysis={handleUpdateAnalysis}
                             handleUpdateFinalAnalysis={handleUpdateFinalAnalysis}
                             handleDeleteArticle={handleDeleteAnalysisArticle}
+                            showToast={showToast}
                           />
                         </div>
                       );
@@ -7331,6 +7693,15 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             <Edit3 size={16} />
                           </button>
                         )}
+                        {canEditSubsidios && (
+                          <button 
+                            className="p-2 text-slate-400 hover:text-blue-500 transition-colors rounded-lg hover:bg-blue-50"
+                            onClick={(e) => handleOpenDuplicate(tomada, e)}
+                            title="Duplicar Participação Social"
+                          >
+                            <Copy size={16} />
+                          </button>
+                        )}
                         {canDeleteSubsidios && (
                           <button 
                             className="p-2 text-slate-400 hover:text-rose-500 transition-colors rounded-lg hover:bg-rose-50"
@@ -7527,25 +7898,36 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                     <p className="text-xs text-indigo-900 font-medium leading-relaxed">
                       Edite os textos propostos pela área técnica e vigentes para cada dispositivo da minuta da norma.
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextOrder = editArticles.length + 1;
-                        setEditArticles([
-                          ...editArticles,
-                          {
-                            id: `new_${Date.now()}`,
-                            tomadaId: editFormData.id,
-                            order: nextOrder,
-                            originalText: "",
-                            proposedText: `Art. ${nextOrder}º `
-                          }
-                        ]);
-                      }}
-                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-sm"
-                    >
-                      <PlusCircle size={15} /> Adicionar Artigo
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {selectedArticlesToMove.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setIsMoveModalOpen(true)}
+                          className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-sm"
+                        >
+                          <Move size={15} /> Mover Selecionados ({selectedArticlesToMove.length})
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextOrder = editArticles.length + 1;
+                          setEditArticles([
+                            ...editArticles,
+                            {
+                              id: `new_${Date.now()}`,
+                              tomadaId: editFormData.id,
+                              order: nextOrder,
+                              originalText: "",
+                              proposedText: `Art. ${nextOrder}º `
+                            }
+                          ]);
+                        }}
+                        className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-sm"
+                      >
+                        <PlusCircle size={15} /> Adicionar Artigo
+                      </button>
+                    </div>
                   </div>
 
                   {editArticles.length === 0 ? (
@@ -7554,11 +7936,28 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                     </div>
                   ) : (
                     editArticles.map((art, idx) => (
-                      <div key={art.id || idx} className="bg-slate-50/90 rounded-2xl border border-slate-200 p-5 space-y-3.5 relative group shadow-sm hover:border-indigo-200 transition-colors">
+                      <div key={art.id || idx} className={cn("bg-slate-50/90 rounded-2xl border p-5 space-y-3.5 relative group shadow-sm hover:border-indigo-200 transition-colors", selectedArticlesToMove.includes(art.id as string | number) ? "border-amber-400 bg-amber-50/50" : "border-slate-200")}>
                         <div className="flex items-center justify-between flex-wrap gap-2">
-                          <span className="text-xs font-black uppercase text-indigo-700 bg-white px-2.5 py-1 rounded-lg border border-indigo-100 shadow-xs">
-                            Dispositivo #{idx + 1}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {art.id && !String(art.id).startsWith("new_") && (
+                              <input
+                                type="checkbox"
+                                checked={selectedArticlesToMove.includes(art.id as string | number)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedArticlesToMove(prev => [...prev, art.id as string | number]);
+                                  } else {
+                                    setSelectedArticlesToMove(prev => prev.filter(id => id !== art.id));
+                                  }
+                                }}
+                                className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                                title="Selecionar para mover"
+                              />
+                            )}
+                            <span className="text-xs font-black uppercase text-indigo-700 bg-white px-2.5 py-1 rounded-lg border border-indigo-100 shadow-xs">
+                              Dispositivo #{idx + 1}
+                            </span>
+                          </div>
                           
                           <div className="flex items-center gap-1 sm:gap-2">
                             <button
@@ -7741,13 +8140,16 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           <div className={cn("grid gap-4", editFormData.tipoResolucao === "alteracao" ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1")}>
                             {editFormData.tipoResolucao === "alteracao" && (
                               <div className="space-y-1.5">
-                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                                  Texto Vigente / Anterior (Opcional)
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                                  <span>Texto Vigente / Anterior (Opcional)</span>
+                                  {!art.originalText?.trim() && (
+                                    <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded uppercase font-black tracking-widest">Acréscimo / Novo</span>
+                                  )}
                                 </label>
                                 <textarea
                                   rows={14}
                                   className="w-full bg-white px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-700 focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all font-mono leading-relaxed resize-y"
-                                  placeholder="Texto anterior ou vigente da norma (se houver alteração)..."
+                                  placeholder="Deixe em branco se for a INCLUSÃO de um novo artigo (Acréscimo)..."
                                   value={art.originalText || ""}
                                   onChange={(e) => {
                                     const val = e.target.value;
@@ -7895,6 +8297,194 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                   {isSubmittingEdit ? "Salvando..." : "Salvar Alterações"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Movimentação de Dispositivos */}
+      {isMoveModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[99999] animate-fadeIn" style={{ zIndex: 99999 }}>
+          <div className="bg-white rounded-2xl border border-amber-100 shadow-2xl max-w-md w-full flex flex-col p-6 space-y-4">
+            <div className="flex items-center gap-3 text-amber-600">
+              <Move size={24} />
+              <h3 className="text-lg font-black text-slate-800">Mover Dispositivos</h3>
+            </div>
+            
+            <p className="text-sm text-slate-600 leading-relaxed">
+              Você está prestes a mover <strong>{selectedArticlesToMove.length}</strong> dispositivo(s) para outra Participação Social.
+            </p>
+            
+            <div className="bg-rose-50 border border-rose-200 p-4 rounded-xl flex items-start gap-3">
+              <AlertCircle className="text-rose-600 shrink-0 mt-0.5" size={18} />
+              <div className="text-xs text-rose-800 space-y-1">
+                <p className="font-bold">Atenção!</p>
+                <p>
+                  Ao mover os dispositivos selecionados para outra Participação Social, <strong>todas as contribuições recebidas, anotações, pareceres e a redação final também serão movidos permanentemente.</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                Selecione a Participação de Destino:
+              </label>
+              <select
+                value={targetTomadaIdToMove}
+                onChange={(e) => setTargetTomadaIdToMove(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm text-slate-700 bg-white"
+              >
+                <option value="">Selecione...</option>
+                {tomadas
+                  .filter(t => t.id !== editFormData.id)
+                  .map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.numero ? `${t.numero} - ` : ""}{t.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsMoveModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                disabled={isMovingArticles}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleMoveArticles}
+                disabled={!targetTomadaIdToMove || isMovingArticles}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {isMovingArticles ? "Movendo..." : "Confirmar Movimentação"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Duplicação */}
+      {duplicateModalTomada && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[99999] animate-fadeIn" style={{ zIndex: 99999 }}>
+          <div className="bg-white rounded-2xl border border-blue-100 shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
+                  <Copy size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 tracking-tight">Duplicar Participação Social</h3>
+                  <p className="text-xs text-slate-500">{duplicateModalTomada.numero}</p>
+                </div>
+              </div>
+              <button onClick={() => setDuplicateModalTomada(null)} className="text-slate-400 hover:text-slate-600 p-2">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-5 grow">
+              <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                <p className="text-sm font-bold text-slate-800 mb-3">Opções de Duplicação</p>
+                <div className="space-y-2">
+                  <label className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-white transition-colors">
+                    <input 
+                      type="radio" 
+                      name="dupmode" 
+                      checked={duplicateMode === "proposed"}
+                      onChange={() => setDuplicateMode("proposed")}
+                      className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-slate-800">Duplicar como foi proposto originalmente</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">Mantém o texto original e o texto proposto. (Ignora textos finais)</div>
+                    </div>
+                  </label>
+                  <label className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-white transition-colors">
+                    <input 
+                      type="radio" 
+                      name="dupmode" 
+                      checked={duplicateMode === "final"}
+                      onChange={() => setDuplicateMode("final")}
+                      className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-slate-800">Utilizar o Texto Final como nova Proposta</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">O Texto Final aprovado nesta participação será carregado como o Texto Proposto na nova. O Texto Original original será mantido.</div>
+                    </div>
+                  </label>
+                </div>
+                <p className="text-[11px] font-medium text-rose-600 mt-3 flex items-center gap-1.5">
+                  <Info size={14} /> As contribuições recebidas não serão duplicadas.
+                </p>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-bold text-slate-800">Selecione os artigos para duplicar</p>
+                  <button 
+                    onClick={() => {
+                      if (duplicateSelectedArticles.length === duplicateArticles.length) {
+                        setDuplicateSelectedArticles([]);
+                      } else {
+                        setDuplicateSelectedArticles(duplicateArticles.map(a => String(a.id)));
+                      }
+                    }}
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-800"
+                  >
+                    {duplicateSelectedArticles.length === duplicateArticles.length ? "Desmarcar Todos" : "Marcar Todos"}
+                  </button>
+                </div>
+                <div className="space-y-2 border border-slate-200 rounded-xl max-h-60 overflow-y-auto p-2 bg-slate-50">
+                  {duplicateArticles.length === 0 ? (
+                    <p className="text-xs text-slate-500 text-center py-4">Nenhum artigo encontrado.</p>
+                  ) : (
+                    duplicateArticles.map(art => (
+                      <label key={art.id} className="flex items-start gap-2 p-2 hover:bg-white rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={duplicateSelectedArticles.includes(String(art.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setDuplicateSelectedArticles(prev => [...prev, String(art.id)]);
+                            } else {
+                              setDuplicateSelectedArticles(prev => prev.filter(id => id !== String(art.id)));
+                            }
+                          }}
+                          className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="flex-1">
+                          <div className="text-xs font-bold text-slate-800">{art.label || `Ordem ${art.order}`}</div>
+                          <div className="text-[10px] text-slate-500 line-clamp-1">{art.proposedText || art.originalText || "Sem texto"}</div>
+                        </div>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50 rounded-b-2xl shrink-0">
+              <button
+                type="button"
+                onClick={() => setDuplicateModalTomada(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-xl transition-colors"
+                disabled={isDuplicating}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDuplicate}
+                disabled={isDuplicating || duplicateSelectedArticles.length === 0}
+                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all disabled:opacity-50"
+              >
+                <Copy size={16} />
+                {isDuplicating ? "Duplicando..." : "Confirmar Duplicação"}
+              </button>
             </div>
           </div>
         </div>
