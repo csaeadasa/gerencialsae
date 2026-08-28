@@ -196,6 +196,12 @@ interface TechnicalAnalysisArticleProps {
   article: Article;
   tipoResolucao?: "nova" | "alteracao";
   contributions: Contribution[];
+  filters?: {
+    complexity: string;
+    decision: string;
+    participant: string;
+    content: string;
+  };
   handleUpdateAnalysis: (contributionId: string | number, decision: string, complexity: string, technicalJustification: string, notes?: string) => void;
   handleUpdateFinalAnalysis: (articleId: string | number, finalText: string, finalJustification: string) => void;
   handleDeleteArticle?: (articleId: string | number, hasContributions: boolean) => void;
@@ -503,12 +509,25 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
   );
 };
 
-const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ article, tipoResolucao, contributions, handleUpdateAnalysis, handleUpdateFinalAnalysis, handleDeleteArticle, showToast }) => {
+const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ article, tipoResolucao, contributions, filters, handleUpdateAnalysis, handleUpdateFinalAnalysis, handleDeleteArticle, showToast }) => {
   const [finalText, setFinalText] = useState(article.finalText || "");
   const [finalJustification, setFinalJustification] = useState(article.finalJustification || "");
   const [isEditing, setIsEditing] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [repeatProposed, setRepeatProposed] = useState(false);
+
+  const displayedContributions = React.useMemo(() => {
+    return contributions.filter(c => {
+      if (filters?.complexity && filters.complexity !== "todos" && (c.complexity || "Não Classificado") !== filters.complexity) return false;
+      if (filters?.decision && filters.decision !== "todos" && (c.decision || "Pendente") !== filters.decision) return false;
+      if (filters?.participant && filters.participant !== "todos" && c.authorName !== filters.participant) return false;
+      if (filters?.content && filters.content.trim()) {
+        const search = filters.content.toLowerCase();
+        if (!c.proposedText.toLowerCase().includes(search) && !(c.justification && c.justification.toLowerCase().includes(search))) return false;
+      }
+      return true;
+    });
+  }, [contributions, filters]);
 
   const prevContributionsRef = React.useRef<string>("");
 
@@ -654,15 +673,15 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
       {/* Lista de Contribuições */}
       <div className="p-4 space-y-4">
         <div className="inline-flex items-center mb-1 bg-slate-200/70 px-3.5 py-2 rounded-lg">
-          <h5 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-0">Contribuições Recebidas ({contributions.length})</h5>
+          <h5 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-0">Contribuições ({displayedContributions.length}{contributions.length !== displayedContributions.length ? ` de ${contributions.length}` : ""})</h5>
         </div>
         
-        {contributions.length === 0 ? (
+        {displayedContributions.length === 0 ? (
           <div className="text-center p-6 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-xs text-slate-500 italic">
-            Nenhuma contribuição recebida para este dispositivo.
+            Nenhuma contribuição encontrada com os filtros atuais.
           </div>
         ) : (
-          contributions.map(c => (
+          displayedContributions.map(c => (
             <ContributionAnalysisItem 
               key={c.id} 
               c={c} 
@@ -1347,6 +1366,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [justification, setJustification] = useState("");
   const [contributeArticleFilter, setContributeArticleFilter] = useState<"todos" | "com_contribuicao" | "sem_contribuicao">("todos");
   const [analysisArticleFilter, setAnalysisArticleFilter] = useState<"todos" | "analisados" | "pendentes">("todos");
+  const [analysisDeviceFilter, setAnalysisDeviceFilter] = useState<string>("todos");
+  const [analysisComplexityFilter, setAnalysisComplexityFilter] = useState<string>("todos");
+  const [analysisDecisionFilter, setAnalysisDecisionFilter] = useState<string>("todos");
+  const [analysisParticipantFilter, setAnalysisParticipantFilter] = useState<string>("todos");
+  const [analysisContentFilter, setAnalysisContentFilter] = useState<string>("");
   const [expandedUserContribs, setExpandedUserContribs] = useState<Record<string, boolean>>({});
   const [sessionContribArticleIds, setSessionContribArticleIds] = useState<string[]>(() => {
     try {
@@ -4856,11 +4880,33 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
               const filteredAnalysisArticles = currentArticles.filter(art => {
                 const artsContribs = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
-                if (analysisArticleFilter === "todos") return true;
-                if (artsContribs.length === 0) return false;
-                const isFullyAnalyzed = artsContribs.every(c => c.decision);
-                if (analysisArticleFilter === "analisados") return isFullyAnalyzed;
-                if (analysisArticleFilter === "pendentes") return !isFullyAnalyzed;
+                
+                // Filtro de Dispositivo
+                if (analysisDeviceFilter !== "todos" && String(art.id) !== analysisDeviceFilter) return false;
+
+                // Filtros avançados nas contribuições
+                const matchesAdvancedFilters = artsContribs.some(c => {
+                  if (analysisComplexityFilter !== "todos" && (c.complexity || "Não Classificado") !== analysisComplexityFilter) return false;
+                  if (analysisDecisionFilter !== "todos" && (c.decision || "Pendente") !== analysisDecisionFilter) return false;
+                  if (analysisParticipantFilter !== "todos" && c.authorName !== analysisParticipantFilter) return false;
+                  if (analysisContentFilter.trim()) {
+                    const search = analysisContentFilter.toLowerCase();
+                    if (!c.proposedText.toLowerCase().includes(search) && !(c.justification && c.justification.toLowerCase().includes(search))) return false;
+                  }
+                  return true;
+                });
+
+                const hasAdvancedFilters = analysisComplexityFilter !== "todos" || analysisDecisionFilter !== "todos" || analysisParticipantFilter !== "todos" || analysisContentFilter.trim() !== "";
+                
+                if (hasAdvancedFilters && !matchesAdvancedFilters) return false;
+
+                if (analysisArticleFilter !== "todos") {
+                  if (artsContribs.length === 0) return false;
+                  const isFullyAnalyzed = artsContribs.every(c => c.decision);
+                  if (analysisArticleFilter === "analisados" && !isFullyAnalyzed) return false;
+                  if (analysisArticleFilter === "pendentes" && isFullyAnalyzed) return false;
+                }
+                
                 return true;
               });
 
@@ -4948,6 +4994,86 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                     </div>
                   </div>
 
+                  {/* Filtros Avançados */}
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Search size={16} className="text-slate-400" />
+                      <span className="text-xs font-black uppercase tracking-wider text-slate-500">Filtros Avançados das Contribuições</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                      {/* Dispositivo */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Dispositivo</label>
+                        <select 
+                          value={analysisDeviceFilter}
+                          onChange={(e) => setAnalysisDeviceFilter(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 transition-all text-xs text-slate-700"
+                        >
+                          <option value="todos">Todos</option>
+                          {currentArticles.map((art, idx) => {
+                            return <option key={art.id} value={art.id}>Dispositivo #{idx + 1}</option>;
+                          })}
+                        </select>
+                      </div>
+                      {/* Conteúdo */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Conteúdo</label>
+                        <input 
+                          type="text" 
+                          placeholder="Buscar termo..."
+                          value={analysisContentFilter}
+                          onChange={(e) => setAnalysisContentFilter(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 transition-all text-xs text-slate-700"
+                        />
+                      </div>
+                      {/* Complexidade */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Complexidade</label>
+                        <select 
+                          value={analysisComplexityFilter}
+                          onChange={(e) => setAnalysisComplexityFilter(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 transition-all text-xs text-slate-700"
+                        >
+                          <option value="todos">Todas</option>
+                          <option value="Baixa">Baixa</option>
+                          <option value="Média">Média</option>
+                          <option value="Alta">Alta</option>
+                        </select>
+                      </div>
+                      {/* Parecer */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Parecer</label>
+                        <select 
+                          value={analysisDecisionFilter}
+                          onChange={(e) => setAnalysisDecisionFilter(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 transition-all text-xs text-slate-700"
+                        >
+                          <option value="todos">Todos</option>
+                          <option value="Acatada">Acatada</option>
+                          <option value="Parcialmente Acatada">Parcialmente Acatada</option>
+                          <option value="Não Acatada">Não Acatada</option>
+                          <option value="Prejudicada">Prejudicada</option>
+                          <option value="Retida para Estudos Adicionais">Retida para Estudos Adicionais</option>
+                          <option value="Pendente">Pendente</option>
+                        </select>
+                      </div>
+                      {/* Participante */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Participante</label>
+                        <select 
+                          value={analysisParticipantFilter}
+                          onChange={(e) => setAnalysisParticipantFilter(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 transition-all text-xs text-slate-700"
+                        >
+                          <option value="todos">Todos</option>
+                          {Array.from(new Set(tomadaContributions.map(c => c.authorName))).map(name => (
+                            <option key={name} value={name}>{name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     {filteredAnalysisArticles.map((art, index) => {
                       const artsContribs = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
@@ -4961,6 +5087,12 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             article={art}
                             tipoResolucao={selectedTomada?.tipoResolucao}
                             contributions={artsContribs}
+                            filters={{
+                              complexity: analysisComplexityFilter,
+                              decision: analysisDecisionFilter,
+                              participant: analysisParticipantFilter,
+                              content: analysisContentFilter
+                            }}
                             handleUpdateAnalysis={handleUpdateAnalysis}
                             handleUpdateFinalAnalysis={handleUpdateFinalAnalysis}
                             handleDeleteArticle={handleDeleteAnalysisArticle}
