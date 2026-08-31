@@ -108,9 +108,14 @@ export function MapTab({ systemSaldoData, systemSaldoDataAllYears, availableYear
       let projectData = null;
       try {
         const res = await fetch(`/api/load-geojson?waterBalanceId=${waterBalanceId}`);
-        const contentType = res.headers.get("content-type");
-        if (res.ok && contentType && contentType.includes("application/json")) {
-          projectData = await res.json();
+        if (res.ok) {
+          const contentType = res.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const data = await res.json();
+            if (data && typeof data === "object" && !data.error) {
+              projectData = data;
+            }
+          }
         }
       } catch (e) {
         console.error("No default map found", e);

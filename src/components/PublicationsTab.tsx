@@ -313,9 +313,9 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
   return (
     <div className="space-y-6 w-full px-4 sm:px-6 lg:px-8 py-6" id="publications-tab-root">
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-indigo-800 rounded-3xl p-6 md:p-8 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="bg-gradient-to-r from-adasa-dark to-adasa-mid rounded-3xl p-6 md:p-8 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/15 backdrop-blur-md rounded-full text-xs font-black uppercase tracking-wider text-blue-200">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/15 backdrop-blur-md rounded-full text-xs font-black uppercase tracking-wider text-blue-100">
             <BookOpen size={12} />
             Publicações ADASA
           </div>
@@ -337,7 +337,7 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
           </button>
           <button
             onClick={handleOpenNew}
-            className="px-4 py-2.5 bg-white text-indigo-700 hover:bg-indigo-50 font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center gap-2"
+            className="px-4 py-2.5 bg-white text-adasa-dark hover:bg-slate-50 font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center gap-2"
           >
             <Plus size={16} />
             Nova Publicação

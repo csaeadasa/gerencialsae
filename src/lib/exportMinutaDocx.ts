@@ -67,7 +67,7 @@ export interface ExportMinutaDocxOptions {
 export function isChapterOrSectionHeader(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
-  return /^(CAP[ÍI]TULO|T[ÍI]TULO|SE[ÇC][ÃA]O|SUBSE[ÇC][ÃA]O|LIVRO)\s+([IVXLCDM0-9]+|ÚNICO|UNICO)(\s*[\-\–\—\:]\s*.*|\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ\s\-\–\—\:\,\.]+)?$/i.test(trimmed);
+  return /^(CAP[ÍI]TULO|T[ÍI]TULO|SE[ÇC][ÃA]O|SUBSE[ÇC][ÃA]O|LIVRO|ANEXO)\s+([IVXLCDM0-9]+|ÚNICO|UNICO)(\s*[\-\–\—\:]\s*.*|\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ\s\-\–\—\:\,\.]+)?$/i.test(trimmed);
 }
 
 export function isChapterSubtitle(line: string): boolean {
@@ -78,7 +78,7 @@ export function isChapterSubtitle(line: string): boolean {
 
 export function parseNormativePrefix(trimmed: string): { prefix: string; rest: string } | null {
   const artMatch = trimmed.match(
-    /^(“?\s*Art\.\s*[0-9]+[ºA-Za-z\.\-_]*\s*[\.-]?|“?\s*\§\s*[0-9]+[ºA-Za-z\.\-_]*\s*[\.-]?|“?\s*Parágrafo\s+único[\.-]?|“?\s*[IVXLCDM]+\s*[\.-]|“?\s*[a-z]\)\s*)/i
+    /^(“?\s*Art\.\s*[0-9]+[ºA-Za-z\.\-_]*\s*[\.-]?|“?\s*\§\s*[0-9]+[ºA-Za-z\.\-_]*\s*[\.-]?|“?\s*Parágrafo\s+único[\.-]?|“?\s*[IVXLCDM]+\s*[\.-]|“?\s*[a-z]\)\s*|“?\s*(?:Item\s+)?\d+(?:\.\d+)+(?:\s*[\.\-–—\)]|\s+)|“?\s*(?:Item\s+)?\d+[\.\-–—\)]\s+)/i
   );
   if (artMatch) {
     return {

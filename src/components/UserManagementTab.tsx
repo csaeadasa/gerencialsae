@@ -439,7 +439,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
     },
     {
       category: 'Participação Social',
-      modules: ['reg_subsidios', 'reg_subsidios_painel', 'reg_subsidios_portal', 'reg_subsidios_analise', 'reg_subsidios_minuta']
+      modules: ['reg_subsidios', 'reg_subsidios_painel', 'reg_subsidios_portal', 'reg_subsidios_oral', 'reg_subsidios_analise', 'reg_subsidios_minuta']
     },
     {
       category: 'Publicações',
@@ -485,6 +485,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
     reg_subsidios: 'Cadastrar Participação Social',
     reg_subsidios_painel: 'Painel da Participação Social',
     reg_subsidios_portal: 'Portal de Contribuições Públicas',
+    reg_subsidios_oral: 'Manifestação Oral e Presencial (Audiência / Ofício)',
     reg_subsidios_analise: 'Análise Técnica de Contribuições',
     reg_subsidios_minuta: 'Minuta Consolidada da Norma',
     pub_cadastro: 'Cadastrar Publicações',

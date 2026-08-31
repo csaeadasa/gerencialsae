@@ -1,15 +1,155 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Plus, Edit3, Trash2, Check, X, FileText, MessageSquare, Save, ArrowLeft, ArrowRight, CornerDownRight, Search, ArrowUpDown, ArrowUp, ArrowDown, Users, Lock, AlertTriangle, AlertCircle, RefreshCw, FileCode, PlusCircle, Wrench, Paperclip, Upload, CheckCircle2, ChevronDown, ChevronUp, CheckCircle, Eye, EyeOff, Columns, Sparkles, BarChart2, PieChart as PieChartIcon, FileSpreadsheet, Download, ScrollText, Copy, Printer, CheckCheck, RotateCcw, Table as TableIcon, FileCheck, Info, Move } from "lucide-react";
+import { Plus, Tag, Edit3, Trash2, Check, X, FileText, MessageSquare, Save, ArrowLeft, ArrowRight, CornerDownRight, Search, ArrowUpDown, ArrowUp, ArrowDown, Users, Lock, AlertTriangle, AlertCircle, RefreshCw, FileCode, PlusCircle, Wrench, Paperclip, Upload, CheckCircle2, ChevronDown, ChevronUp, CheckCircle, Eye, EyeOff, Columns, Sparkles, BarChart2, PieChart as PieChartIcon, FileSpreadsheet, Download, ScrollText, Copy, Printer, CheckCheck, RotateCcw, Table as TableIcon, FileCheck, Info, Move, List, Ban, Layers, FolderTree, Hash, Mic, Building, Mail, ShieldAlert, ShieldCheck } from "lucide-react";
 import * as XLSX from "xlsx";
 import * as diff from "diff";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { cn } from "../lib/utils";
 import { useAuth } from "../lib/auth";
 import { RegulatoryTableEditor } from "./RegulatoryTableEditor";
+import { SubjectPickerModal } from "./SubjectPickerModal";
 import { RegulatoryTableView } from "./RegulatoryTableView";
 import { TableModalPreview } from "./TableModalPreview";
 import { RegulatoryTable, isTableJson, parseTableData, serializeTableData, DEFAULT_TABLE_TEMPLATES, formatContentForExport, formatContentForPdf } from "../lib/tableStructure";
 import { generateMinutaDocxBlob, isChapterOrSectionHeader, isChapterSubtitle, parseNormativePrefix } from "../lib/exportMinutaDocx";
+
+
+
+export interface DispositivoInfo {
+  type: "artigo" | "anexo" | "decimal_item" | "preambulo" | "outro";
+  label: string;
+  sublabel: string;
+  depth: number;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+  itemNumber?: string;
+  isAnnexOrDecimal: boolean;
+}
+
+export function getDispositivoInfo(text: string, defaultIndex: number = 1): DispositivoInfo {
+  if (!text) {
+    return {
+      type: "outro",
+      label: `DISPOSITIVO #${defaultIndex}`,
+      sublabel: `Dispositivo #${defaultIndex}`,
+      depth: 0,
+      badgeBg: "bg-slate-800",
+      badgeText: "text-white",
+      badgeBorder: "border-slate-700",
+      isAnnexOrDecimal: false,
+    };
+  }
+
+  const clean = text.replace(/^["'‚Äú\s]+/, "").trim();
+  const firstLine = clean.split("\n")[0].trim();
+
+  // 1. Artigo
+  const artMatch = firstLine.match(/^Art(?:igo)?\.?\s*([0-9]+(?:[¬∫¬™])?(?:[-_]?[A-Za-z]{1,3})?(?:[¬∫¬™])?)/i);
+  if (artMatch && artMatch[1]) {
+    const rawNum = artMatch[1].trim();
+    return {
+      type: "artigo",
+      label: `DISPOSITIVO #${defaultIndex}`,
+      sublabel: `Artigo da Norma ‚Ä¢ Disp. #${defaultIndex}`,
+      depth: 0,
+      badgeBg: "bg-blue-600",
+      badgeText: "text-white",
+      badgeBorder: "border-blue-500",
+      isAnnexOrDecimal: false,
+    };
+  }
+
+  // 2. Anexo
+  const anexoMatch = firstLine.match(/^(?:ANEXO|Anexo)\s+([IVXLCDM\d]+|√öNICO|UNICO)/i);
+  if (anexoMatch && anexoMatch[1]) {
+    const rawAnexo = anexoMatch[1].toUpperCase();
+    return {
+      type: "anexo",
+      label: `DISPOSITIVO #${defaultIndex}`,
+      sublabel: `Anexo T√©cnico ‚Ä¢ Disp. #${defaultIndex}`,
+      depth: 0,
+      badgeBg: "bg-purple-700",
+      badgeText: "text-white",
+      badgeBorder: "border-purple-600",
+      isAnnexOrDecimal: true,
+    };
+  }
+
+  // 3. Decimal hierarchical item (e.g. 1.1.1, 1.1, 1., Item 1.1)
+  const decimalMatch = firstLine.match(/^(?:Item\s+)?(\d+(?:\.\d+)*)(?:[\.\-‚Äì‚Äî\)]|\s+|$)/i);
+  if (decimalMatch && decimalMatch[1]) {
+    const num = decimalMatch[1];
+    const depth = num.split(".").length;
+    
+    let badgeBg = "bg-teal-800";
+    if (depth === 2) badgeBg = "bg-emerald-700";
+    else if (depth === 3) badgeBg = "bg-cyan-700";
+    else if (depth >= 4) badgeBg = "bg-sky-700";
+
+    return {
+      type: "decimal_item",
+      label: `DISPOSITIVO #${defaultIndex}`,
+      sublabel: `Estrutura Decimal ‚Ä¢ N√≠vel ${depth} (Anexo/Manual)`,
+      depth,
+      badgeBg,
+      badgeText: "text-white",
+      badgeBorder: "border-teal-500",
+      itemNumber: num,
+      isAnnexOrDecimal: true,
+    };
+  }
+
+  // 4. Pre√¢mbulo / Ementa
+  if (defaultIndex === 1 && (firstLine.toUpperCase().startsWith("RESOLU√á√ÉO") || firstLine.toUpperCase().startsWith("PORTARIA") || firstLine.toUpperCase().startsWith("A DIRETORIA"))) {
+    return {
+      type: "preambulo",
+      label: `DISPOSITIVO #${defaultIndex}`,
+      sublabel: `Dispositivo #${defaultIndex}`,
+      depth: 0,
+      badgeBg: "bg-indigo-900",
+      badgeText: "text-white",
+      badgeBorder: "border-indigo-800",
+      isAnnexOrDecimal: false,
+    };
+  }
+
+  return {
+    type: "outro",
+    label: `DISPOSITIVO #${defaultIndex}`,
+    sublabel: `Dispositivo #${defaultIndex}`,
+    depth: 0,
+    badgeBg: "bg-slate-800",
+    badgeText: "text-white",
+    badgeBorder: "border-slate-700",
+    isAnnexOrDecimal: false,
+  };
+}
+
+export function formatSuppressedDevice(text: string, defaultIndex: number = 1): string {
+  const clean = (text || "").trim();
+  const firstLine = clean.split("\n")[0].trim();
+
+  if (/\((?:suprimido|revogado)\)/i.test(clean)) {
+    return clean;
+  }
+
+  const artMatch = firstLine.match(/^(Art(?:igo)?\.?\s*[0-9]+(?:[¬∫¬™])?(?:[-_]?[A-Za-z]{1,3})?(?:[¬∫¬™])?)/i);
+  if (artMatch && artMatch[1]) {
+    return `${artMatch[1].trim()} - (Revogado)`;
+  }
+
+  const decimalMatch = firstLine.match(/^(?:Item\s+)?(\d+(?:\.\d+)*)/i);
+  if (decimalMatch && decimalMatch[1]) {
+    return `${decimalMatch[1]} - (Suprimido)`;
+  }
+
+  const parMatch = firstLine.match(/^(¬ß\s*\d+¬∫?|Par√°grafo\s+√∫nico|[IVXLCDM]+\s*[-‚Äì‚Äî]|[a-z]\))/i);
+  if (parMatch && parMatch[1]) {
+    return `${parMatch[1].trim()} - (Revogado)`;
+  }
+
+  return `Dispositivo #${defaultIndex} - (Suprimido)`;
+}
 
 
 export const getSmartDiff = (oldText: string, newText: string) => {
@@ -110,6 +250,7 @@ export interface TomadaSubsidio {
   dataFim: string;
   createdAt: string;
   anexos?: { id: string | number; name: string; url: string }[];
+  subjects?: { id: string; name: string }[];
 }
 
 export interface Article {
@@ -121,6 +262,7 @@ export interface Article {
   proposedText?: string;
   finalText?: string;
   finalJustification?: string;
+  subjectIds?: string[];
 }
 
 export interface Contribution {
@@ -129,6 +271,11 @@ export interface Contribution {
   userId?: string | number | null;
   authorName: string;
   authorEmail?: string;
+  authorInstitution?: string;
+  originType?: 'online' | 'oral' | 'documental' | 'email' | string;
+  protocolNumber?: string;
+  registeredById?: string | number | null;
+  registeredByName?: string;
   proposedText: string;
   justification: string;
   decision?: string;
@@ -194,6 +341,8 @@ export const renderDiffInline = (originalText?: string, proposedText?: string, a
 
 interface TechnicalAnalysisArticleProps {
   article: Article;
+  articleIndex?: number;
+  subjects?: { id: string; name: string }[];
   tipoResolucao?: "nova" | "alteracao";
   contributions: Contribution[];
   filters?: {
@@ -282,11 +431,50 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
   return (
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
       <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-black">
-            {c.authorName.charAt(0).toUpperCase()}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className={cn(
+            "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black shrink-0",
+            c.originType === 'oral' ? "bg-purple-100 text-purple-800" :
+            c.originType === 'documental' ? "bg-amber-100 text-amber-800" :
+            c.originType === 'email' ? "bg-sky-100 text-sky-800" : "bg-indigo-100 text-indigo-700"
+          )}>
+            {c.originType === 'oral' ? <Mic size={13} /> : (c.authorName || "P").charAt(0).toUpperCase()}
           </div>
-          <span className="text-xs font-bold text-slate-700">{c.authorName}</span>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-slate-800">{c.authorName}</span>
+              {c.originType === 'oral' ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200">
+                  <Mic size={10} /> Manifesta√ß√£o Oral (Audi√™ncia)
+                </span>
+              ) : c.originType === 'documental' ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                  <FileText size={10} /> Of√≠cio / Doc. Presencial
+                </span>
+              ) : c.originType === 'email' ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200">
+                  <Mail size={10} /> E-mail / Ouvidoria
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  üíª Portal Online
+                </span>
+              )}
+            </div>
+            {(c.authorInstitution || c.protocolNumber || c.registeredByName) && (
+              <div className="flex items-center gap-2 text-[10px] text-slate-500 font-medium mt-0.5 flex-wrap">
+                {c.authorInstitution && (
+                  <span className="flex items-center gap-1"><Building size={10} /> {c.authorInstitution}</span>
+                )}
+                {c.protocolNumber && (
+                  <span className="bg-slate-200/80 px-1.5 py-0.2 rounded text-slate-700 font-bold">Ref: {c.protocolNumber}</span>
+                )}
+                {c.registeredByName && (
+                  <span className="text-slate-400 italic">Cadastrado por: {c.registeredByName}</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-4 flex-1 justify-end">
           <button 
@@ -509,12 +697,26 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
   );
 };
 
-const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ article, tipoResolucao, contributions, filters, handleUpdateAnalysis, handleUpdateFinalAnalysis, handleDeleteArticle, showToast }) => {
+const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ 
+  article, 
+  articleIndex,
+  subjects,
+  tipoResolucao, 
+  contributions, 
+  filters, 
+  handleUpdateAnalysis, 
+  handleUpdateFinalAnalysis, 
+  handleDeleteArticle, 
+  showToast 
+}) => {
   const [finalText, setFinalText] = useState(article.finalText || "");
   const [finalJustification, setFinalJustification] = useState(article.finalJustification || "");
   const [isEditing, setIsEditing] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [repeatProposed, setRepeatProposed] = useState(false);
+
+  const displayIndex = articleIndex !== undefined ? articleIndex : (article.order !== undefined ? article.order + 1 : 1);
+  const dispInfo = getDispositivoInfo(article.proposedText || article.originalText || "", displayIndex);
 
   const displayedContributions = React.useMemo(() => {
     return contributions.filter(c => {
@@ -616,6 +818,61 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
       {/* Cabe√ßalho do Dispositivo */}
       <div className={cn("border-b p-4 flex flex-col md:flex-row md:items-start justify-between gap-4", isFullyAnalyzed ? "bg-emerald-50/50 border-emerald-100" : "bg-slate-50 border-slate-200")}>
         <div className="flex-1 space-y-4">
+          {/* Box de Identifica√ß√£o e Assunto do Dispositivo com Suporte Hier√°rquico e Anexos */}
+          <div className="bg-adasa-dark text-white px-4 py-3 rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-2 border border-white/10">
+            <div className="flex items-center gap-2 flex-wrap text-xs sm:text-sm font-black">
+              <div className="flex items-center gap-1.5 bg-white/15 border border-white/25 px-2.5 py-1 rounded-lg shadow-2xs">
+                {dispInfo.isAnnexOrDecimal ? (
+                  <FolderTree size={14} className="text-teal-300" />
+                ) : (
+                  <FileText size={14} className="text-blue-300" />
+                )}
+                <span className="tracking-wide uppercase text-white font-black">
+                  {article.contentType === 'table' ? `TABELA #${displayIndex}` : dispInfo.label}
+                </span>
+              </div>
+
+              {dispInfo.isAnnexOrDecimal && (
+                <span className={cn(
+                  "text-[11px] font-bold px-2 py-0.5 rounded-md border shadow-2xs",
+                  dispInfo.depth > 1 ? "bg-teal-500/30 text-teal-200 border-teal-400/40" : "bg-purple-500/30 text-purple-200 border-purple-400/40"
+                )}>
+                  {dispInfo.sublabel}
+                </span>
+              )}
+
+              {article.subjectIds && article.subjectIds.length > 0 && subjects && (
+                <>
+                  <span className="text-white/40 font-bold">‚Ä¢</span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="uppercase text-white font-black text-xs">ASSUNTO:</span>
+                    {article.subjectIds.map(sid => {
+                      const s = subjects?.find(sub => sub.id === sid);
+                      return s ? (
+                        <span key={sid} className="text-xs font-semibold bg-white/15 border border-white/20 text-white px-2.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs backdrop-blur-xs">
+                          <Tag size={11} className="text-white/80" />
+                          {s.name}
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {/\((?:suprimido|revogado)\)/i.test(article.finalText || "") && (
+                <span className="inline-flex items-center gap-1 bg-rose-500/30 text-rose-200 border border-rose-400/30 text-[10px] sm:text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg">
+                  <Ban size={12} /> Suprimido/Revogado
+                </span>
+              )}
+              {isFullyAnalyzed && (
+                <span className="inline-flex items-center gap-1 bg-emerald-500/30 text-emerald-200 border border-emerald-400/30 text-[10px] sm:text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg">
+                  <CheckCircle2 size={12} /> Totalmente Analisado
+                </span>
+              )}
+            </div>
+          </div>
+
           {tipoResolucao === "alteracao" && article.originalText && (
             <div>
               <div className="flex items-center gap-2 mb-3">
@@ -744,11 +1001,26 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
               </label>
             </div>
             <div>
-              <label className="block text-xs font-black text-slate-800 uppercase tracking-widest mb-2">
-                {article.contentType === 'table' || isTableJson(finalText || article.proposedText || article.originalText)
-                  ? "Tabela Final do Dispositivo"
-                  : "Texto Final do Dispositivo"}
-              </label>
+              <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                <label className="block text-xs font-black text-slate-800 uppercase tracking-widest">
+                  {article.contentType === 'table' || isTableJson(finalText || article.proposedText || article.originalText)
+                    ? "Tabela Final do Dispositivo"
+                    : "Texto Final do Dispositivo"}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const base = article.proposedText || article.originalText || "";
+                    const suppressedText = formatSuppressedDevice(base, displayIndex);
+                    setFinalText(suppressedText);
+                    setFinalJustification("Dispositivo suprimido/revogado conforme an√°lise t√©cnica das contribui√ß√µes recebidas. Mantida a numera√ß√£o original com indica√ß√£o expressa de supress√£o (Op√ß√£o 2 - Preserva√ß√£o da Sequ√™ncia).");
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  title="Marcar dispositivo com (Suprimido) ou (Revogado) mantendo a numera√ß√£o original"
+                >
+                  <Ban size={12} className="text-rose-600" /> Marcar como (Suprimido) / (Revogado)
+                </button>
+              </div>
               {article.contentType === 'table' || isTableJson(finalText || article.proposedText || article.originalText) ? (
                 <div className="border border-indigo-100 rounded-xl p-3 bg-indigo-50/20">
                   <RegulatoryTableEditor 
@@ -801,8 +1073,18 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({ art
                     originalData={article.proposedText || article.originalText}
                   />
                 ) : (
-                  <div className="bg-white p-3 rounded-xl border border-indigo-100 text-xs text-indigo-950 font-medium whitespace-pre-wrap shadow-2xs">
-                    {article.finalText}
+                  <div className={cn(
+                    "p-3 rounded-xl border text-xs font-medium whitespace-pre-wrap shadow-2xs",
+                    /\((?:suprimido|revogado)\)/i.test(article.finalText) 
+                      ? "bg-rose-50/70 border-rose-200 text-rose-900 font-bold" 
+                      : "bg-white border-indigo-100 text-indigo-950"
+                  )}>
+                    {/\((?:suprimido|revogado)\)/i.test(article.finalText) && (
+                      <div className="mb-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-rose-200/80 text-rose-800 border border-rose-300">
+                        <Ban size={11} className="text-rose-600" /> Dispositivo com Supress√£o Indicada (Op√ß√£o 2)
+                      </div>
+                    )}
+                    <div>{article.finalText}</div>
                   </div>
                 )
               ) : (
@@ -853,17 +1135,20 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const canViewMinuta = auth?.checkPermission ? auth.checkPermission("reg_subsidios_minuta", "view") : true;
   const canViewPortal = auth?.checkPermission ? auth.checkPermission("reg_subsidios_portal", "view") : true;
   const canContribute = auth?.checkPermission ? auth.checkPermission("reg_subsidios_portal", "create") : true;
+  const canRegisterOral = auth?.checkPermission ? (auth.checkPermission("reg_subsidios_oral", "create") || auth.checkPermission("reg_subsidios_oral", "edit")) : true;
 
   const [tomadas, setTomadas] = useState<TomadaSubsidio[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [contributions, setContributions] = useState<Contribution[]>([]);
 
+    
   const [activeView, setActiveView] = useState<"list" | "create_step1" | "create_step2" | "public_view" | "public_contribute" | "public_contributions" | "technical_analysis">("list");
   const [publicTab, setPublicTab] = useState<"contribuir" | "ver">("contribuir");
   const [analysisTab, setAnalysisTab] = useState<"contribuicoes" | "painel" | "minuta">("contribuicoes");
   const [expandedRowArtId, setExpandedRowArtId] = useState<string | number | null>(null);
   const [selectedTomada, setSelectedTomada] = useState<TomadaSubsidio | null>(null);
   const [participantRankingViewMode, setParticipantRankingViewMode] = useState<"chart" | "bento">("bento");
+  const [rankingMetricType, setRankingMetricType] = useState<"participantes" | "assuntos">("participantes");
 
 
   // Minuta da Norma State
@@ -922,6 +1207,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     dataFim: string;
     rawText: string;
     anexos: File[];
+    subjects: { id: string; name: string }[];
   }>({
     numero: "",
     tipoResolucao: "nova",
@@ -931,7 +1217,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     dataInicio: "",
     dataFim: "",
     rawText: "",
-    anexos: []
+    anexos: [],
+    subjects: []
   });
   const [previewArticles, setPreviewArticles] = useState<Article[]>();
   
@@ -1166,7 +1453,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       dataInicio: new Date().toISOString().split('T')[0],
       dataFim: "",
       rawText: "",
-      anexos: []
+      anexos: [],
+    subjects: []
     });
     setPreviewArticles([]);
     setInputMode("text");
@@ -1178,7 +1466,12 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   // Contribution State
   const [contributingArticleId, setContributingArticleId] = useState<string | null>(null);
   const [editingContributionId, setEditingContributionId] = useState<string | number | null>(null);
-  const [participantFilter, setParticipantFilter] = useState<string>("all");
+  const [contribOriginType, setContribOriginType] = useState<'online' | 'oral' | 'documental' | 'email'>('online');
+  const [contribAuthorName, setContribAuthorName] = useState<string>('');
+  const [contribAuthorInstitution, setContribAuthorInstitution] = useState<string>('');
+  const [contribAuthorEmail, setContribAuthorEmail] = useState<string>('');
+  const [contribProtocolNumber, setContribProtocolNumber] = useState<string>('');
+    const [participantFilter, setParticipantFilter] = useState<string>("all");
   const [publicContributionsView, setPublicContributionsView] = useState<"minhas" | "todas">("minhas");
   const [contributionsSortConfig, setContributionsSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
@@ -1381,10 +1674,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [contributeArticleFilter, setContributeArticleFilter] = useState<"todos" | "com_contribuicao" | "sem_contribuicao">("todos");
   const [analysisArticleFilter, setAnalysisArticleFilter] = useState<"todos" | "analisados" | "pendentes">("todos");
   const [analysisDeviceFilter, setAnalysisDeviceFilter] = useState<string>("todos");
+  const [analysisSubjectFilter, setAnalysisSubjectFilter] = useState<string>("todos");
   const [analysisComplexityFilter, setAnalysisComplexityFilter] = useState<string>("todos");
   const [analysisDecisionFilter, setAnalysisDecisionFilter] = useState<string>("todos");
   const [analysisParticipantFilter, setAnalysisParticipantFilter] = useState<string>("todos");
-  const [analysisContentFilter, setAnalysisContentFilter] = useState<string>("");
+    const [analysisContentFilter, setAnalysisContentFilter] = useState<string>("");
   const [expandedUserContribs, setExpandedUserContribs] = useState<Record<string, boolean>>({});
   const [sessionContribArticleIds, setSessionContribArticleIds] = useState<string[]>(() => {
     try {
@@ -1402,6 +1696,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     return contributions.filter(c => {
       if (String(c.articleId) !== sId) return false;
       
+      if (currentUserId && c.registeredById !== undefined && c.registeredById !== null && String(c.registeredById) === currentUserId) return true;
       if (currentUserId && c.userId !== undefined && c.userId !== null && String(c.userId) === currentUserId) return true;
       if (authorName && (c.authorName || "").toLowerCase().trim() === authorName) return true;
       if (!currentUserId && !authorName && sessionContribArticleIds.includes(sId) && (!c.userId || c.authorName === "Usu√°rio")) return true;
@@ -1427,9 +1722,9 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   // Edit Modal State
   const [editingTomada, setEditingTomada] = useState<TomadaSubsidio | null>(null);
   const [editModalTab, setEditModalTab] = useState<"geral" | "minuta" | "anexos">("geral");
-  const [showOrientacoesModal, setShowOrientacoesModal] = useState(false);
-  const [editFormData, setEditFormData] = useState({
+    const [editFormData, setEditFormData] = useState({
     id: "" as string | number,
+    subjects: [] as { id: string; name: string }[],
     numero: "",
     tipoResolucao: "nova" as "nova" | "alteracao",
     meioParticipacao: "Consulta P√∫blica",
@@ -1440,10 +1735,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   });
   const [editArticles, setEditArticles] = useState<Article[]>([]);
   const [selectedArticlesToMove, setSelectedArticlesToMove] = useState<(string | number)[]>([]);
-  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
-  const [targetTomadaIdToMove, setTargetTomadaIdToMove] = useState<string>("");
-  const [isMovingArticles, setIsMovingArticles] = useState(false);
-  const [editAnexos, setEditAnexos] = useState<{ id: string | number; name: string; url: string }[]>([]);
+    const [targetTomadaIdToMove, setTargetTomadaIdToMove] = useState<string>("");
+    const [editAnexos, setEditAnexos] = useState<{ id: string | number; name: string; url: string }[]>([]);
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
 
   // Duplicate Modal State
@@ -1451,13 +1744,21 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [duplicateArticles, setDuplicateArticles] = useState<Article[]>([]);
   const [duplicateSelectedArticles, setDuplicateSelectedArticles] = useState<string[]>([]);
   const [duplicateMode, setDuplicateMode] = useState<"proposed" | "final">("proposed");
-  const [isDuplicating, setIsDuplicating] = useState(false);
-
+  
   // Delete Confirmation Modal State (Safe for Sandboxed iFrames)
   const [deletingTomada, setDeletingTomada] = useState<TomadaSubsidio | null>(null);
-  const [deletingArticle, setDeletingArticle] = useState<{ id: string | number, hasContributions: boolean } | null>(null);
+  const [deletingCounts, setDeletingCounts] = useState<{articles: number, contributions: number} | null>(null);
+  const [isFetchingDeleteCounts, setIsFetchingDeleteCounts] = useState(false);
+  const [deletingArticle, setDeletingArticle] = useState<{ id: string | number, hasContributions: boolean, count?: number, indexToRemove?: number } | null>(null);
   const [deletingContribution, setDeletingContribution] = useState<{ contribId: string | number, articleId: string | number } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [pickerModalIndex, setPickerModalIndex] = useState<number | null>(null);
+  const [pickerModalType, setPickerModalType] = useState<"edit" | "create" | null>(null);
+  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+  const [isMovingArticles, setIsMovingArticles] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
+  const [showOrientacoesModal, setShowOrientacoesModal] = useState(false);
+
 
   // Filter & Sort State
   const [searchQuery, setSearchQuery] = useState("");
@@ -1538,77 +1839,124 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     return sortConfig.direction === "asc" ? <ArrowUp size={12} className="text-indigo-600 ml-1" /> : <ArrowDown size={12} className="text-indigo-600 ml-1" />;
   };
 
-  // Parsing Logic (Regex to split articles)
+  // Unified Parsing Logic: Splits text into granular contribution blocks (Articles, Annexes, and Hierarchical Decimal Items)
   const parseRawTextToArticles = (text: string) => {
-    // Regex for capturing "Art. X", "Artigo X", etc.
-    const articleRegex = /(Art\.\s*\d+¬∫?|Artigo\s*\d+¬∫?)/gi;
-    
-    // Split text by the article pattern
-    const parts = text.split(articleRegex);
-    const newArticles: Article[] = [];
-    
-    let order = 1;
+    if (!text || !text.trim()) return [];
 
-    // Helper to extract structural headers (T√çTULO, CAP√çTULO, SE√á√ÉO) from the end of a text block
+    // Helper to determine if a line starts a new contribution block boundary
+    const getLineBoundaryType = (line: string): "artigo" | "anexo" | "decimal_subitem" | "decimal_item" | null => {
+      const trimmed = line.trim();
+      if (!trimmed) return null;
+
+      // 1. Artigo: Art. 1¬∫, Artigo 1¬∫, Art. 1A, etc.
+      if (/^(?:Art\.\s*\d+¬∫?|Artigo\s*\d+¬∫?)\b/i.test(trimmed)) {
+        return "artigo";
+      }
+
+      // 2. Anexo Header: ANEXO I, ANEXO √öNICO, etc.
+      if (/^(?:ANEXO|Anexo)\s+(?:[IVXLCDM\d]+|√öNICO|UNICO|\b)/i.test(trimmed)) {
+        return "anexo";
+      }
+
+      // 3. Decimal hierarchical subitem (e.g. 1.1, 1.1.1, 1.1.1.1, 2.3.4)
+      if (/^(?:Item\s+)?\d+(?:\.\d+)+(?:[\.\-‚Äì‚Äî\)]|\s+)/i.test(trimmed)) {
+        return "decimal_subitem";
+      }
+
+      // 4. Decimal top-level item (e.g. 1. DIRETRIZES, 1 - DO OBJETO, 2. DAS OBRIGA√á√ïES, Item 1.)
+      if (/^(?:Item\s+)?\d+[\.\-‚Äì‚Äî\)]\s+[A-Z√Å√â√ç√ì√ö√Ç√ä√î√É√ï√á0-9]/i.test(trimmed)) {
+        return "decimal_item";
+      }
+
+      return null;
+    };
+
+    // Helper to extract trailing structural headers (T√çTULO, CAP√çTULO, SE√á√ÉO, ANEXO) at the end of a block
     const extractHeadersFromEnd = (textBlock: string) => {
-      const headerRegex = /(?:^|\n[ \t]*\n)[ \t]*(T√çTULO|CAP√çTULO|SE√á√ÉO|SECAO|SUBSE√á√ÉO|SUBSECAO)[ \t]+[IVXLCDM\d]+/i;
-      const match = headerRegex.exec(textBlock);
-      
-      if (match) {
-        const keywordIndex = textBlock.indexOf(match[1], match.index);
-        let lineStartIndex = keywordIndex;
-        while (lineStartIndex > 0 && textBlock[lineStartIndex - 1] !== '\n') {
-          lineStartIndex--;
+      const lines = textBlock.split("\n");
+      const headerLines: string[] = [];
+      let i = lines.length - 1;
+      while (i >= 0 && !lines[i].trim()) {
+        i--;
+      }
+
+      while (i >= 0) {
+        const lineStr = lines[i].trim();
+        if (
+          /^(T√çTULO|CAP√çTULO|SE√á√ÉO|SECAO|SUBSE√á√ÉO|SUBSECAO|LIVRO)\s+[IVXLCDM\d√öNICO]+/i.test(lineStr) ||
+          /^(DO|DA|DOS|DAS|DE|DISPOSI√á√ïES|DISPOSI√á√ÉO)\s+[A-Z√Å√â√ç√ì√ö√Ç√ä√î√É√ï√á\s]+$/i.test(lineStr)
+        ) {
+          headerLines.unshift(lines[i]);
+          i--;
+        } else {
+          break;
         }
+      }
+
+      if (headerLines.length > 0 && i >= 0) {
         return {
-          remainingText: textBlock.substring(0, lineStartIndex),
-          headers: textBlock.substring(lineStartIndex)
+          remainingText: lines.slice(0, i + 1).join("\n"),
+          headers: headerLines.join("\n"),
         };
       }
       return { remainingText: textBlock, headers: "" };
     };
 
-    let preamble = parts[0] || "";
+    const lines = text.split("\n");
+    const rawBlocks: string[] = [];
+    let currentLines: string[] = [];
+
+    for (const line of lines) {
+      const bType = getLineBoundaryType(line);
+      if (bType && currentLines.length > 0) {
+        const blockStr = currentLines.join("\n").trim();
+        if (blockStr) {
+          rawBlocks.push(blockStr);
+        }
+        currentLines = [line];
+      } else {
+        currentLines.push(line);
+      }
+    }
+
+    if (currentLines.length > 0) {
+      const blockStr = currentLines.join("\n").trim();
+      if (blockStr) {
+        rawBlocks.push(blockStr);
+      }
+    }
+
+    const newArticles: Article[] = [];
+    let order = 1;
     let pendingHeaders = "";
 
-    const preambleExtraction = extractHeadersFromEnd(preamble);
-    preamble = preambleExtraction.remainingText.trim();
-    pendingHeaders = preambleExtraction.headers.trim();
+    for (let i = 0; i < rawBlocks.length; i++) {
+      const trimmedB = rawBlocks[i].trim();
+      if (!trimmedB) continue;
 
-    if (preamble !== "") {
-      newArticles.push({
-        id: crypto.randomUUID(),
-        tomadaId: "",
-        order: order++,
-        originalText: "", proposedText: preamble
-      });
-    }
+      const extracted = extractHeadersFromEnd(trimmedB);
+      const mainContent = extracted.remainingText.trimEnd();
 
-    for (let i = 1; i < parts.length; i += 2) {
-      const artHeader = parts[i];
-      let artBody = parts[i + 1] || "";
-      
-      const bodyExtraction = extractHeadersFromEnd(artBody);
-      artBody = bodyExtraction.remainingText.trimEnd();
-      
-      let fullText = artHeader + artBody;
+      let fullText = mainContent;
       if (pendingHeaders) {
-         fullText = pendingHeaders + "\n\n" + fullText;
+        fullText = pendingHeaders + "\n\n" + fullText;
       }
-      
-      newArticles.push({
-        id: crypto.randomUUID(),
-        tomadaId: "",
-        order: order++,
-        originalText: "", proposedText: fullText.trim()
-      });
 
-      pendingHeaders = bodyExtraction.headers.trim();
+      if (fullText.trim()) {
+        newArticles.push({
+          id: crypto.randomUUID(),
+          tomadaId: "",
+          order: order++,
+          originalText: "",
+          proposedText: fullText.trim(),
+        });
+      }
+
+      pendingHeaders = extracted.headers.trim();
     }
 
-    // Append any trailing headers to the last article just in case
     if (pendingHeaders && newArticles.length > 0) {
-       newArticles[newArticles.length - 1].proposedText += "\n\n" + pendingHeaders;
+      newArticles[newArticles.length - 1].proposedText += "\n\n" + pendingHeaders;
     }
 
     return newArticles;
@@ -1735,6 +2083,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       dataInicio: formData.dataInicio || new Date().toISOString().split('T')[0],
       dataFim: formData.dataFim || new Date().toISOString().split('T')[0],
       createdAt: new Date().toISOString(),
+      subjects: formData.subjects || [],
       anexos: anexosMapped,
       articles: previewArticles?.map(a => ({ ...a, tomadaId: "" })) || []
     };
@@ -1757,7 +2106,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           dataInicio: "",
           dataFim: "",
           rawText: "",
-          anexos: []
+          anexos: [],
+    subjects: []
         });
         setPreviewArticles([]);
         setActiveView("list");
@@ -1782,6 +2132,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       meioParticipacao: tomada.meioParticipacao || "Consulta P√∫blica",
       title: tomada.title || "",
       objeto: tomada.objeto || "",
+      subjects: tomada.subjects ? [...tomada.subjects] : [],
       dataInicio: tomada.dataInicio ? tomada.dataInicio.split("T")[0] : "",
       dataFim: tomada.dataFim ? tomada.dataFim.split("T")[0] : ""
     });
@@ -1902,9 +2253,30 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     }
   };
 
-  const handleOpenDeleteConfirm = (tomada: TomadaSubsidio, e: React.MouseEvent) => {
+  const handleOpenDeleteConfirm = async (tomada: TomadaSubsidio, e: React.MouseEvent) => {
     e.stopPropagation();
     setDeletingTomada(tomada);
+    setIsFetchingDeleteCounts(true);
+    setDeletingCounts(null);
+    try {
+      const [artRes, contRes] = await Promise.all([
+        fetch(`/api/reg/tomadas/${tomada.id}/articles`),
+        fetch(`/api/reg/tomadas/${tomada.id}/contributions`)
+      ]);
+      if (artRes.ok && contRes.ok) {
+        const arts = await artRes.json();
+        const conts = await contRes.json();
+        setDeletingCounts({
+          articles: arts.length,
+          contributions: conts.length
+        });
+      }
+    } catch (e) {
+      console.error(e);
+      setDeletingCounts({ articles: 0, contributions: 0 });
+    } finally {
+      setIsFetchingDeleteCounts(false);
+    }
   };
 
   const handleConfirmDelete = async () => {
@@ -1999,6 +2371,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       dataInicio: new Date().toISOString().split('T')[0],
       dataFim: new Date().toISOString().split('T')[0],
       createdAt: new Date().toISOString(),
+      subjects: formData.subjects || [],
       anexos: duplicateModalTomada.anexos ? [...duplicateModalTomada.anexos] : [],
       articles: duplicateArticlesData
     };
@@ -2026,13 +2399,25 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     }
   };
 
-  const handleAddContribution = (article: Article) => {
+  const handleAddContribution = (article: Article, initialOrigin: 'online' | 'oral' | 'documental' | 'email' = 'online') => {
     if (!effectiveUser) {
       showToast("Autentica√ß√£o Necess√°ria", "Voc√™ precisa estar conectado √† sua conta para propor altera√ß√µes.", "warning");
       return;
     }
     setContributingArticleId(String(article.id));
     setEditingContributionId(null);
+    setContribOriginType(initialOrigin);
+    if (initialOrigin === 'online') {
+      setContribAuthorName(effectiveUser?.name || "");
+      setContribAuthorEmail(effectiveUser?.email || "");
+      setContribAuthorInstitution("");
+      setContribProtocolNumber("");
+    } else {
+      setContribAuthorName("");
+      setContribAuthorEmail("");
+      setContribAuthorInstitution("");
+      setContribProtocolNumber("");
+    }
     const baseText = (article.proposedText !== undefined && article.proposedText !== null && article.proposedText.trim() !== "")
       ? article.proposedText
       : (article.originalText || "");
@@ -2048,6 +2433,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     }
     setContributingArticleId(String(article.id));
     setEditingContributionId(contrib.id);
+    setContribOriginType((contrib.originType as any) || 'online');
+    setContribAuthorName(contrib.authorName || "");
+    setContribAuthorEmail(contrib.authorEmail || "");
+    setContribAuthorInstitution(contrib.authorInstitution || "");
+    setContribProtocolNumber(contrib.protocolNumber || "");
     setProposedText(contrib.proposedText || "");
     setIsSuppressing(!contrib.proposedText || contrib.proposedText.trim() === "");
     setJustification(contrib.justification || "");
@@ -2105,10 +2495,24 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       return;
     }
 
+    const isExternal = contribOriginType !== 'online';
+    if (isExternal && !contribAuthorName.trim()) {
+      showToast("Identifica√ß√£o Necess√°ria", "Informe o nome do participante ou entidade manifestante.", "warning");
+      return;
+    }
+    if (isExternal && !canRegisterOral) {
+      showToast("Acesso Restrito", "Seu perfil n√£o possui permiss√£o para cadastrar manifesta√ß√µes orais ou presenciais.", "error");
+      return;
+    }
+
     const currentArtIdStr = String(contributingArticleId);
     const currentUserId = effectiveUser?.id ? Number(effectiveUser.id) : null;
-    const authorSignature = (effectiveUser?.name || effectiveUser?.email || "Usu√°rio").trim();
-    const authorEmail = (effectiveUser?.email || "").trim();
+    const authorSignature = (isExternal ? contribAuthorName : (effectiveUser?.name || effectiveUser?.email || "Usu√°rio")).trim();
+    const authorEmail = (isExternal ? contribAuthorEmail : (effectiveUser?.email || "")).trim();
+    const authorInstitution = contribAuthorInstitution.trim();
+    const protocolNumber = contribProtocolNumber.trim();
+    const registeredById = currentUserId;
+    const registeredByName = (effectiveUser?.name || effectiveUser?.email || "T√©cnico(a)").trim();
 
     const currentArt = articles.find(a => String(a.id) === currentArtIdStr);
     let finalProposedText = proposedText;
@@ -2146,6 +2550,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
             justification,
             authorName: authorSignature,
             authorEmail,
+            authorInstitution,
+            originType: contribOriginType,
+            protocolNumber,
+            registeredById,
+            registeredByName,
             userId: currentUserId
           })
         });
@@ -2160,6 +2569,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 justification,
                 authorName: authorSignature,
                 authorEmail,
+                authorInstitution,
+                originType: contribOriginType,
+                protocolNumber,
+                registeredById,
+                registeredByName,
                 createdAt: new Date().toISOString()
               };
             }
@@ -2167,7 +2581,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           }));
 
           setExpandedUserContribs(prev => ({ ...prev, [currentArtIdStr]: true }));
-          showToast("Sucesso", "Sua proposta de altera√ß√£o foi atualizada com sucesso!", "success");
+          showToast("Sucesso", "A proposta de altera√ß√£o foi atualizada com sucesso!", "success");
           setProposedText("");
           setIsSuppressing(false);
           setJustification("");
@@ -2181,12 +2595,17 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           showToast("Erro", "Falha ao atualizar contribui√ß√£o.", "error");
         }
       } else {
-        // Create new contribution (single per article per user)
+        // Create new contribution
         const newContrib = {
           articleId: Number(contributingArticleId),
           userId: currentUserId,
           authorName: authorSignature,
           authorEmail,
+          authorInstitution,
+          originType: contribOriginType,
+          protocolNumber,
+          registeredById,
+          registeredByName,
           proposedText: isSuppressing ? "" : finalProposedText,
           justification,
           createdAt: new Date().toISOString()
@@ -2208,11 +2627,22 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               articleId: Number(contributingArticleId),
               userId: currentUserId,
               authorName: authorSignature,
+              authorEmail,
+              authorInstitution,
+              originType: contribOriginType,
+              protocolNumber,
+              registeredById,
+              registeredByName,
               proposedText: isSuppressing ? "" : finalProposedText,
               justification,
               createdAt: newContrib.createdAt
             },
-            ...prev.filter(c => !(String(c.articleId) === currentArtIdStr && String(c.userId) === String(currentUserId)))
+            ...prev.filter(c => {
+              if (contribOriginType === 'online') {
+                return !(String(c.articleId) === currentArtIdStr && String(c.userId) === String(currentUserId) && (c.originType === 'online' || !c.originType));
+              }
+              return true;
+            })
           ]);
 
           // Record session contributed id
@@ -2225,7 +2655,15 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           // Automatically expand the user contribution view on that article
           setExpandedUserContribs(prev => ({ ...prev, [currentArtIdStr]: true }));
 
-          showToast("Sucesso", "Contribui√ß√£o cadastrada com sucesso!", "success");
+          showToast(
+            "Sucesso",
+            contribOriginType === 'oral'
+              ? `Manifesta√ß√£o oral de "${authorSignature}" registrada com sucesso!`
+              : contribOriginType === 'documental'
+              ? `Contribui√ß√£o documental de "${authorSignature}" registrada com sucesso!`
+              : "Contribui√ß√£o cadastrada com sucesso!",
+            "success"
+          );
           setProposedText("");
           setJustification("");
           setContributingArticleId(null);
@@ -2235,11 +2673,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
             await fetchTomadaDetails(String(selectedTomada.id));
           }
         } else {
-          showToast("Erro", "Falha ao enviar contribui√ß√£o", "error");
+          showToast("Erro", "Falha ao enviar contribui√ß√£o.", "error");
         }
       }
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error("Error saving contribution:", error);
       showToast("Erro", "Erro ao conectar com o servidor.", "error");
     }
   };
@@ -2263,9 +2701,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     }
   };
 
-  const handleDeleteAnalysisArticle = (articleId: string | number, hasContributions: boolean) => {
-    setDeletingArticle({ id: articleId, hasContributions });
-  };
+
 
   const handleConfirmDeleteArticle = async () => {
     if (!deletingArticle) return;
@@ -2277,6 +2713,9 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       if (res.ok) {
         setArticles(prev => prev.filter(a => String(a.id) !== String(deletingArticle.id)));
         setContributions(prev => prev.filter(c => String(c.articleId) !== String(deletingArticle.id)));
+        if (deletingArticle.indexToRemove !== undefined) {
+          setEditArticles(prev => prev.filter((_, i) => i !== deletingArticle.indexToRemove));
+        }
         showToast("Sucesso", "Dispositivo exclu√≠do com sucesso.", "success");
         setDeletingArticle(null);
       } else {
@@ -2877,17 +3316,56 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               </div>
               {(previewArticles || []).map((art, i) => {
                 const isMissingOriginal = isAlteracao && (!art.originalText || !art.originalText.trim());
+                const dInfo = getDispositivoInfo(art.proposedText || art.originalText || "", i + 1);
 
                 return (
                   <div 
                     key={art.id} 
                     className={cn(
                       "p-4 rounded-xl relative group transition-all border",
+                      dInfo.depth === 2 && "sm:ml-4 border-l-4 border-l-teal-500",
+                      dInfo.depth === 3 && "sm:ml-8 border-l-4 border-l-cyan-500",
+                      dInfo.depth >= 4 && "sm:ml-12 border-l-4 border-l-sky-500",
                       isMissingOriginal ? "bg-amber-50/30 border-amber-300 ring-1 ring-amber-200" : "bg-slate-50 border-slate-200"
                     )}
                   >
                     <div className="absolute -left-3 top-4 bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full z-10 shadow-sm">
                       #{i+1}
+                    </div>
+                    <div className="mb-3 pl-3 pr-20 flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-black uppercase text-indigo-900 bg-white px-2.5 py-1 rounded-lg border border-indigo-100 shadow-xs flex items-center gap-1.5">
+                        {dInfo.isAnnexOrDecimal ? <FolderTree size={12} className="text-teal-600" /> : <FileText size={12} className="text-indigo-600" />}
+                        {dInfo.label}
+                      </span>
+                      {dInfo.isAnnexOrDecimal && (
+                        <span className="text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-md">
+                          {dInfo.sublabel}
+                        </span>
+                      )}
+                      <button type="button" onClick={() => { setPickerModalType("create"); setPickerModalIndex(i); }} className="text-[10px] font-bold text-indigo-600 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-100 px-2 py-1 rounded-md transition-colors flex items-center gap-1 shrink-0 shadow-2xs active:scale-95">
+                        <Tag size={12} /> Vincular Assunto
+                      </button>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {(art.subjectIds || []).map(sid => {
+                          const s = (formData.subjects || []).find(sub => sub.id === sid);
+                          return s ? (
+                            <span key={sid} className="inline-flex items-center gap-1 text-[9px] font-medium bg-slate-100 border border-slate-200 text-slate-700 px-1.5 py-0.5 rounded shadow-2xs">
+                              <span className="truncate max-w-[140px]" title={s.name}>{s.name}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewArticles(prev => prev?.map((a, idx) => idx === i ? { ...a, subjectIds: (a.subjectIds || []).filter(id => id !== sid) } : a));
+                                }}
+                                className="text-slate-400 hover:text-rose-600 rounded-full transition-colors"
+                                title="Desvincular assunto"
+                              >
+                                <X size={10} />
+                              </button>
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
                     </div>
                     
                     <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-100 p-0.5">
@@ -3512,46 +3990,82 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               const isExpanded = !!expandedUserContribs[String(art.id)];
               const actualArtIdx = currentArticles.findIndex(a => String(a.id) === String(art.id));
               const displayIdx = actualArtIdx >= 0 ? actualArtIdx + 1 : artIdx + 1;
+              const dispInfo = getDispositivoInfo(art.proposedText || art.originalText || "", displayIdx);
 
               return (
                 <div 
                   key={art.id} 
                   className={cn(
                     "rounded-2xl border shadow-sm overflow-hidden transition-all",
+                    dispInfo.depth === 2 && "sm:ml-4 border-l-4 border-l-teal-500",
+                    dispInfo.depth === 3 && "sm:ml-8 border-l-4 border-l-cyan-500",
+                    dispInfo.depth >= 4 && "sm:ml-12 border-l-4 border-l-sky-500",
                     hasUserContributed 
                       ? "bg-emerald-50/20 border-emerald-300 ring-2 ring-emerald-500/20" 
                       : "bg-white border-slate-200"
                   )}
                 >
                   <div className="p-6">
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={cn(
-                          "text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md",
-                          hasUserContributed
-                            ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                            : "bg-indigo-50 text-indigo-600"
-                        )}>
-                          Dispositivo #{displayIdx}
-                        </span>
-                        
-                        {hasUserContributed && (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs">
-                            <CheckCircle2 size={14} className="text-emerald-600" />
-                            Contribui√ß√£o Cadastrada
+                    {/* Box / Barra Horizontal Azul com Dispositivo, Identifica√ß√£o Hier√°rquica e Assuntos */}
+                    <div className="bg-adasa-dark text-white px-4 py-3 rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-2 border border-white/10 mb-4 w-full">
+                      <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm font-black">
+                        <div className="flex items-center gap-1.5 bg-white/15 border border-white/25 px-2.5 py-1 rounded-lg shadow-2xs">
+                          {dispInfo.isAnnexOrDecimal ? (
+                            <FolderTree size={14} className="text-teal-300" />
+                          ) : (
+                            <FileText size={14} className="text-blue-300" />
+                          )}
+                          <span className="tracking-wide uppercase text-white font-black">
+                            {art.contentType === 'table' ? `TABELA #${displayIdx}` : dispInfo.label}
                           </span>
+                        </div>
+
+                        {dispInfo.isAnnexOrDecimal && (
+                          <span className={cn(
+                            "text-[11px] font-bold px-2.5 py-0.5 rounded-md border shadow-2xs",
+                            dispInfo.depth > 1 ? "bg-teal-500/30 text-teal-200 border-teal-400/40" : "bg-purple-500/30 text-purple-200 border-purple-400/40"
+                          )}>
+                            {dispInfo.sublabel}
+                          </span>
+                        )}
+
+                        {art.subjectIds && art.subjectIds.length > 0 && selectedTomada?.subjects && (
+                          <>
+                            <span className="text-white/40 font-bold">‚Ä¢</span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="uppercase text-white font-black text-xs">ASSUNTO:</span>
+                              {art.subjectIds.map(sid => {
+                                const s = selectedTomada.subjects?.find(sub => sub.id === sid);
+                                return s ? (
+                                  <span key={sid} className="text-xs font-semibold bg-white/15 border border-white/20 text-white px-2.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs backdrop-blur-xs">
+                                    <Tag size={11} className="text-white/80" />
+                                    {s.name}
+                                  </span>
+                                ) : null;
+                              })}
+                            </div>
+                          </>
                         )}
                       </div>
 
-                      {hasUserContributed && (
-                        <button
-                          onClick={() => toggleExpandUserContrib(art.id)}
-                          className="text-xs font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-100/80 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 border border-emerald-300/80 shadow-2xs"
-                        >
-                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                          {isExpanded ? "Ocultar comparativo da proposta" : "Ver comparativo da minha proposta"}
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {hasUserContributed && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-black bg-emerald-500/25 text-emerald-200 border border-emerald-400/30 shadow-2xs">
+                            <CheckCircle2 size={13} className="text-emerald-300" />
+                            Contribui√ß√£o Cadastrada
+                          </span>
+                        )}
+
+                        {hasUserContributed && (
+                          <button
+                            onClick={() => toggleExpandUserContrib(art.id)}
+                            className="text-xs font-bold text-white hover:text-white bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 border border-white/20 shadow-2xs"
+                          >
+                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            {isExpanded ? "Ocultar comparativo" : "Ver comparativo da proposta"}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {selectedTomada.tipoResolucao === "alteracao" && art.originalText && (
@@ -3596,55 +4110,93 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                     </div>
 
                     {/* Comparativo Texto Proposto X Contribui√ß√£o Sugerida */}
-                    {hasUserContributed && isExpanded && userArticleContribs[0] && (
+                    {hasUserContributed && isExpanded && (
                       <div className="mt-5 pt-4 border-t border-emerald-200/80 space-y-4">
-                        {renderUserContributionComparison(
-                          (art.proposedText !== undefined && art.proposedText !== null && art.proposedText.trim() !== "")
-                            ? art.proposedText
-                            : (art.originalText || ""),
-                          userArticleContribs[0].proposedText,
-                          art.contentType
-                        )}
-                        
-                        <div className="mb-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
-                                Sua Justificativa T√©cnica / Motiva√ß√£o
-                              </span>
-                            </div>
-                            <span className="text-[10px] text-slate-400 font-medium bg-slate-100 px-2 py-1 rounded">
-                              Registrada em {formatDateBr(userArticleContribs[0].createdAt)} por {userArticleContribs[0].authorName}
-                            </span>
-                          </div>
-                          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
-                            <p className="text-sm text-slate-700 italic bg-slate-50 p-3 rounded-lg border border-slate-200 whitespace-pre-wrap leading-relaxed">
-                              "{userArticleContribs[0].justification}"
-                            </p>
-                          </div>
-                        </div>
+                        {userArticleContribs.map((uContrib) => {
+                          const isOral = uContrib.originType === 'oral';
+                          const isDoc = uContrib.originType === 'documental';
+                          const isEmail = uContrib.originType === 'email';
 
-                        {!isContributing && isTomadaAberta && (
-                          <div className="flex justify-end items-center gap-2 pt-2 border-t border-emerald-100">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleDeleteUserContribution(userArticleContribs[0].id, art.id);
-                              }}
-                              className="px-3.5 py-1.5 text-xs font-bold text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
-                            >
-                              <Trash2 size={13} /> Excluir Proposta
-                            </button>
-                            <button
-                              onClick={() => handleStartEditContribution(art, userArticleContribs[0])}
-                              className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
-                            >
-                              <Edit3 size={13} /> Editar Minha Proposta
-                            </button>
-                          </div>
-                        )}
+                          return (
+                            <div key={uContrib.id} className="bg-slate-50/70 rounded-2xl border border-slate-200 p-4 space-y-4 shadow-2xs">
+                              <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-200">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={cn(
+                                    "inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border shadow-2xs",
+                                    isOral ? "bg-purple-100 text-purple-800 border-purple-200" :
+                                    isDoc ? "bg-amber-100 text-amber-800 border-amber-200" :
+                                    isEmail ? "bg-sky-100 text-sky-800 border-sky-200" : "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                  )}>
+                                    {isOral ? <><Mic size={12} /> Manifesta√ß√£o Oral</> :
+                                     isDoc ? <><FileText size={12} /> Of√≠cio / Doc. Presencial</> :
+                                     isEmail ? <><Mail size={12} /> E-mail</> : <><CheckCircle2 size={12} /> Minha Proposta Online</>}
+                                  </span>
+                                  <span className="text-xs font-black text-slate-800">
+                                    {uContrib.authorName}
+                                  </span>
+                                  {uContrib.authorInstitution && (
+                                    <span className="text-[11px] text-slate-600 font-medium flex items-center gap-1">
+                                      <Building size={11} /> {uContrib.authorInstitution}
+                                    </span>
+                                  )}
+                                  {uContrib.protocolNumber && (
+                                    <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded text-slate-700 font-bold">
+                                      {uContrib.protocolNumber}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-slate-400 font-medium">
+                                    Registrada em {formatDateBr(uContrib.createdAt)}
+                                    {uContrib.registeredByName && ` ‚Ä¢ Cadastrado por: ${uContrib.registeredByName}`}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {renderUserContributionComparison(
+                                (art.proposedText !== undefined && art.proposedText !== null && art.proposedText.trim() !== "")
+                                  ? art.proposedText
+                                  : (art.originalText || ""),
+                                uContrib.proposedText,
+                                art.contentType
+                              )}
+
+                              <div>
+                                <span className="text-[11px] font-black uppercase tracking-widest text-slate-500 block mb-1.5">
+                                  Justificativa T√©cnica / Motiva√ß√£o
+                                </span>
+                                <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs">
+                                  <p className="text-xs text-slate-700 italic whitespace-pre-wrap leading-relaxed">
+                                    "{uContrib.justification}"
+                                  </p>
+                                </div>
+                              </div>
+
+                              {!isContributing && isTomadaAberta && (
+                                <div className="flex justify-end items-center gap-2 pt-2 border-t border-slate-200/80">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleDeleteUserContribution(uContrib.id, art.id);
+                                    }}
+                                    className="px-3 py-1.5 text-xs font-bold text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
+                                  >
+                                    <Trash2 size={13} /> Excluir Proposta
+                                  </button>
+                                  <button
+                                    onClick={() => handleStartEditContribution(art, uContrib)}
+                                    className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                                  >
+                                    <Edit3 size={13} /> Editar Proposta
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -3656,7 +4208,10 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                     <div className="text-xs font-medium">
                       {hasUserContributed ? (
                         <span className="text-emerald-800 font-bold flex items-center gap-1.5">
-                          <CheckCircle2 size={14} className="text-emerald-600" /> Proposta registrada por voc√™ neste dispositivo
+                          <CheckCircle2 size={14} className="text-emerald-600" />
+                          {userArticleContribs.length === 1
+                            ? "1 proposta registrada por voc√™ neste dispositivo"
+                            : `${userArticleContribs.length} propostas/manifesta√ß√µes registradas neste dispositivo`}
                         </span>
                       ) : (
                         <span className="text-slate-400">Nenhuma proposta enviada por voc√™ neste dispositivo</span>
@@ -3664,25 +4219,34 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                     </div>
 
                     {!isContributing && (
-                      <>
+                      <div className="flex items-center gap-2 flex-wrap">
                         {isTomadaAberta ? (
-                          !hasUserContributed ? (
-                            <div className="flex items-center gap-2">
-                            <button 
-                              onClick={() => handleAddContribution(art)}
-                              className="text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg transition-all shadow-sm flex items-center gap-2 bg-white text-slate-700 border border-slate-200 hover:border-indigo-700 hover:text-indigo-700"
-                            >
-                              <MessageSquare size={14} className="text-indigo-600" /> Propor Altera√ß√£o
-                            </button>
+                          <>
+                            {!userArticleContribs.some(c => c.originType === 'online' || !c.originType) && (
+                              <button 
+                                onClick={() => handleAddContribution(art, 'online')}
+                                className="text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg transition-all shadow-sm flex items-center gap-2 bg-white text-slate-700 border border-slate-200 hover:border-indigo-700 hover:text-indigo-700"
+                              >
+                                <MessageSquare size={14} className="text-indigo-600" /> Propor Altera√ß√£o
+                              </button>
+                            )}
+                            {canRegisterOral && (
+                              <button 
+                                onClick={() => handleAddContribution(art, 'oral')}
+                                className="text-xs font-bold uppercase tracking-wider px-3.5 py-2 rounded-lg transition-all shadow-sm flex items-center gap-1.5 bg-purple-50 text-purple-800 border border-purple-200 hover:bg-purple-100 hover:border-purple-300"
+                                title="Cadastrar contribui√ß√£o feita de forma oral durante a audi√™ncia p√∫blica, ou via of√≠cio e e-mail"
+                              >
+                                <Mic size={14} className="text-purple-600" /> + Manifesta√ß√£o Oral
+                              </button>
+                            )}
                             <button 
                               onClick={() => setShowOrientacoesModal(true)}
-                              className="text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg transition-all shadow-sm flex items-center gap-2 bg-white text-slate-700 border border-slate-200 hover:border-slate-800 hover:text-slate-800"
+                              className="text-xs font-bold uppercase tracking-wider px-3 py-2 rounded-lg transition-all shadow-sm flex items-center gap-1.5 bg-white text-slate-700 border border-slate-200 hover:border-slate-800 hover:text-slate-800"
                               title="Orienta√ß√µes sobre como propor altera√ß√µes"
                             >
                               <AlertTriangle size={14} className="text-amber-500" /> Orienta√ß√µes
                             </button>
-                            </div>
-                          ) : null
+                          </>
                         ) : (
                           <button 
                             disabled
@@ -3692,7 +4256,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             <Lock size={13} className="text-slate-400" /> Contribui√ß√µes Encerradas
                           </button>
                         )}
-                      </>
+                      </div>
                     )}
                   </div>
                   
@@ -3702,14 +4266,188 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       <div className="flex items-center justify-between mb-3">
                         <div>
                           <h4 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                            <Edit3 size={16} className="text-emerald-700" /> 
-                            {editingContributionId ? `Editar Minha Proposta - Dispositivo #${displayIdx}` : `Nova Proposta de Altera√ß√£o - Dispositivo #${displayIdx}`}
+                            <Edit3 size={16} className={contribOriginType === 'online' ? "text-indigo-700" : "text-purple-700"} /> 
+                            {editingContributionId 
+                              ? (contribOriginType === 'online' ? `Editar Proposta Online - Dispositivo #${displayIdx}` : `Editar Manifesta√ß√£o Externa/Oral - Dispositivo #${displayIdx}`)
+                              : (contribOriginType === 'online' ? `Propor Altera√ß√£o Online - Dispositivo #${displayIdx}` : `Nova Manifesta√ß√£o Oral / Of√≠cio - Dispositivo #${displayIdx}`)
+                            }
                           </h4>
                           <p className="text-xs text-slate-500 font-medium mt-0.5">
-                            Cada usu√°rio pode enviar 1 proposta por dispositivo. Voc√™ pode editar o texto e a justificativa enquanto o per√≠odo estiver aberto.
+                            {contribOriginType === 'online' 
+                              ? 'Proposta online vinculada exclusivamente ao seu usu√°rio autenticado.' 
+                              : 'Registro t√©cnico de contribui√ß√£o externa (audi√™ncia p√∫blica, of√≠cio ou e-mail) com identifica√ß√£o do manifestante e auditoria pelo seu login t√©cnico.'}
                           </p>
                         </div>
                       </div>
+
+                      {/* Exibi√ß√£o condicional: 'online' (canal fixo do usu√°rio autenticado) VS 'oral/documental/email' (canais de manifesta√ß√£o externa) */}
+                      {contribOriginType === 'online' ? (
+                        <div className="mb-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl p-4 shadow-2xs">
+                          <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-base shadow-xs shrink-0">
+                                üíª
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-black uppercase tracking-wider text-indigo-950">
+                                    Proposta Online (Usu√°rio Autenticado)
+                                  </span>
+                                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                    Canal Direto Online
+                                  </span>
+                                </div>
+                                <p className="text-xs text-indigo-900/80 font-medium mt-0.5">
+                                  Autor(a): <strong className="text-indigo-950">{effectiveUser?.name || "Usu√°rio"}</strong> ({effectiveUser?.email || "E-mail n√£o informado"})
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-[11px] text-indigo-800 font-semibold flex items-center gap-1.5 bg-white/90 px-3 py-1.5 rounded-lg border border-indigo-200">
+                              <ShieldCheck size={14} className="text-indigo-600 shrink-0" />
+                              Autoria Direta do Usu√°rio
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mb-4 bg-purple-50/40 border border-purple-200 rounded-2xl p-4 shadow-2xs">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-black uppercase tracking-widest text-slate-700 flex items-center gap-1.5">
+                              Canal / Origem da Manifesta√ß√£o
+                            </span>
+                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200">
+                              Cadastro T√©cnico / Audi√™ncia
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                            <button
+                              type="button"
+                              onClick={() => setContribOriginType('oral')}
+                              className={cn(
+                                "p-3 rounded-xl border text-left transition-all flex flex-col gap-1",
+                                contribOriginType === 'oral'
+                                  ? "bg-purple-50 border-purple-600 ring-2 ring-purple-500/20 text-purple-950 shadow-xs"
+                                  : "bg-white/80 border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300"
+                              )}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold flex items-center gap-1.5 text-purple-900">
+                                  <Mic size={14} className="text-purple-600" /> Manifesta√ß√£o Oral
+                                </span>
+                                {contribOriginType === 'oral' && <CheckCircle2 size={14} className="text-purple-600" />}
+                              </div>
+                              <p className="text-[11px] text-slate-400 font-medium">
+                                Audi√™ncia presencial / remota
+                              </p>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setContribOriginType('documental')}
+                              className={cn(
+                                "p-3 rounded-xl border text-left transition-all flex flex-col gap-1",
+                                contribOriginType === 'documental'
+                                  ? "bg-amber-50 border-amber-600 ring-2 ring-amber-500/20 text-amber-950 shadow-xs"
+                                  : "bg-white/80 border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300"
+                              )}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold flex items-center gap-1.5 text-amber-900">
+                                  <FileText size={14} className="text-amber-600" /> Of√≠cio / Doc. Presencial
+                                </span>
+                                {contribOriginType === 'documental' && <CheckCircle2 size={14} className="text-amber-600" />}
+                              </div>
+                              <p className="text-[11px] text-slate-400 font-medium">
+                                Protocolo SEI, of√≠cio em mesa
+                              </p>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setContribOriginType('email')}
+                              className={cn(
+                                "p-3 rounded-xl border text-left transition-all flex flex-col gap-1",
+                                contribOriginType === 'email'
+                                  ? "bg-sky-50 border-sky-600 ring-2 ring-sky-500/20 text-sky-950 shadow-xs"
+                                  : "bg-white/80 border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300"
+                              )}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold flex items-center gap-1.5 text-sky-900">
+                                  <Mail size={14} className="text-sky-600" /> E-mail / Ouvidoria
+                                </span>
+                                {contribOriginType === 'email' && <CheckCircle2 size={14} className="text-sky-600" />}
+                              </div>
+                              <p className="text-[11px] text-slate-400 font-medium">
+                                Canais institucionais
+                              </p>
+                            </button>
+                          </div>
+
+                          <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-2xs">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                                  Nome do Manifestante / Participante <span className="text-rose-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="Ex: Carlos Alberto de Souza ou Representante ABCON"
+                                  value={contribAuthorName}
+                                  onChange={e => setContribAuthorName(e.target.value)}
+                                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-600 text-slate-800 font-medium"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                                  Institui√ß√£o / √ìrg√£o / Entidade Representada
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="Ex: ABCON, CAESB, Federa√ß√£o, Cidad√£o(√£)..."
+                                  value={contribAuthorInstitution}
+                                  onChange={e => setContribAuthorInstitution(e.target.value)}
+                                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-600 text-slate-800 font-medium"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                                  N¬∫ da Manifesta√ß√£o / Protocolo / Grava√ß√£o
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="Ex: Manifesta√ß√£o Oral n¬∫ 04 - Audi√™ncia P√∫blica ou Processo SEI..."
+                                  value={contribProtocolNumber}
+                                  onChange={e => setContribProtocolNumber(e.target.value)}
+                                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-600 text-slate-800 font-medium"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                                  E-mail de Contato do Manifestante (Opcional)
+                                </label>
+                                <input
+                                  type="email"
+                                  placeholder="Ex: participante@entidade.org.br"
+                                  value={contribAuthorEmail}
+                                  onChange={e => setContribAuthorEmail(e.target.value)}
+                                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-600 text-slate-800 font-medium"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-600">
+                              <ShieldCheck size={16} className="text-purple-600 shrink-0" />
+                              <div>
+                                <span className="font-bold text-slate-800">Rastreabilidade e Transpar√™ncia:</span> A manifesta√ß√£o ser√° registrada em nome do autor acima e auditada sob a matr√≠cula/login t√©cnico de <strong className="text-slate-900">{effectiveUser?.name || effectiveUser?.email || "T√©cnico"}</strong>.
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       
                       <div className="space-y-6">
                         <div>
@@ -3985,7 +4723,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           row["Texto Proposto em Consulta (Minuta)"] = formatContentForExport(originalArticle?.proposedText !== undefined ? originalArticle.proposedText : (originalArticle?.originalText || ""), false, isPropostaTable);
                           row["Texto da Contribui√ß√£o Sugerida"] = formatContentForExport(c.proposedText, isSuppressingContrib, isTableContrib);
                           row["Justificativa da Contribui√ß√£o"] = c.justification || "";
-                          row["Participante"] = c.authorName || "";
+                          row["Canal / Origem"] = c.originType === 'oral' ? 'Manifesta√ß√£o Oral (Audi√™ncia)' : c.originType === 'documental' ? 'Of√≠cio / Doc. Presencial' : c.originType === 'email' ? 'E-mail / Ouvidoria' : 'Portal Online';
+                          row["Participante / Manifestante"] = c.authorName || "";
+                          row["Institui√ß√£o / Entidade"] = c.authorInstitution || "-";
+                          row["N¬∫ Ref / Protocolo"] = c.protocolNumber || "-";
+                          row["T√©cnico Cadastrador"] = c.registeredByName || "-";
                           row["Parecer"] = c.decision || "Aguardando An√°lise";
                           row["Justificativa T√©cnica"] = c.technicalJustification || originalArticle?.finalJustification || "";
                           row["Texto Final do Dispositivo"] = formatContentForExport(originalArticle?.finalText || originalArticle?.proposedText || originalArticle?.originalText || "", false, isTableFinal);
@@ -4244,7 +4986,6 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           </>
                         )}
                       </div>
-
                       <button
                         onClick={() => handleResetColWidths("contributions")}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold shadow-xs hover:shadow transition-all group"
@@ -4735,14 +5476,46 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                               )}
                               {!contributionsHiddenCols.participante && (
                                 <td className="px-4 py-4 text-xs font-bold text-slate-800">
-                                  <div className="flex items-center gap-2.5">
-                                    <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center text-[11px] font-black text-slate-700 shrink-0">
-                                      {c.authorName.charAt(0).toUpperCase()}
+                                  <div className="flex items-start gap-2.5">
+                                    <div className={cn(
+                                      "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5",
+                                      c.originType === 'oral' ? "bg-purple-100 text-purple-800" :
+                                      c.originType === 'documental' ? "bg-amber-100 text-amber-800" :
+                                      c.originType === 'email' ? "bg-sky-100 text-sky-800" : "bg-slate-100 text-slate-700"
+                                    )}>
+                                      {c.originType === 'oral' ? <Mic size={13} /> : (c.authorName || "P").charAt(0).toUpperCase()}
                                     </div>
-                                    <div className="min-w-0">
+                                    <div className="min-w-0 space-y-1">
                                       <div className="line-clamp-1 text-slate-900 font-bold">{c.authorName}</div>
-                                      {c.authorEmail && (
-                                        <div className="text-[10px] text-slate-400 font-normal truncate">{c.authorEmail}</div>
+                                      <div>
+                                        {c.originType === 'oral' ? (
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200">
+                                            <Mic size={9} /> Oral (Audi√™ncia)
+                                          </span>
+                                        ) : c.originType === 'documental' ? (
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                            <FileText size={9} /> Of√≠cio / Doc.
+                                          </span>
+                                        ) : c.originType === 'email' ? (
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200">
+                                            <Mail size={9} /> E-mail
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                            üíª Online
+                                          </span>
+                                        )}
+                                      </div>
+                                      {c.authorInstitution && (
+                                        <div className="text-[10px] text-slate-600 font-medium truncate flex items-center gap-1">
+                                          <Building size={10} /> {c.authorInstitution}
+                                        </div>
+                                      )}
+                                      {c.protocolNumber && (
+                                        <div className="text-[9px] text-slate-500 font-bold truncate">Ref: {c.protocolNumber}</div>
+                                      )}
+                                      {c.registeredByName && (
+                                        <div className="text-[9px] text-slate-400 italic truncate">Cadastrado por: {c.registeredByName}</div>
                                       )}
                                     </div>
                                   </div>
@@ -4898,6 +5671,15 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 // Filtro de Dispositivo
                 if (analysisDeviceFilter !== "todos" && String(art.id) !== analysisDeviceFilter) return false;
 
+                // Filtro de Assunto
+                if (analysisSubjectFilter !== "todos") {
+                  if (analysisSubjectFilter === "sem_assunto") {
+                    if (art.subjectIds && art.subjectIds.length > 0) return false;
+                  } else {
+                    if (!art.subjectIds || !art.subjectIds.includes(analysisSubjectFilter)) return false;
+                  }
+                }
+
                 // Filtros avan√ßados nas contribui√ß√µes
                 const matchesAdvancedFilters = artsContribs.some(c => {
                   if (analysisComplexityFilter !== "todos" && (c.complexity || "N√£o Classificado") !== analysisComplexityFilter) return false;
@@ -5010,12 +5792,30 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
                   {/* Filtros Avan√ßados */}
                   <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Search size={16} className="text-slate-400" />
-                      <span className="text-xs font-black uppercase tracking-wider text-slate-500">Filtros Avan√ßados das Contribui√ß√µes</span>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <Search size={16} className="text-slate-400" />
+                        <span className="text-xs font-black uppercase tracking-wider text-slate-500">Filtros Avan√ßados das Contribui√ß√µes</span>
+                      </div>
+                      {(analysisDeviceFilter !== "todos" || analysisSubjectFilter !== "todos" || analysisComplexityFilter !== "todos" || analysisDecisionFilter !== "todos" || analysisParticipantFilter !== "todos" || analysisContentFilter.trim() !== "") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAnalysisDeviceFilter("todos");
+                            setAnalysisSubjectFilter("todos");
+                            setAnalysisContentFilter("");
+                            setAnalysisComplexityFilter("todos");
+                            setAnalysisDecisionFilter("todos");
+                            setAnalysisParticipantFilter("todos");
+                          }}
+                          className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition-colors"
+                        >
+                          Limpar filtros
+                        </button>
+                      )}
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                      {/* Dispositivo */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {/* Linha 1 - Campo 1: Dispositivo */}
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Dispositivo</label>
                         <select 
@@ -5025,11 +5825,28 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         >
                           <option value="todos">Todos</option>
                           {currentArticles.map((art, idx) => {
-                            return <option key={art.id} value={art.id}>Dispositivo #{idx + 1}</option>;
+                            return <option key={art.id} value={art.id}>{art.contentType === 'table' ? `Tabela #${idx + 1}` : `Dispositivo #${idx + 1}`}</option>;
                           })}
                         </select>
                       </div>
-                      {/* Conte√∫do */}
+
+                      {/* Linha 1 - Campo 2: Assunto */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Assunto</label>
+                        <select 
+                          value={analysisSubjectFilter}
+                          onChange={(e) => setAnalysisSubjectFilter(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 transition-all text-xs text-slate-700"
+                        >
+                          <option value="todos">Todos</option>
+                          {(selectedTomada?.subjects || []).map((s) => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                          <option value="sem_assunto">Sem Assunto Vinculado</option>
+                        </select>
+                      </div>
+
+                      {/* Linha 1 - Campo 3: Conte√∫do */}
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Conte√∫do</label>
                         <input 
@@ -5040,7 +5857,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 transition-all text-xs text-slate-700"
                         />
                       </div>
-                      {/* Complexidade */}
+
+                      {/* Linha 2 - Campo 4: Complexidade */}
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Complexidade</label>
                         <select 
@@ -5054,7 +5872,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           <option value="Alta">Alta</option>
                         </select>
                       </div>
-                      {/* Parecer */}
+
+                      {/* Linha 2 - Campo 5: Parecer */}
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Parecer</label>
                         <select 
@@ -5071,7 +5890,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           <option value="Pendente">Pendente</option>
                         </select>
                       </div>
-                      {/* Participante */}
+
+                      {/* Linha 2 - Campo 6: Participante */}
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Participante</label>
                         <select 
@@ -5093,12 +5913,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       const artsContribs = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
                       const actualArtIdx = currentArticles.findIndex(a => String(a.id) === String(art.id));
                       return (
-                        <div key={art.id} className="relative">
-                          <div className="absolute -left-3 top-4 bg-slate-800 text-white text-[10px] font-black px-2 py-0.5 rounded-full z-10 shadow-sm">
-                            #{actualArtIdx + 1}
-                          </div>
+                        <div key={art.id}>
                           <TechnicalAnalysisArticle
                             article={art}
+                            articleIndex={actualArtIdx + 1}
+                            subjects={selectedTomada?.subjects || []}
                             tipoResolucao={selectedTomada?.tipoResolucao}
                             contributions={artsContribs}
                             filters={{
@@ -5109,7 +5928,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             }}
                             handleUpdateAnalysis={handleUpdateAnalysis}
                             handleUpdateFinalAnalysis={handleUpdateFinalAnalysis}
-                            handleDeleteArticle={handleDeleteAnalysisArticle}
+      
                             showToast={showToast}
                           />
                         </div>
@@ -5191,12 +6010,69 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
               const participantRankingData = Array.from(participantMap.entries())
                 .map(([name, data]) => ({
+                  id: name,
                   name,
-                  email: data.email,
+                  email: data.email || "",
                   value: data.count,
-                  acatadas: data.acatadas
+                  acatadas: data.acatadas,
+                  devicesCount: 0
                 }))
                 .sort((a, b) => b.value - a.value);
+
+              // 3. Subject Ranking (Ranking por Assunto)
+              const subjectMap = new Map<string, { id: string; name: string; count: number; acatadas: number; devicesCount: number }>();
+              (selectedTomada?.subjects || []).forEach(s => {
+                subjectMap.set(s.id, { id: s.id, name: s.name, count: 0, acatadas: 0, devicesCount: 0 });
+              });
+
+              let unassignedCount = 0;
+              let unassignedAcatadas = 0;
+              let unassignedDevicesCount = 0;
+
+              currentArticles.forEach(art => {
+                const artContribs = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
+                const artAcatadas = artContribs.filter(c => c.decision === "Acatada" || c.decision === "Acatada Parcialmente").length;
+                
+                if (art.subjectIds && art.subjectIds.length > 0) {
+                  art.subjectIds.forEach(sid => {
+                    const cur = subjectMap.get(sid);
+                    if (cur) {
+                      cur.devicesCount += 1;
+                      cur.count += artContribs.length;
+                      cur.acatadas += artAcatadas;
+                    }
+                  });
+                } else {
+                  unassignedDevicesCount += 1;
+                  unassignedCount += artContribs.length;
+                  unassignedAcatadas += artAcatadas;
+                }
+              });
+
+              const subjectRankingData = Array.from(subjectMap.values())
+                .map(data => ({
+                  id: data.id,
+                  name: data.name,
+                  email: "",
+                  value: data.count,
+                  acatadas: data.acatadas,
+                  devicesCount: data.devicesCount
+                }));
+
+              if (unassignedCount > 0 || unassignedDevicesCount > 0) {
+                subjectRankingData.push({
+                  id: "sem_assunto",
+                  name: "Sem Assunto Vinculado",
+                  email: "",
+                  value: unassignedCount,
+                  acatadas: unassignedAcatadas,
+                  devicesCount: unassignedDevicesCount
+                });
+              }
+
+              subjectRankingData.sort((a, b) => b.value - a.value);
+
+              const currentRankingData = rankingMetricType === "participantes" ? participantRankingData : subjectRankingData;
 
               return (
                 <div className="space-y-6">
@@ -5304,50 +6180,104 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       )}
                     </div>
 
-                    {/* Gr√°fico 4: Ranking de Participantes */}
+                    {/* Gr√°fico 4: Ranking de Participantes / Assuntos */}
                     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                      <div className="flex items-center justify-between mb-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                         <div>
-                          <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                            Ranking de Participa√ß√£o Social
+                          <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                            {rankingMetricType === "participantes" ? (
+                              <>
+                                <Users size={14} className="text-indigo-600" />
+                                <span>Ranking de Participa√ß√£o Social</span>
+                              </>
+                            ) : (
+                              <>
+                                <Tag size={14} className="text-indigo-600" />
+                                <span>Ranking de Contribui√ß√µes por Assunto</span>
+                              </>
+                            )}
                           </h4>
-                          <span className="text-[10px] text-slate-400">{participantRankingData.length} participante(s) identificados</span>
+                          <span className="text-[10px] text-slate-400">
+                            {rankingMetricType === "participantes"
+                              ? `${participantRankingData.length} participante(s) identificados`
+                              : `${subjectRankingData.length} assunto(s) mapeados`}
+                          </span>
                         </div>
-                        <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
-                          <button
-                            type="button"
-                            onClick={() => setParticipantRankingViewMode("bento")}
-                            className={cn(
-                              "px-2.5 py-1 rounded text-[11px] font-bold transition-all",
-                              participantRankingViewMode === "bento"
-                                ? "bg-white text-indigo-700 shadow-xs"
-                                : "text-slate-500 hover:text-slate-800"
-                            )}
-                          >
-                            Lista
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setParticipantRankingViewMode("chart")}
-                            className={cn(
-                              "px-2.5 py-1 rounded text-[11px] font-bold transition-all",
-                              participantRankingViewMode === "chart"
-                                ? "bg-white text-indigo-700 shadow-xs"
-                                : "text-slate-500 hover:text-slate-800"
-                            )}
-                          >
-                            Gr√°fico
-                          </button>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* Alternar M√©trica: Participantes vs Assuntos */}
+                          <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setRankingMetricType("participantes")}
+                              className={cn(
+                                "px-2.5 py-1 rounded text-[11px] font-bold transition-all flex items-center gap-1",
+                                rankingMetricType === "participantes"
+                                  ? "bg-white text-indigo-700 shadow-xs"
+                                  : "text-slate-500 hover:text-slate-800"
+                              )}
+                              title="Ranking por participante/autor"
+                            >
+                              <Users size={12} />
+                              Participantes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRankingMetricType("assuntos")}
+                              className={cn(
+                                "px-2.5 py-1 rounded text-[11px] font-bold transition-all flex items-center gap-1",
+                                rankingMetricType === "assuntos"
+                                  ? "bg-white text-indigo-700 shadow-xs"
+                                  : "text-slate-500 hover:text-slate-800"
+                              )}
+                              title="Ranking por assunto tem√°tico"
+                            >
+                              <Tag size={12} />
+                              Por Assunto
+                            </button>
+                          </div>
+
+                          {/* Alternar Formato: Lista vs Gr√°fico */}
+                          <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setParticipantRankingViewMode("bento")}
+                              className={cn(
+                                "px-2.5 py-1 rounded text-[11px] font-bold transition-all flex items-center gap-1",
+                                participantRankingViewMode === "bento"
+                                  ? "bg-white text-indigo-700 shadow-xs"
+                                  : "text-slate-500 hover:text-slate-800"
+                              )}
+                              title="Visualizar em formato de lista"
+                            >
+                              <List size={12} />
+                              Lista
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setParticipantRankingViewMode("chart")}
+                              className={cn(
+                                "px-2.5 py-1 rounded text-[11px] font-bold transition-all flex items-center gap-1",
+                                participantRankingViewMode === "chart"
+                                  ? "bg-white text-indigo-700 shadow-xs"
+                                  : "text-slate-500 hover:text-slate-800"
+                              )}
+                              title="Visualizar em formato de gr√°fico"
+                            >
+                              <BarChart2 size={12} />
+                              Gr√°fico
+                            </button>
+                          </div>
                         </div>
                       </div>
 
-                      {participantRankingData.length > 0 ? (
+                      {currentRankingData.length > 0 ? (
                         participantRankingViewMode === "chart" ? (
                           <div className="h-64">
                             <ResponsiveContainer width="100%" height="100%">
                               <BarChart
                                 layout="vertical"
-                                data={participantRankingData.slice(0, 7)}
+                                data={currentRankingData.slice(0, 7)}
                                 margin={{ left: 20, right: 20, top: 10, bottom: 10 }}
                               >
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
@@ -5356,60 +6286,109 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                   type="category"
                                   dataKey="name"
                                   tick={{ fontSize: 10, fontWeight: 600, fill: '#475569' }}
-                                  width={110}
-                                  tickFormatter={(val) => val.length > 15 ? `${val.slice(0, 13)}...` : val}
+                                  width={120}
+                                  tickFormatter={(val) => val.length > 16 ? `${val.slice(0, 14)}...` : val}
                                 />
                                 <Tooltip
                                   cursor={{ fill: '#f8fafc' }}
                                   contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}
                                 />
-                                <Bar dataKey="value" name="Contribui√ß√µes" fill="#0ea5e9" radius={[0, 4, 4, 0]} barSize={20} />
+                                <Bar
+                                  dataKey="value"
+                                  name="Contribui√ß√µes"
+                                  fill={rankingMetricType === "participantes" ? "#0ea5e9" : "#6366f1"}
+                                  radius={[0, 4, 4, 0]}
+                                  barSize={20}
+                                />
                               </BarChart>
                             </ResponsiveContainer>
                           </div>
                         ) : (
                           <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                            {participantRankingData.map((part, idx) => (
-                              <div
-                                key={part.name}
-                                className="flex items-center justify-between p-2.5 bg-slate-50/80 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors"
-                              >
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <span className={cn(
-                                    "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0",
-                                    idx === 0 ? "bg-amber-100 text-amber-700" :
-                                    idx === 1 ? "bg-slate-200 text-slate-700" :
-                                    idx === 2 ? "bg-amber-800/10 text-amber-900" : "bg-slate-100 text-slate-500"
-                                  )}>
-                                    {idx + 1}
-                                  </span>
-                                  <div className="min-w-0">
-                                    <div className="text-xs font-bold text-slate-800 truncate" title={part.name}>
-                                      {part.name}
-                                    </div>
-                                    {part.email && (
-                                      <div className="text-[10px] text-slate-400 truncate" title={part.email}>
-                                        {part.email}
+                            {rankingMetricType === "participantes" ? (
+                              participantRankingData.map((part, idx) => (
+                                <div
+                                  key={part.name}
+                                  className="flex items-center justify-between p-2.5 bg-slate-50/80 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <span className={cn(
+                                      "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0",
+                                      idx === 0 ? "bg-amber-100 text-amber-700" :
+                                      idx === 1 ? "bg-slate-200 text-slate-700" :
+                                      idx === 2 ? "bg-amber-800/10 text-amber-900" : "bg-slate-100 text-slate-500"
+                                    )}>
+                                      {idx + 1}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <div className="text-xs font-bold text-slate-800 truncate" title={part.name}>
+                                        {part.name}
                                       </div>
+                                      {part.email && (
+                                        <div className="text-[10px] text-slate-400 truncate" title={part.email}>
+                                          {part.email}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {part.acatadas > 0 && (
+                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700">
+                                        {part.acatadas} acatada(s)
+                                      </span>
                                     )}
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                      {part.value} {part.value === 1 ? 'prop.' : 'prop.'}
+                                    </span>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  {part.acatadas > 0 && (
-                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700">
-                                      {part.acatadas} acatada(s)
+                              ))
+                            ) : (
+                              subjectRankingData.map((sub, idx) => (
+                                <div
+                                  key={sub.id}
+                                  className="flex items-center justify-between p-2.5 bg-slate-50/80 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <span className={cn(
+                                      "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0",
+                                      idx === 0 ? "bg-amber-100 text-amber-700" :
+                                      idx === 1 ? "bg-slate-200 text-slate-700" :
+                                      idx === 2 ? "bg-amber-800/10 text-amber-900" : "bg-slate-100 text-slate-500"
+                                    )}>
+                                      {idx + 1}
                                     </span>
-                                  )}
-                                  <span className="px-2 py-0.5 rounded-full text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-100">
-                                    {part.value} {part.value === 1 ? 'prop.' : 'prop.'}
-                                  </span>
+                                    <div className="min-w-0">
+                                      <div className="text-xs font-bold text-slate-800 truncate flex items-center gap-1.5" title={sub.name}>
+                                        <Tag size={11} className="text-indigo-500 shrink-0" />
+                                        <span>{sub.name}</span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-400">
+                                        {sub.devicesCount} {sub.devicesCount === 1 ? 'dispositivo vinculado' : 'dispositivos vinculados'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {sub.acatadas > 0 && (
+                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700">
+                                        {sub.acatadas} acatada(s)
+                                      </span>
+                                    )}
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                      {sub.value} {sub.value === 1 ? 'contrib.' : 'contrib.'}
+                                    </span>
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              ))
+                            )}
                           </div>
                         )
                       ) : (
-                        <div className="h-64 flex items-center justify-center text-slate-400 text-sm font-medium">Nenhum participante registrado ainda</div>
+                        <div className="h-64 flex items-center justify-center text-slate-400 text-sm font-medium">
+                          {rankingMetricType === "participantes"
+                            ? "Nenhum participante registrado ainda"
+                            : "Nenhum assunto com contribui√ß√µes ainda"}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -6233,6 +7212,16 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 const artMatch = clean.match(/^Art(?:igo)?\.?\s*([0-9]+(?:[¬∫¬™])?(?:[-_]?[A-Za-z]{1,3})?(?:[¬∫¬™])?)(?:[\.:\s\-‚Äì‚Äî]+|$)/i);
                 if (artMatch && artMatch[1]) {
                   return `Art. ${artMatch[1].trim()}`;
+                }
+
+                const anexoMatch = clean.match(/^Anexo\s+([A-Za-z0-9IVXLCDM¬∫¬™√öNICO]+)/i);
+                if (anexoMatch && anexoMatch[1]) {
+                  return `Anexo ${anexoMatch[1]}`;
+                }
+
+                const decimalMatch = clean.match(/^(?:Item\s+)?([0-9]+(?:\.[0-9]+)*)(?:[\.:\s\-‚Äì‚Äî\)]+|$)/i);
+                if (decimalMatch && decimalMatch[1]) {
+                  return `Item ${decimalMatch[1]}`;
                 }
                 
                 const clausulaMatch = clean.match(/^Cl[a√°]usula\s+([A-Za-z0-9¬∫¬™]+)/i);
@@ -8100,762 +9089,63 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                 title="Selecionar para mover"
                               />
                             )}
-                            <span className="text-xs font-black uppercase text-indigo-700 bg-white px-2.5 py-1 rounded-lg border border-indigo-100 shadow-xs">
-                              Dispositivo #{idx + 1}
-                            </span>
+                            {(() => {
+                              const dInfo = getDispositivoInfo(art.proposedText || art.originalText || "", idx + 1);
+                              return (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs font-black uppercase text-indigo-900 bg-white px-2.5 py-1 rounded-lg border border-indigo-100 shadow-xs flex items-center gap-1.5">
+                                    {dInfo.isAnnexOrDecimal ? <FolderTree size={12} className="text-teal-600" /> : <FileText size={12} className="text-indigo-600" />}
+                                    {dInfo.label}
+                                  </span>
+                                  {dInfo.isAnnexOrDecimal && (
+                                    <span className="text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-md">
+                                      {dInfo.sublabel}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                            <button type="button" onClick={() => { setPickerModalType("edit"); setPickerModalIndex(idx); }} className="text-[10px] font-bold text-indigo-600 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-100 px-2 py-1 rounded-md transition-colors flex items-center gap-1 shrink-0 shadow-2xs active:scale-95">
+                              <Tag size={12} /> Vincular Assunto
+                            </button>
+                            <div className="flex flex-wrap items-center gap-1 overflow-hidden">
+                              {(art.subjectIds || []).map(sid => {
+                                const s = (editFormData.subjects || []).find(sub => sub.id === sid);
+                                return s ? (
+                                  <span key={sid} className="inline-flex items-center gap-1 text-[9px] font-medium bg-slate-100 border border-slate-200 text-slate-700 px-1.5 py-0.5 rounded shadow-2xs">
+                                    <span className="truncate max-w-[140px]" title={s.name}>{s.name}</span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, subjectIds: (a.subjectIds || []).filter(id => id !== sid) } : a));
+                                      }}
+                                      className="text-slate-400 hover:text-rose-600 rounded-full transition-colors"
+                                      title="Desvincular assunto"
+                                    >
+                                      <X size={10} />
+                                    </button>
+                                  </span>
+                                ) : null;
+                              })}
+                            </div>
                           </div>
-                          
                           <div className="flex items-center gap-1 sm:gap-2">
                             <button
                               type="button"
                               onClick={() => {
-                                if (idx > 0) {
-                                  const newArts = [...editArticles];
-                                  [newArts[idx - 1], newArts[idx]] = [newArts[idx], newArts[idx - 1]];
-                                  setEditArticles(newArts);
-                                }
-                              }}
-                              disabled={idx === 0}
-                              className="text-xs font-bold text-slate-500 hover:text-indigo-600 disabled:opacity-30 px-1.5 py-1 hover:bg-indigo-50 rounded transition-colors flex items-center gap-1"
-                              title="Mover para Cima"
-                            >
-                              <ArrowUp size={14} /> <span className="hidden sm:inline">Mover</span> Cima
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (idx < editArticles.length - 1) {
-                                  const newArts = [...editArticles];
-                                  [newArts[idx + 1], newArts[idx]] = [newArts[idx], newArts[idx + 1]];
-                                  setEditArticles(newArts);
-                                }
-                              }}
-                              disabled={idx === editArticles.length - 1}
-                              className="text-xs font-bold text-slate-500 hover:text-indigo-600 disabled:opacity-30 px-1.5 py-1 hover:bg-indigo-50 rounded transition-colors flex items-center gap-1"
-                              title="Mover para Baixo"
-                            >
-                              <ArrowDown size={14} /> <span className="hidden sm:inline">Mover</span> Baixo
-                            </button>
-
-                            <div className="w-px h-4 bg-slate-300 mx-1"></div>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newArticle = {
-                                  id: 'new_' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-                                  tomadaId: editFormData.id,
-                                  originalText: "",
-                                  proposedText: "",
-                                  order: idx
-                                };
-                                const newArts = [...editArticles];
-                                newArts.splice(idx, 0, newArticle as any);
-                                setEditArticles(newArts);
-                              }}
-                              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 px-1.5 py-1 hover:bg-emerald-50 rounded transition-colors flex items-center gap-1"
-                              title="Adicionar Dispositivo Acima"
-                            >
-                              <Plus size={14} /><ArrowUp size={10} className="-ml-1 hidden sm:block" /> <span className="hidden sm:inline">Acima</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newArticle = {
-                                  id: 'new_' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-                                  tomadaId: editFormData.id,
-                                  originalText: "",
-                                  proposedText: "",
-                                  order: idx + 1
-                                };
-                                const newArts = [...editArticles];
-                                newArts.splice(idx + 1, 0, newArticle as any);
-                                setEditArticles(newArts);
-                              }}
-                              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 px-1.5 py-1 hover:bg-emerald-50 rounded transition-colors flex items-center gap-1"
-                              title="Adicionar Dispositivo Abaixo"
-                            >
-                              <Plus size={14} /><ArrowDown size={10} className="-ml-1 hidden sm:block" /> <span className="hidden sm:inline">Abaixo</span>
-                            </button>
-
-                            <div className="w-px h-4 bg-slate-300 mx-1"></div>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditArticles(editArticles.filter((_, i) => i !== idx));
-                              }}
-                              className="text-xs font-bold text-rose-500 hover:text-rose-700 px-2 py-1 hover:bg-rose-50 rounded transition-colors flex items-center gap-1.5"
-                              title="Remover este dispositivo"
-                            >
-                              <Trash2 size={14} /> <span className="hidden sm:inline">Remover</span>
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-200/60">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                              Formato:
-                            </span>
-                            <div className="inline-flex rounded-lg p-0.5 bg-slate-200/70 border border-slate-300/60">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, contentType: 'text' } : a));
-                                }}
-                                className={cn(
-                                  "px-2 py-0.5 text-[10px] font-bold rounded-md transition-all flex items-center gap-1",
-                                  art.contentType !== 'table'
-                                    ? "bg-white text-indigo-700 shadow-xs"
-                                    : "text-slate-600 hover:text-slate-900"
-                                )}
-                              >
-                                <FileText size={11} /> Texto
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditArticles(prev => prev.map((a, i) => {
-                                    if (i !== idx) return a;
-                                    const baseContent = a.proposedText || a.originalText || "Item\tDescri√ß√£o\tValor\n1\tTarifa Base\t100,00";
-                                    const parsedT = isTableJson(baseContent) ? parseTableData(baseContent) : parseTableData(baseContent);
-                                    return {
-                                      ...a,
-                                      contentType: 'table',
-                                      proposedText: serializeTableData(parsedT)
-                                    };
-                                  }));
-                                }}
-                                className={cn(
-                                  "px-2 py-0.5 text-[10px] font-bold rounded-md transition-all flex items-center gap-1",
-                                  art.contentType === 'table'
-                                    ? "bg-indigo-600 text-white shadow-xs"
-                                    : "text-slate-600 hover:text-slate-900"
-                                )}
-                              >
-                                <TableIcon size={11} /> Tabela
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {art.contentType === 'table' ? (
-                          <div className="space-y-4">
-                            {editFormData.tipoResolucao === "alteracao" && (
-                              <div className="space-y-1.5">
-                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                                  Tabela Vigente / Anterior (Opcional)
-                                </label>
-                                <RegulatoryTableEditor
-                                  initialData={parseTableData(art.originalText || "")}
-                                  onChange={(table) => {
-                                    setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, originalText: serializeTableData(table) } : a));
-                                  }}
-                                />
-                              </div>
-                            )}
-                            <div className="space-y-1.5">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="block text-[11px] font-bold text-indigo-600 uppercase tracking-wider">
-                                  Tabela Proposta pela √Årea T√©cnica (Oficial)
-                                </label>
-                                {editFormData.tipoResolucao === "alteracao" && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, proposedText: a.originalText || "" } : a));
-                                    }}
-                                    className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 hover:underline cursor-pointer bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200"
-                                    title="Copiar estrutura e dados da tabela vigente para a tabela proposta"
-                                  >
-                                    <Copy size={11} /> Copiar Tabela Atual para Tabela Proposta
-                                  </button>
-                                )}
-                              </div>
-                              <RegulatoryTableEditor
-                                initialData={parseTableData(art.proposedText || art.originalText || "")}
-                                originalData={editFormData.tipoResolucao === "alteracao" && art.originalText ? parseTableData(art.originalText) : undefined}
-                                onChange={(table) => {
-                                  setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, proposedText: serializeTableData(table) } : a));
-                                }}
-                              />
-                            </div>
-                          </div>
-                        ) : (
-                          <div className={cn("grid gap-4", editFormData.tipoResolucao === "alteracao" ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1")}>
-                            {editFormData.tipoResolucao === "alteracao" && (
-                              <div className="space-y-1.5">
-                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-                                  <span>Texto Vigente / Anterior (Opcional)</span>
-                                  {!art.originalText?.trim() && (
-                                    <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded uppercase font-black tracking-widest">Acr√©scimo / Novo</span>
-                                  )}
-                                </label>
-                                <textarea
-                                  rows={14}
-                                  className="w-full bg-white px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-700 focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all font-mono leading-relaxed resize-y"
-                                  placeholder="Deixe em branco se for a INCLUS√ÉO de um novo artigo (Acr√©scimo)..."
-                                  value={art.originalText || ""}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, originalText: val } : a));
-                                  }}
-                                />
-                              </div>
-                            )}
-                            <div className="space-y-1.5">
-                              <label className="block text-[11px] font-bold text-indigo-600 uppercase tracking-wider flex items-center justify-between">
-                                <span>Texto Proposto pela √Årea T√©cnica (Oficial)</span>
-                                <span className="text-[10px] text-indigo-400 font-normal lowercase">reda√ß√£o proposta</span>
-                              </label>
-                              <textarea
-                                rows={14}
-                                className="w-full bg-white px-3.5 py-2.5 border border-indigo-200 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600 transition-all font-mono leading-relaxed resize-y shadow-xs"
-                                placeholder="Reda√ß√£o proposta oficial pela ag√™ncia reguladora..."
-                                value={art.proposedText !== undefined ? art.proposedText : (art.originalText || "")}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setEditArticles(prev => prev.map((a, i) => i === idx ? { ...a, proposedText: val } : a));
-                                }}
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-
-              {editModalTab === "anexos" && (
-                <div className="space-y-5">
-                  <div className="bg-indigo-50/70 p-4 rounded-xl border border-indigo-100">
-                    <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                      <Paperclip size={14} className="text-indigo-600" />
-                      Gerenciar Material de Apoio e Anexos
-                    </h4>
-                    <p className="text-xs text-indigo-900 leading-relaxed">
-                      Adicione novos arquivos (Nota T√©cnica, Minuta em PDF, Estudos) ou exclua arquivos existentes desta consulta/tomada.
-                    </p>
-                  </div>
-
-                  {/* Upload de novos arquivos */}
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3">
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Incluir Novo Arquivo / Documento
-                    </label>
-                    <input 
-                      type="file" 
-                      multiple
-                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-700 transition-all text-xs text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
-                      onChange={e => {
-                        if (e.target.files && e.target.files.length > 0) {
-                          const filesList = Array.from(e.target.files) as File[];
-                          const newFiles = filesList.map(file => ({
-                            id: `anexo_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-                            name: file.name,
-                            url: URL.createObjectURL(file)
-                          }));
-                          setEditAnexos(prev => [...prev, ...newFiles]);
-                          e.target.value = "";
-                        }
-                      }}
-                    />
-                  </div>
-
-                  {/* Lista de anexos existentes */}
-                  <div className="space-y-2">
-                    <span className="block text-xs font-bold text-slate-600 uppercase tracking-wider">
-                      Arquivos Cadastrados ({editAnexos.length})
-                    </span>
-
-                    {editAnexos.length === 0 ? (
-                      <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-xs">
-                        Nenhum anexo ou material de apoio vinculado a esta participa√ß√£o social.
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {editAnexos.map((anexo, idx) => (
-                          <div 
-                            key={anexo.id || idx}
-                            className="bg-white border border-slate-200 rounded-xl p-3.5 flex items-center justify-between gap-3 shadow-xs hover:border-slate-300 transition-all"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                                <FileText size={16} />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-xs font-bold text-slate-800 truncate" title={anexo.name}>
-                                  {anexo.name}
-                                </p>
-                                {anexo.url && (
-                                  <a 
-                                    href={anexo.url} 
-                                    download={anexo.name}
-                                    target="_blank" 
-                                    rel="noreferrer"
-                                    className="text-[10px] text-indigo-600 hover:underline font-medium inline-block mt-0.5"
-                                  >
-                                    Visualizar / Download
-                                  </a>
-                                )}
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditAnexos(prev => prev.filter((_, i) => i !== idx));
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors shrink-0"
-                              title="Remover anexo"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between pt-4 border-t border-slate-100 shrink-0">
-              <span className="text-xs text-slate-400 font-medium">
-                {editArticles.length} dispositivo(s) na minuta &bull; {editAnexos.length} anexo(s)
-              </span>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setEditingTomada(null)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  disabled={isSubmittingEdit}
-                  onClick={handleSaveEdit}
-                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50"
-                >
-                  <Save size={15} />
-                  {isSubmittingEdit ? "Salvando..." : "Salvar Altera√ß√µes"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Movimenta√ß√£o de Dispositivos */}
-      {isMoveModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[99999] animate-fadeIn" style={{ zIndex: 99999 }}>
-          <div className="bg-white rounded-2xl border border-amber-100 shadow-2xl max-w-md w-full flex flex-col p-6 space-y-4">
-            <div className="flex items-center gap-3 text-amber-600">
-              <Move size={24} />
-              <h3 className="text-lg font-black text-slate-800">Mover Dispositivos</h3>
-            </div>
-            
-            <p className="text-sm text-slate-600 leading-relaxed">
-              Voc√™ est√° prestes a mover <strong>{selectedArticlesToMove.length}</strong> dispositivo(s) para outra Participa√ß√£o Social.
-            </p>
-            
-            <div className="bg-rose-50 border border-rose-200 p-4 rounded-xl flex items-start gap-3">
-              <AlertCircle className="text-rose-600 shrink-0 mt-0.5" size={18} />
-              <div className="text-xs text-rose-800 space-y-1">
-                <p className="font-bold">Aten√ß√£o!</p>
-                <p>
-                  Ao mover os dispositivos selecionados para outra Participa√ß√£o Social, <strong>todas as contribui√ß√µes recebidas, anota√ß√µes, pareceres e a reda√ß√£o final tamb√©m ser√£o movidos permanentemente.</strong>
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-                Selecione a Participa√ß√£o de Destino:
-              </label>
-              <select
-                value={targetTomadaIdToMove}
-                onChange={(e) => setTargetTomadaIdToMove(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm text-slate-700 bg-white"
-              >
-                <option value="">Selecione...</option>
-                {tomadas
-                  .filter(t => t.id !== editFormData.id)
-                  .map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.numero ? `${t.numero} - ` : ""}{t.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setIsMoveModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
-                disabled={isMovingArticles}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleMoveArticles}
-                disabled={!targetTomadaIdToMove || isMovingArticles}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {isMovingArticles ? "Movendo..." : "Confirmar Movimenta√ß√£o"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Confirma√ß√£o de Duplica√ß√£o */}
-      {duplicateModalTomada && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[99999] animate-fadeIn" style={{ zIndex: 99999 }}>
-          <div className="bg-white rounded-2xl border border-blue-100 shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
-                  <Copy size={20} />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-slate-900 tracking-tight">Duplicar Participa√ß√£o Social</h3>
-                  <p className="text-xs text-slate-500">{duplicateModalTomada.numero}</p>
-                </div>
-              </div>
-              <button onClick={() => setDuplicateModalTomada(null)} className="text-slate-400 hover:text-slate-600 p-2">
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="p-6 overflow-y-auto space-y-5 grow">
-              <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
-                <p className="text-sm font-bold text-slate-800 mb-3">Op√ß√µes de Duplica√ß√£o</p>
-                <div className="space-y-2">
-                  <label className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-white transition-colors">
-                    <input 
-                      type="radio" 
-                      name="dupmode" 
-                      checked={duplicateMode === "proposed"}
-                      onChange={() => setDuplicateMode("proposed")}
-                      className="mt-0.5 text-blue-600 focus:ring-blue-500"
-                    />
-                    <div>
-                      <div className="text-xs font-bold text-slate-800">Duplicar como foi proposto originalmente</div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">Mant√©m o texto original e o texto proposto. (Ignora textos finais)</div>
-                    </div>
-                  </label>
-                  <label className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-white transition-colors">
-                    <input 
-                      type="radio" 
-                      name="dupmode" 
-                      checked={duplicateMode === "final"}
-                      onChange={() => setDuplicateMode("final")}
-                      className="mt-0.5 text-blue-600 focus:ring-blue-500"
-                    />
-                    <div>
-                      <div className="text-xs font-bold text-slate-800">Utilizar o Texto Final como nova Proposta</div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">O Texto Final aprovado nesta participa√ß√£o ser√° carregado como o Texto Proposto na nova. O Texto Original original ser√° mantido.</div>
-                    </div>
-                  </label>
-                </div>
-                <p className="text-[11px] font-medium text-rose-600 mt-3 flex items-center gap-1.5">
-                  <Info size={14} /> As contribui√ß√µes recebidas n√£o ser√£o duplicadas.
-                </p>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-bold text-slate-800">Selecione os artigos para duplicar</p>
-                  <button 
-                    onClick={() => {
-                      if (duplicateSelectedArticles.length === duplicateArticles.length) {
-                        setDuplicateSelectedArticles([]);
-                      } else {
-                        setDuplicateSelectedArticles(duplicateArticles.map(a => String(a.id)));
-                      }
-                    }}
-                    className="text-[11px] font-bold text-blue-600 hover:text-blue-800"
-                  >
-                    {duplicateSelectedArticles.length === duplicateArticles.length ? "Desmarcar Todos" : "Marcar Todos"}
-                  </button>
-                </div>
-                <div className="space-y-2 border border-slate-200 rounded-xl max-h-60 overflow-y-auto p-2 bg-slate-50">
-                  {duplicateArticles.length === 0 ? (
-                    <p className="text-xs text-slate-500 text-center py-4">Nenhum artigo encontrado.</p>
-                  ) : (
-                    duplicateArticles.map(art => (
-                      <label key={art.id} className="flex items-start gap-2 p-2 hover:bg-white rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-200">
-                        <input
-                          type="checkbox"
-                          checked={duplicateSelectedArticles.includes(String(art.id))}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setDuplicateSelectedArticles(prev => [...prev, String(art.id)]);
-                            } else {
-                              setDuplicateSelectedArticles(prev => prev.filter(id => id !== String(art.id)));
-                            }
-                          }}
-                          className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
-                        />
-                        <div className="flex-1">
-                          <div className="text-xs font-bold text-slate-800">{art.label || `Ordem ${art.order}`}</div>
-                          <div className="text-[10px] text-slate-500 line-clamp-1">{art.proposedText || art.originalText || "Sem texto"}</div>
-                        </div>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50 rounded-b-2xl shrink-0">
-              <button
-                type="button"
-                onClick={() => setDuplicateModalTomada(null)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-xl transition-colors"
-                disabled={isDuplicating}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDuplicate}
-                disabled={isDuplicating || duplicateSelectedArticles.length === 0}
-                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all disabled:opacity-50"
-              >
-                <Copy size={16} />
-                {isDuplicating ? "Duplicando..." : "Confirmar Duplica√ß√£o"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Confirma√ß√£o de Exclus√£o (100% compat√≠vel com iFrames) */}
-      {deletingTomada && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[99999] animate-fadeIn" style={{ zIndex: 99999 }}>
-          <div className="bg-white rounded-2xl border border-rose-100 shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                <AlertTriangle size={24} />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-base font-black text-slate-900">
-                  Excluir Participa√ß√£o Social?
-                </h3>
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  Esta a√ß√£o √© irrevers√≠vel. Deseja realmente excluir permanentemente a participa√ß√£o:
-                </p>
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 mt-2">
-                  <div className="text-xs font-bold text-slate-800">{deletingTomada.numero}</div>
-                  <div className="text-xs text-slate-600 line-clamp-2 mt-0.5">{deletingTomada.title}</div>
-                </div>
-                <p className="text-[11px] text-rose-600 font-medium pt-1">
-                  Todos os anexos, a minuta da norma e as contribui√ß√µes recebidas ser√£o exclu√≠dos do banco de dados.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={() => setDeletingTomada(null)}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={handleConfirmDelete}
-                className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-rose-600/20 disabled:opacity-50"
-              >
-                <Trash2 size={15} />
-                {isDeleting ? "Excluindo..." : "Sim, Excluir Registro"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Confirma√ß√£o de Exclus√£o de Dispositivo */}
-      {deletingArticle && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[99999] animate-fadeIn" style={{ zIndex: 99999 }}>
-          <div className="bg-white rounded-2xl border border-rose-100 shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                <AlertTriangle size={24} />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-base font-black text-slate-900">
-                  Excluir Dispositivo?
-                </h3>
-                {deletingArticle.hasContributions ? (
-                  <p className="text-xs text-rose-600 font-bold leading-relaxed pt-1">
-                    Aten√ß√£o: Este dispositivo possui contribui√ß√µes associadas. <br/><br/>
-                    Excluir este dispositivo remover√° TODAS as contribui√ß√µes ligadas a ele permanentemente. Essa a√ß√£o n√£o pode ser desfeita.
-                  </p>
-                ) : (
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Deseja realmente excluir este dispositivo? Essa a√ß√£o n√£o pode ser desfeita.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={() => setDeletingArticle(null)}
-                className="text-slate-500 hover:bg-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={handleConfirmDeleteArticle}
-                className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-rose-600/20 disabled:opacity-50"
-              >
-                <Trash2 size={15} />
-                {isDeleting ? "Excluindo..." : "Sim, Excluir"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Confirma√ß√£o de Exclus√£o de Contribui√ß√£o */}
-      {deletingContribution && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-fadeIn" style={{ zIndex: 99999 }}>
-          <div className="bg-white rounded-2xl border border-rose-100 shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                <AlertTriangle size={24} />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-base font-black text-slate-900">
-                  Excluir Proposta?
-                </h3>
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  Deseja realmente excluir sua proposta de contribui√ß√£o para este dispositivo? Essa a√ß√£o n√£o pode ser desfeita.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={() => setDeletingContribution(null)}
-                className="text-slate-500 hover:bg-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={handleConfirmDeleteContribution}
-                className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-rose-600/20 disabled:opacity-50"
-              >
-                <Trash2 size={15} />
-                {isDeleting ? "Excluindo..." : "Sim, Excluir"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Orienta√ß√µes */}
-      {showOrientacoesModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
-            <div className="flex items-center justify-between p-5 border-b border-slate-200 bg-slate-50">
-              <h3 className="text-base font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                <FileText size={18} className="text-indigo-600" />
-                Guia de Orienta√ß√£o: Como Propor Altera√ß√µes
-              </h3>
-              <button 
-                onClick={() => setShowOrientacoesModal(false)}
-                className="p-2 bg-slate-200 hover:bg-slate-300 rounded-xl transition-colors text-slate-700"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto space-y-6 text-sm text-slate-700 leading-relaxed font-medium">
-              <div className="space-y-3">
-                <h4 className="text-emerald-700 font-bold uppercase tracking-wider text-xs">üìù Edi√ß√£o Simples de Texto</h4>
-                <p>
-                  Para propor uma pequena altera√ß√£o no texto de um dispositivo, clique no bot√£o <strong className="text-indigo-600">Propor Altera√ß√£o</strong> correspondente ao dispositivo desejado. 
-                  Voc√™ visualizar√° o texto original. Edite-o conforme sua proposta e preencha a Justificativa T√©cnica para explicar a motiva√ß√£o. 
-                  O sistema destacar√° suas inclus√µes (em verde) e exclus√µes (riscadas em vermelho) automaticamente para a √°rea t√©cnica.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <h4 className="text-orange-600 font-bold uppercase tracking-wider text-xs">‚úÇÔ∏è Supress√£o (Exclus√£o) Parcial</h4>
-                <p>
-                  Para propor exclus√µes parciais, como retirar apenas um par√°grafo, inciso ou al√≠nea sem remover o artigo inteiro, basta utilizar o bot√£o <strong className="text-indigo-600">Propor Altera√ß√£o</strong> e, no campo de texto, excluir a parte indesejada. O sistema ir√° riscar o texto removido automaticamente.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <h4 className="text-rose-700 font-bold uppercase tracking-wider text-xs">üóëÔ∏è Supress√£o (Exclus√£o) Total de Dispositivo</h4>
-                <p>
-                  Para sugerir que um dispositivo inteiro seja removido da norma:
-                </p>
-                <ol className="list-decimal list-inside space-y-1 ml-2">
-                  <li>Clique em "Propor Altera√ß√£o" no dispositivo que deseja suprimir.</li>
-                  <li>Marque a op√ß√£o <strong className="text-rose-600">"Propor supress√£o (exclus√£o) integral deste dispositivo"</strong> localizada acima da caixa de texto.</li>
-                  <li>A caixa de texto ser√° desativada, n√£o sendo necess√°rio apagar o texto manualmente.</li>
-                  <li>Insira a Justificativa T√©cnica com os motivos da exclus√£o e salve.</li>
-                </ol>
-              </div>
-
-              <div className="space-y-3">
-                <h4 className="text-amber-600 font-bold uppercase tracking-wider text-xs">‚ûï Inclus√£o de Novo Artigo / Dispositivo</h4>
-                <p>
-                  Caso deseje incluir um novo artigo ou dispositivo no meio do texto normativo:
-                </p>
-                <ul className="list-disc list-inside space-y-2 ml-2">
-                  <li><strong>Identifica√ß√£o:</strong> Ao inv√©s de renumerar todos os artigos subsequentes, utilize a numera√ß√£o do artigo anterior seguida de uma letra mai√∫scula. <br />
-                    <em>Exemplo:</em> Para sugerir um novo artigo ap√≥s o <strong className="font-mono bg-slate-100 px-1 rounded">Art. 1¬∫</strong>, denomine-o como <strong className="font-mono bg-slate-100 px-1 rounded text-indigo-700">Art. 1A¬∫</strong>, <strong className="font-mono bg-slate-100 px-1 rounded text-indigo-700">Art. 1B¬∫</strong>, etc.
-                  </li>
-                  <li><strong>Como fazer:</strong> Se o novo dispositivo for substituir totalmente o anterior, voc√™ pode usar a op√ß√£o de edi√ß√£o normal no pr√≥prio artigo anterior, apagando todo o texto e escrevendo o seu novo texto. Se for uma adi√ß√£o al√©m do que j√° existe, utilize o artigo mais pr√≥ximo ao local desejado e adicione a sua proposta junto ao texto, ou adicione no final do cap√≠tulo/se√ß√£o.</li>
-                </ul>
-              </div>
-
-              <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 space-y-2 text-indigo-900">
-                <h4 className="font-bold uppercase tracking-wider text-xs flex items-center gap-2">
-                  <AlertTriangle size={14} /> Dicas Importantes
-                </h4>
-                <ul className="list-disc list-inside text-xs space-y-1 ml-1">
-                  <li>Cada usu√°rio pode enviar <strong>apenas uma proposta por dispositivo</strong>. Por√©m, enquanto a participa√ß√£o estiver aberta, voc√™ pode editar sua proposta livremente.</li>
-                  <li>O preenchimento da <strong>Justificativa T√©cnica</strong> √© obrigat√≥rio em todas as contribui√ß√µes, pois fundamenta a an√°lise pela √°rea t√©cnica da ADASA.</li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end">
-              <button 
-                onClick={() => setShowOrientacoesModal(false)}
-                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-md transition-all active:scale-95"
-              >
-                Entendi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-};
-
+                                if (idx > xú‰ZKsπæ˚W ¨‘µÒ•áΩ4)óV∂S>x£äî\T™Zp$aa≥P§ÃÂèIÂêSé˘˛ci`ƒÃ j•ç◊(èFw›_Ï†ı3‘¯ÁÛHHëÂY"£ÎNßC*·ë˙åàõW{Lrùçø¶¡
+y®Û-77j^≥°ÙZÿkA‰[C¥v6…AÛÿMCèMSáÄ
+<a$Øïƒ„ÒıöÜ¯Ò…∏%…Jz+Å¶<íﬁÑ≥ È¡∞$ﬁqØáÊ¸é$C›H£ÄŒ∏w≠˘¢Ccü {Ô∞á‚ï◊Ô£¯ﬁÎg£&≥|Ãq%|ÊOp$®§<Ú|Œxk3≤BTíPx>â$I–«^ø’∞I%É|PK°'ù”Ôu⁄0ÁË,I¯Úo1ÙØ˚G‘=E#„»‘⁄úâêá4b4"≠SµÙ®´˙Ì^b‘ù,§‰MΩ“NM
+∏èAñ¥kì≤xtŒ®;^∑–¯t¸—)j+á!sF¢ôú+`|!W˙'Ö–
+àucÁ_àZˇÖˆ˜òÆ¯S`˚_FF∑^˝wÔ'¿e6∏#bXö®`Ò¢BÛ∏_
+≥F5˚~BÇ™Á´¶=áãß˝5ˇ˛+	µá+UÃÎ›W	Û¡É];ì·©ú{‘ËùªCˆ˙ôªº7û%4@ÍCi\Äm¬`∏}huµvJ¥S ›É·	aÊ™∆˝€‘eÆ˚Ωxu„¢ã8&âèQﬁ·ﬂ“hÊ-i F'ﬁ`ß`ÍÔ
+&„Ë/	ù—3Ùw:S^ÙÙÉF]Ω«=®≠·Ñ‡˝q∂Ù¶∆2ùÑh¬µıÙ_¶§(i ˝Ö&J9Û¡H;ik62kW∏Ã∞Á≠äΩC“»õÉQ⁄* —‹]ÖS¢ºﬂªoÇ_Ã∞OÊ`Líå[Ô“ê`∏ﬁG<S+ƒ√¶iÓ0[ ÷p";˘(eÙÛœ®’j
+V±Á8ö¡¯6˘ü«lÕâ`Ü5Ç) ‰ ‹…ë8ƒå»éﬁ+⁄|±Ëﬁ}D–˘*b¿E¬c.‡K˚ç¸ˆú°ÚWtA+ªÉßAtúiˆaàNGë‡ÎG¥πìﬂ	¢wæﬁÒÚ¿Ü™É∫ú÷)†_•e≠lıÅ-ÒDWm-ë-ÙÕ7®]ü∂BnÄr˘‡‹SÌ]ÁöB“ÈΩ7!rIÄ÷ï–Û¢ßî÷ úœ˝^œ£F±çSõ„wËCP≈"Då‡@≈ÅÑ0º"Å3ˆ˝ô$$Ú)A\† ER_	¬1ß¡≠H§&ÚÅp„ 0"BÂ–>ÇwÏBwc«nvV]˚T[Ü2†\8LÀÖÅ°ˆì¢∂ÿ∂©òßU∂úÉÒ
+k∞≤)€CvT∞ÆòC∏Ωız4≥ÑXmóŸâë∂Á4@Á√±ÆŒ™’Eâ2ÄC√Ó:¿	>ç=gqú°œ*—kPÙL˜áçRïe∫0»ü€«(ä†r´1R#Éè°”_ —‹[;%Ú1Ã
+¶
+úË–¡ÓπŸ<2:%2ı‚∏›÷≤=GÛuÚ±ØS¨uKÓıY”Êaä-•˜‘ï]lkå∆¬l˜Í €›»fyG—I:ı„AoSZÖù[ª≥Œ>D—Å*Y…·Z◊⁄2ù∫oú¡©òºë 6vH¡YhnïTœBü≠ùs4Ÿ†|ˆp≤iJÓMÁ;7y`Iÿ;˝“üVòmÎÓ∑ËÃW™AﬂÎMÙm∑<ø’Ø’áR¶:z—ﬂæ¥CçDAÍ¯ ∂ìRêÀÄ&kà´ô«ïÍv'π !b∆˚ ù_ÒB^;Ç“¿¢Àz˘ {\zx°∏˜ Kì$‰¨"nîRCNËéÊ€SdŸB;ı√9gn¨;…9é|`IUèO}§~°LπƒwD)¯¡=14™RˆBò#’(ß[õJ3µÑA¶ƒÏI°‘t÷ '∑Õî$˜[#fö>Rªœ∆Kk¿∏ƒÏNÒ”‚œˇ˙¸"ˆ2O€ï„±Êu@Ÿ∫zôæ◊ MÅ⁄"@ÄÅ>\XBM@Ìî\`ÄE¢3Cì TR˝‰]7@1h®fõ‚Äºá¿-‰=≠—ß˜`¿’©nP[ï6X∞@Znı¡÷Ï-Û©Ø<Ì*Œ‰Ñ„∏@¯ò)	NõÉ[∫9Ö•t»Vá-ôõ´u ’©™B≤3zıtb–-l£FúÖä£¸ãûÔÿV‚åŒI‰UB°j/x‡»‚å÷t·‚l}JØo[o~XÀ√Ä∫Zµ7Ω‰’î§≥π¥Ê‡∑+ü-hÇ.∞™Œi¨pÚOé.πO1≥dΩ˘°E,7ü…™:C¨G±xEB‰É6…'å~Z®‰˘ıZ&V∑x¶Ñ# –<ö9x…KÕõ òÏDP%&ÍÖˇhµA˙(v´µ©v–.¿æ“UO_[TS#f£€Å|ôÀUíW·Ê•∞£"DoΩ_Ÿ>˜¶˙˘aŸ^€ÏÈ¨mÆhalËLíH[gàﬁòQf™H}ƒ∂˘@
+e€)°W´õ•3UFÖÙ*|35bl2jÛ≥Kêƒ—~ı˘ﬂÍP Û§”5ÔàÙÁ`Ù7 ¯‰‘,¯KKù¸©“+wäÙÕÎŒé¥‘˘^Ô`ÎÎ9Å@pÖ$X¶^Èç∫6	˜?JlLûPH}T—œ™Ï˘[ö¶L§w@˜‹¿®ª`wy7√Mâ¨ImcisÈ'‚´oJ®ﬂÉ∞~Q~™µ‘/ÙÒà¸6ôÍ9è¶4	Sˇ¨Î”¯Òä»-–§uì√ˇ))¨ûÙEπòÕ	lEÈ{í⁄˙/cÄU4⁄À–â„®k‰8Æ¨ﬁ›/!WÃ∑ºfê—
+ÎnÎ√
+˘”¸©`u1J∑Î∂?•Q†ÓK¨|ıaÆs-◊Œˆ=.»¸ä -îÄ∫ØDUˇ{t©`¨c I“ì í*å&M‘—∆c§P•ñ∏\L>_^lªÀãÙ•◊V–óÍ»Ø•ºH}y«ë≤p>HeÇÎmã©„ù©e¢à‚⁄*"ÀºÕrÅ•~Ë´˛s¿Ï¸ ó≥≠Ø¶L…ü˚"ci¥©\-maÇÿÊ/œ=}Ëº∆SÈ≤J `}IÇl‰˚ Rπ√:!3cÂóg◊U7πyù€V…¨Tô¬¥gŒX^w:S≈Ùzá‘∏≤‹*
+Ü?Åı|µô_Z÷ˆUΩ’¨u(ÏíõWz®›oÓwõÈp9€¶Í∆…îˇwË¬E.·∞ÿ√ﬁòPî R™˝Ü∞‰EŸ7RÓıjG/Ω≥z7c—Æy’ø4–CoÿÚ3≤äy"°ô‚ì(e|†A ≈ûº˙/   ˇˇ èΩ∂Ó

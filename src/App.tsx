@@ -50,6 +50,7 @@ import {
   FileSpreadsheet,
   BookOpen,
   Globe,
+  Share2,
   FolderKanban,
   Key,
   Bell,
@@ -58,7 +59,13 @@ import {
   CheckCheck,
   ClipboardList,
   Compass,
-  MessageSquare
+  MessageSquare,
+  Settings2,
+  Tag,
+  List,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react";
 import {
   LineChart,
@@ -91,6 +98,7 @@ import {
   AdjustmentType,
   Task,
   WaterBalance,
+  WaterBalanceCategory,
   WATER_BALANCE_ETAPAS,
   WaterBalanceEtapa,
 } from "./types";
@@ -113,6 +121,7 @@ import { TomadaSubsidiosModule } from "./modules/tomada-subsidios";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { FiscalizacaoPainel } from "./components/FiscalizacaoPainel";
 import { RecursoPainel } from "./components/RecursoPainel";
+import { WaterBalanceCategoryModal, DEFAULT_WATER_BALANCE_CATEGORIES, getCategoryBadgeClasses } from "./components/WaterBalanceCategoryModal";
 
 
 import { enrichTasksWithStageDates } from "./utils/stageDatesGenerator";
@@ -621,7 +630,7 @@ export default function App() {
     const saved = localStorage.getItem("adasa-demands");
     return saved ? JSON.parse(saved) : [INITIAL_DEMAND];
   });
-  const [activeTab, setActiveTab] = useState<"home" | "gerencial" | "public_hub" | "edit" | "compare" | "manage" | "analyze" | "templates" | "planning" | "users" | "departments" | "reg_cadastro" | "reg_agenda" | "reg_subsidios" | "reg_painel" | "reg_agenda_painel" | "pub_cadastro" | "pub_painel" | "fisc_operational" | "recurso_painel">(
+  const [activeTab, setActiveTab] = useState<"home" | "gerencial" | "public_hub" | "edit" | "compare" | "manage" | "analyze" | "templates" | "planning" | "users" | "departments" | "reg_cadastro" | "reg_agenda" | "reg_subsidios" | "reg_subsidios_painel" | "reg_painel" | "reg_agenda_painel" | "pub_cadastro" | "pub_painel" | "fisc_operational" | "recurso_painel">(
     "home",
   );
   const [editingTaskIdFromPainel, setEditingTaskIdFromPainel] = useState<number | null>(null);
@@ -676,8 +685,29 @@ export default function App() {
   const [demandSubTab, setDemandSubTab] = useState<"edit" | "view">("edit");
   const [supplySubTab, setSupplySubTab] = useState<"edit" | "view">("edit");
   const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
+  const [isWbCategoryModalOpen, setIsWbCategoryModalOpen] = useState(false);
   
   const [confirmState, setConfirmState] = useState<{ title?: string; message: string; type?: "confirm" | "alert"; onConfirm?: () => void } | null>(null);
+  
+  const [waterBalanceCategories, setWaterBalanceCategories] = useState<WaterBalanceCategory[]>(() => {
+    const saved = localStorage.getItem("adasa-wb-categories");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return DEFAULT_WATER_BALANCE_CATEGORIES;
+      }
+    }
+    return DEFAULT_WATER_BALANCE_CATEGORIES;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("adasa-wb-categories", JSON.stringify(waterBalanceCategories));
+  }, [waterBalanceCategories]);
+
+  const handleRenameWbCategoryInBalances = (oldName: string, newName: string) => {
+    setWaterBalances(prev => prev.map(wb => wb.category === oldName ? { ...wb, category: newName } : wb));
+  };
   
   const [waterBalances, setWaterBalances] = useState<import("./types").WaterBalance[]>(() => {
     const saved = localStorage.getItem("adasa-water-balances");
@@ -715,6 +745,91 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("adasa-water-balances", JSON.stringify(waterBalances));
   }, [waterBalances]);
+
+  const [wbSortField, setWbSortField] = useState<'description' | 'category' | 'etapa'>('description');
+  const [wbSortDirection, setWbSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const handleToggleWbSort = (field: 'description' | 'category' | 'etapa') => {
+    if (wbSortField === field) {
+      setWbSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setWbSortField(field);
+      setWbSortDirection('asc');
+    }
+  };
+
+  const sortedWaterBalances = useMemo(() => {
+    const list = [...waterBalances];
+    list.sort((a, b) => {
+      let valA = '';
+      let valB = '';
+      if (wbSortField === 'description') {
+        valA = (a.description || '').trim();
+        valB = (b.description || '').trim();
+      } else if (wbSortField === 'category') {
+        valA = (a.category || '').trim();
+        valB = (b.category || '').trim();
+      } else if (wbSortField === 'etapa') {
+        valA = (a.etapa || a.status || '').trim();
+        valB = (b.etapa || b.status || '').trim();
+      }
+      const cmp = valA.localeCompare(valB, 'pt-BR', { numeric: true, sensitivity: 'base' });
+      return wbSortDirection === 'asc' ? cmp : -cmp;
+    });
+    return list;
+  }, [waterBalances, wbSortField, wbSortDirection]);
+
+  const [wbViewMode, setWbViewMode] = useState<'list' | 'grouped'>('list');
+  const [collapsedWbCategories, setCollapsedWbCategories] = useState<Record<string, boolean>>({});
+
+  const toggleWbCategoryCollapse = (catKey: string) => {
+    setCollapsedWbCategories(prev => ({
+      ...prev,
+      [catKey]: !prev[catKey]
+    }));
+  };
+
+  const groupedWaterBalances = useMemo(() => {
+    const groups: {
+      id: string;
+      name: string;
+      color?: string;
+      description?: string;
+      items: typeof waterBalances;
+    }[] = [];
+
+    // Registered categories
+    waterBalanceCategories.forEach(cat => {
+      const items = sortedWaterBalances.filter(
+        wb => (wb.category || '').trim().toLowerCase() === cat.name.trim().toLowerCase()
+      );
+      groups.push({
+        id: cat.id,
+        name: cat.name,
+        color: cat.color,
+        description: cat.description,
+        items
+      });
+    });
+
+    // Balances without category or with unregistered category
+    const registeredNames = new Set(waterBalanceCategories.map(c => c.name.trim().toLowerCase()));
+    const uncategorizedItems = sortedWaterBalances.filter(
+      wb => !wb.category || !registeredNames.has(wb.category.trim().toLowerCase())
+    );
+
+    if (uncategorizedItems.length > 0 || groups.length === 0) {
+      groups.push({
+        id: 'uncategorized',
+        name: 'Sem Categoria',
+        color: 'slate',
+        description: 'Balanços hídricos sem categoria definida ou vinculada.',
+        items: uncategorizedItems
+      });
+    }
+
+    return groups;
+  }, [sortedWaterBalances, waterBalanceCategories]);
 
   const [supplySources, setSupplySources] = useState<SupplySource[]>(() => {
     const saved = localStorage.getItem("adasa-supply-sources");
@@ -1063,6 +1178,170 @@ export default function App() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleDuplicateWb = (wb: WaterBalance) => {
+    // Find the maximum ID in waterBalances safely, filtering out NaN
+    const validWbIds = waterBalances.map(w => Number(w.id)).filter(id => !isNaN(id));
+    const maxWbId = validWbIds.length > 0 ? Math.max(...validWbIds) : 0;
+    const newWbId = maxWbId + 1;
+
+    const inWb = (id: any) => Number(id) === Number(wb.id) || (!id && Number(wb.id) === 2026);
+    
+    const sysMap = new Map();
+    const regMap = new Map();
+    const supMap = new Map();
+    
+    const validSysIds = systems.map(s => Number(s.id)).filter(id => !isNaN(id));
+    let maxSysId = validSysIds.length > 0 ? Math.max(...validSysIds) : 0;
+
+    const validRegIds = regions.map(r => Number(r.id)).filter(id => !isNaN(id));
+    let maxRegId = validRegIds.length > 0 ? Math.max(...validRegIds) : 0;
+
+    const validCentIds = demands.map(s => Number(s.id)).filter(id => !isNaN(id));
+    let maxCentId = validCentIds.length > 0 ? Math.max(...validCentIds) : 0;
+
+    const validSupIds = supplySources.map(s => Number(s.id)).filter(id => !isNaN(id));
+    let maxSupId = validSupIds.length > 0 ? Math.max(...validSupIds) : 0;
+
+    const validAdjIds = operationalAdjustments.map(s => Number(s.id)).filter(id => !isNaN(id));
+    let maxAdjId = validAdjIds.length > 0 ? Math.max(...validAdjIds) : 0;
+
+    const newSystems = systems.filter(s => inWb(s.waterBalanceId)).map(s => {
+      const newId = ++maxSysId;
+      sysMap.set(s.id, newId);
+      return { ...s, id: newId, waterBalanceId: newWbId };
+    });
+    
+    const newRegions = regions.filter(r => inWb(r.waterBalanceId)).map(r => {
+      const newId = ++maxRegId;
+      regMap.set(r.id, newId);
+      return { ...r, id: newId, systemId: sysMap.get(r.systemId) || r.systemId, waterBalanceId: newWbId };
+    });
+    
+    const newDemands = demands.filter(s => inWb(s.waterBalanceId)).map(s => {
+      const newId = ++maxCentId;
+      return { 
+        ...s, 
+        id: newId, 
+        waterBalanceId: newWbId,
+        entries: s.entries.map(e => ({
+          ...e,
+          regionId: regMap.get(e.regionId) || e.regionId
+        }))
+      };
+    });
+    
+    const newSupply = supplySources.filter(s => inWb(s.waterBalanceId)).map(s => {
+      const newId = ++maxSupId;
+      supMap.set(s.id, newId);
+      return {
+        ...s,
+        id: newId,
+        systemId: sysMap.get(s.systemId) || s.systemId,
+        waterBalanceId: newWbId
+      };
+    });
+    
+    const adjMap = new Map();
+    let newAdj = operationalAdjustments.filter(a => inWb(a.waterBalanceId)).map(a => {
+      const newId = ++maxAdjId;
+      adjMap.set(a.id, newId);
+      return {
+        ...a,
+        id: newId,
+        systemId: sysMap.get(a.systemId) || a.systemId,
+        waterBalanceId: newWbId
+      };
+    });
+    newAdj = newAdj.map(a => {
+      if (a.linkedAdjustmentId) {
+        return { ...a, linkedAdjustmentId: adjMap.get(a.linkedAdjustmentId) || a.linkedAdjustmentId };
+      }
+      return a;
+    });
+
+    const updatedWaterBalances = [...waterBalances, { ...wb, id: newWbId, description: `${wb.description} (Cópia)` }];
+    const updatedSystems = [...systems, ...newSystems];
+    const updatedRegions = [...regions, ...newRegions];
+    const updatedDemands = [...demands, ...newDemands];
+    const updatedSupplySources = [...supplySources, ...newSupply];
+    const updatedOperationalAdjustments = [...operationalAdjustments, ...newAdj];
+
+    setWaterBalances(updatedWaterBalances);
+    setSystems(updatedSystems);
+    setRegions(updatedRegions);
+    setDemands(updatedDemands);
+    setSupplySources(updatedSupplySources);
+    setOperationalAdjustments(updatedOperationalAdjustments);
+
+    setSelectedWaterBalanceId(newWbId);
+    setSavedBalanceIds(prev => Array.from(new Set([...prev, newWbId])));
+    setManageSubTab("balance");
+
+    const fullPayload = {
+      waterBalances: updatedWaterBalances,
+      systems: updatedSystems,
+      regions: updatedRegions,
+      demands: updatedDemands,
+      supplySources: updatedSupplySources,
+      operationalAdjustments: updatedOperationalAdjustments
+    };
+    
+    setTimeout(() => {
+      handleSaveToCloud(true, fullPayload).then(() => {
+        showToast("Sucesso", `Balanço "${wb.description}" duplicado e salvo com sucesso! Redirecionado para edição.`, "success");
+      }).catch(err => {
+        showToast("Erro", "Erro ao salvar duplicação: " + err.message, "error");
+      });
+    }, 100);
+  };
+
+  const handleDeleteWb = (wb: WaterBalance) => {
+    setConfirmState({
+      message: `Tem certeza que deseja excluir o balanço "${wb.description}" e todos os registros vinculados a ele?`,
+      onConfirm: () => {
+        const isLinkedToDeletedWb = (itemWbId: any) => {
+          const numId = itemWbId ? Number(itemWbId) : 2026;
+          return numId === Number(wb.id);
+        };
+        
+        const updatedWaterBalances = waterBalances.filter(w => w.id !== wb.id);
+        const updatedSystems = systems.filter(s => !isLinkedToDeletedWb(s.waterBalanceId));
+        const updatedRegions = regions.filter(r => !isLinkedToDeletedWb(r.waterBalanceId));
+        const updatedDemands = demands.filter(d => !isLinkedToDeletedWb(d.waterBalanceId));
+        const updatedSupplySources = supplySources.filter(s => !isLinkedToDeletedWb(s.waterBalanceId));
+        const updatedOperationalAdjustments = operationalAdjustments.filter(a => !isLinkedToDeletedWb(a.waterBalanceId));
+
+        setWaterBalances(updatedWaterBalances);
+        setSystems(updatedSystems);
+        setRegions(updatedRegions);
+        setDemands(updatedDemands);
+        setSupplySources(updatedSupplySources);
+        setOperationalAdjustments(updatedOperationalAdjustments);
+
+        if (Number(selectedWaterBalanceId) === Number(wb.id)) {
+          setSelectedWaterBalanceId(null);
+        }
+
+        const fullPayload = {
+          waterBalances: updatedWaterBalances,
+          systems: updatedSystems,
+          regions: updatedRegions,
+          demands: updatedDemands,
+          supplySources: updatedSupplySources,
+          operationalAdjustments: updatedOperationalAdjustments
+        };
+
+        setTimeout(() => {
+          handleSaveToCloud(true, fullPayload).then(() => {
+            showToast("Sucesso", "Balanço hídrico e todos os registros vinculados excluídos com sucesso!", "success");
+          }).catch(err => {
+            showToast("Erro", "Erro ao sincronizar exclusão: " + err.message, "error");
+          });
+        }, 100);
+      }
+    });
   };
 
   const handleSaveTemplates = async () => {
@@ -3364,7 +3643,21 @@ const renderSupplyTable = () => {
             <span className="text-xs text-slate-300 font-semibold md:block hidden">{publicTabTitle}</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="text-[10px] bg-white/10 text-white font-extrabold uppercase px-2.5 py-1 rounded border border-white/15 shadow-sm">
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.href).then(() => {
+                  showToast("Link Copiado!", "O link deste painel público foi copiado para a área de transferência.", "success");
+                }).catch(() => {
+                  prompt("Copie o link:", window.location.href);
+                });
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 active:bg-white/30 text-white rounded-xl text-xs font-bold transition-all border border-white/20 cursor-pointer shadow-sm"
+              title="Copiar link público"
+            >
+              <Share2 size={13} className="text-adasa-light" />
+              <span>Compartilhar Link</span>
+            </button>
+            <div className="text-[10px] bg-white/10 text-white font-extrabold uppercase px-2.5 py-1.5 rounded-xl border border-white/15 shadow-sm">
               Acesso Público • Sem Login
             </div>
           </div>
@@ -3479,6 +3772,21 @@ const renderSupplyTable = () => {
                   </div>
                   <RegulatoryAgendaModule view="painel" showToast={showToast} />
                 </div>
+              ) : publicTabName === "reg_subsidios_painel" ? (
+                <div className="space-y-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <button 
+                       onClick={() => {
+                         window.location.hash = "#public-publico_hub";
+                         setPublicTabName("publico_hub");
+                       }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-xs font-bold text-slate-700 shadow-sm transition-all"
+                    >
+                      ← Voltar para Painéis Públicos
+                    </button>
+                  </div>
+                  <TomadaSubsidiosModule view="painel" showToast={showToast} currentUser={currentUser} />
+                </div>
               ) : publicTabName === "analyze" || publicTabName === "balanco" ? (
                 <div className="space-y-6">
                   <div className="flex items-center gap-2 mb-4">
@@ -3554,8 +3862,13 @@ const renderSupplyTable = () => {
                     window.location.hash = "#public-reg_agenda_painel";
                     setPublicTabName("reg_agenda_painel");
                   }}
+                  onOpenParticipacaoSocialPainel={() => {
+                    window.location.hash = "#public-reg_subsidios_painel";
+                    setPublicTabName("reg_subsidios_painel");
+                  }}
                   isPublic={true}
                   showOnlyPublic={true}
+                  showToast={showToast}
                 />
               )}
             </motion.div>
@@ -3640,13 +3953,17 @@ const renderSupplyTable = () => {
                     <BarChart2 size={20} className={activeTab === "gerencial" ? "text-adasa-mid" : "text-white/60"} />
                     Painéis Gerenciais
                   </button>
-                  {/* <button
-                    onClick={() => handleTabChange("public_hub")}
+                  <button
+                    onClick={() => {
+                      setIsMyTasksSelected(false);
+                      setIsMobileMenuOpen(false);
+                      handleTabChange("public_hub");
+                    }}
                     className={cn("w-full px-5 py-3 rounded-2xl flex items-center gap-4 transition-all text-sm font-semibold", activeTab === "public_hub" ? "bg-white text-adasa-dark shadow-lg" : "text-white/80 border border-transparent")}
                   >
                     <Globe size={20} className={activeTab === "public_hub" ? "text-adasa-mid" : "text-white/60"} />
                     Painéis Públicos
-                  </button> */}
+                  </button>
                 </div>
               </div>
 
@@ -3891,6 +4208,19 @@ const renderSupplyTable = () => {
                           >
                             <MessageSquare size={18} className={activeTab === "reg_subsidios" ? "text-adasa-mid" : "text-white/50"} />
                             Participação Social
+                          </button>
+                        )}
+                        {checkPermission("reg_subsidios_painel", "view") && (
+                          <button
+                            onClick={() => {
+                              setIsMyTasksSelected(false);
+                              setIsMobileMenuOpen(false);
+                              handleTabChange("reg_subsidios_painel");
+                            }}
+                            className={cn("w-full text-left justify-start px-4 py-2 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "reg_subsidios_painel" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
+                          >
+                            <BarChart3 size={18} className={activeTab === "reg_subsidios_painel" ? "text-adasa-mid" : "text-white/50"} />
+                            Painel Participação Social
                           </button>
                         )}
                       </div>
@@ -4271,6 +4601,26 @@ const renderSupplyTable = () => {
                   )}
                 />
                 {!isSidebarCollapsed && <span className="hidden md:inline">Painéis Gerenciais</span>}
+              </button>
+
+              <button
+                title={isSidebarCollapsed ? "Painéis Públicos" : undefined}
+                onClick={() => handleTabChange("public_hub")}
+                className={cn(
+                  "w-full px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all duration-200 group text-xs font-semibold cursor-pointer",
+                  activeTab === "public_hub"
+                    ? "bg-white/15 text-white shadow-lg border border-white/10 border-l-4 border-l-adasa-light pl-3"
+                    : "text-white/60 hover:text-white hover:bg-white/5 hover:translate-x-0.5",
+                )}
+              >
+                <Globe
+                  size={16}
+                  className={cn(
+                    "flex-shrink-0 transition-colors",
+                    activeTab === "public_hub" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
+                  )}
+                />
+                {!isSidebarCollapsed && <span className="hidden md:inline">Painéis Públicos</span>}
               </button>
             </div>
           </div>
@@ -4680,6 +5030,30 @@ const renderSupplyTable = () => {
                         {!isSidebarCollapsed && <span className="hidden md:inline">Participação Social</span>}
                       </button>
                     )}
+                    {checkPermission("reg_subsidios_painel", "view") && (
+                      <button
+                        title={isSidebarCollapsed ? "Painel Participação Social" : undefined}
+                        onClick={() => {
+                          setIsMyTasksSelected(false);
+                          handleTabChange("reg_subsidios_painel");
+                        }}
+                        className={cn(
+                          "w-full text-left justify-start px-4 py-2 rounded-xl flex items-center gap-3 transition-all duration-200 group text-xs font-semibold cursor-pointer",
+                          activeTab === "reg_subsidios_painel"
+                            ? "bg-white/15 text-white shadow-lg border border-white/10 border-l-4 border-l-adasa-light pl-3"
+                            : "text-white/60 hover:text-white hover:bg-white/5 hover:translate-x-0.5",
+                        )}
+                      >
+                        <BarChart3
+                          size={16}
+                          className={cn(
+                            "flex-shrink-0 transition-colors",
+                            activeTab === "reg_subsidios_painel" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
+                          )}
+                        />
+                        {!isSidebarCollapsed && <span className="hidden md:inline">Painel Participação Social</span>}
+                      </button>
+                    )}
                   </div>
 
                   {/* Subsection: Agenda Regulatória */}
@@ -5086,7 +5460,7 @@ const renderSupplyTable = () => {
                    activePlanningSubTab === "responsibles" ? "Cadastrar Responsáveis" :
                    activePlanningSubTab === "models" ? "Cadastrar Modelo de Atividades" :
                    activePlanningSubTab === "radar" ? "Radar de Atividades" : "Importar Atividades")
-                : activeTab === "reg_cadastro" ? "Cadastrar Resoluções" : activeTab === "reg_agenda" ? "Agenda Regulatória" : activeTab === "reg_subsidios" ? "Participação Social" : activeTab === "reg_painel" ? "Painel Estratégico de Resoluções" : activeTab === "reg_agenda_painel" ? "Painel da Agenda Regulatória" : activeTab === "pub_cadastro" ? "Cadastrar Publicações" : activeTab === "pub_painel" ? "Painel de Publicações" : activeTab === "fisc_operational" ? "Painel de Fiscalização" : activeTab === "recurso_painel" ? "Painel de Qualidade do Atendimento" : "Cadastrar Balanço"}
+                : activeTab === "reg_cadastro" ? "Cadastrar Resoluções" : activeTab === "reg_agenda" ? "Agenda Regulatória" : activeTab === "reg_subsidios" ? "Participação Social" : activeTab === "reg_subsidios_painel" ? "Painel Participação Social" : activeTab === "reg_painel" ? "Painel Estratégico de Resoluções" : activeTab === "reg_agenda_painel" ? "Painel da Agenda Regulatória" : activeTab === "pub_cadastro" ? "Cadastrar Publicações" : activeTab === "pub_painel" ? "Painel de Publicações" : activeTab === "fisc_operational" ? "Painel de Fiscalização" : activeTab === "recurso_painel" ? "Painel de Qualidade do Atendimento" : "Cadastrar Balanço"}
             </h1>
             <p className="text-slate-500 text-sm font-medium">
               {activeTab === "home"
@@ -5105,7 +5479,7 @@ const renderSupplyTable = () => {
                           ? "Gerencie as contas de usuários, papéis de acesso (RBAC) e departamentos do sistema."
                         : activeTab === "planning"
                           ? (isMyTasksSelected ? "Gerencie e acompanhe as atividades atribuídas diretamente ao seu usuário." : "Gerencie o cronograma consolidado, planos, áreas e status de execução.")
-                          : activeTab === "reg_cadastro" ? "Gestão do acervo de normas, atos legais e resoluções aplicados à regulação do saneamento básico e recursos hídricos." : activeTab === "reg_agenda" ? "Cadastro e acompanhamento de metas, temas e ações da agenda regulatória." : activeTab === "reg_subsidios" ? "Módulo de participação social e recebimento de contribuições para normas e resoluções." : activeTab === "reg_painel" ? "Estoque Regulatório da Superintendência de Abastecimento de Água e Esgoto" : activeTab === "reg_agenda_painel" ? "Acompanhamento estratégico, metas, indicadores gráficos e percentual de entregas dos itens da Agenda Regulatória." : activeTab === "pub_cadastro" ? "Gestão do acervo bibliográfico, relatórios anuais de atividades, boletins informativos e artigos de pesquisa científica." : activeTab === "pub_painel" ? "Painel analítico gráfico de publicações, volumes históricos, distribuição de documentos e filtro do acervo próximo." : activeTab === "fisc_operational" ? "Painel estratégico de monitoramento das ações de fiscalização, constatações, não conformidades e termos emitidos." : activeTab === "recurso_painel" ? "Painel estratégico de acompanhamento de demandas de ouvidoria, prazos, andamento e penalidades aplicadas." : "Gerencie os balanços hídricos e cadastre novas informações."}
+                          : activeTab === "reg_cadastro" ? "Gestão do acervo de normas, atos legais e resoluções aplicados à regulação do saneamento básico e recursos hídricos." : activeTab === "reg_agenda" ? "Cadastro e acompanhamento de metas, temas e ações da agenda regulatória." : activeTab === "reg_subsidios" ? "Módulo de participação social e recebimento de contribuições para normas e resoluções." : activeTab === "reg_subsidios_painel" ? "Acompanhamento gerencial das ações de participação social, consultas públicas e tomadas de subsídios." : activeTab === "reg_painel" ? "Estoque Regulatório da Superintendência de Abastecimento de Água e Esgoto" : activeTab === "reg_agenda_painel" ? "Acompanhamento estratégico, metas, indicadores gráficos e percentual de entregas dos itens da Agenda Regulatória." : activeTab === "pub_cadastro" ? "Gestão do acervo bibliográfico, relatórios anuais de atividades, boletins informativos e artigos de pesquisa científica." : activeTab === "pub_painel" ? "Painel analítico gráfico de publicações, volumes históricos, distribuição de documentos e filtro do acervo próximo." : activeTab === "fisc_operational" ? "Painel estratégico de monitoramento das ações de fiscalização, constatações, não conformidades e termos emitidos." : activeTab === "recurso_painel" ? "Painel estratégico de acompanhamento de demandas de ouvidoria, prazos, andamento e penalidades aplicadas." : "Gerencie os balanços hídricos e cadastre novas informações."}
             </p>
           </div>
           <div className="flex flex-col md:flex-row items-center gap-3">
@@ -7210,251 +7584,405 @@ const renderSupplyTable = () => {
               <div className="bg-white rounded-[2rem] border border-slate-200 p-8 shadow-sm">
                 {manageSubTab === "list" && !editingRegionId && (
                   <div className="space-y-6">
-                    <div className="flex justify-between items-center bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 p-6 rounded-2xl border border-slate-100">
                       <div>
                         <h2 className="text-xl font-black text-slate-800 tracking-tight">Balanços Hídricos</h2>
                         <p className="text-sm font-medium text-slate-500 mt-1">Gerencie os balanços hídricos cadastrados.</p>
                       </div>
-                      <button
-                        onClick={() => {
-                          const maxWbId = waterBalances.length > 0 ? Math.max(...waterBalances.map(w => Number(w.id) || 0)) : 0;
-                          const newId = maxWbId + 1;
-                          const today = new Date().toISOString().split('T')[0];
-                          const userName = currentUser?.name || "Administrador";
-                          setWaterBalances([...waterBalances, {
-                            id: newId,
-                            description: `Novo Balanço Hídrico`,
-                            etapa: "Criado",
-                            status: "Pendente",
-                            datasEtapas: { "Criado": today },
-                            responsaveisEtapas: { "Criado": userName },
-                            createdAt: today,
-                            createdBy: userName
-                          }]);
-                          setSelectedWaterBalanceId(newId);
-                          setManageSubTab("balance");
-                        }}
-                        className="px-6 py-3 bg-adasa-mid text-white font-black uppercase tracking-widest text-xs rounded-xl shadow-lg hover:shadow-xl hover:bg-adasa-dark transition-all flex items-center gap-2"
-                      >
-                        <Plus size={16} /> Novo Balanço
-                      </button>
+                      
+                      <div className="flex items-center flex-wrap gap-3">
+                        {/* Seletor de Modo de Visualização: Lista (padrão) ou Por Categoria */}
+                        <div className="flex items-center bg-slate-200/80 p-1 rounded-xl border border-slate-300/60 shadow-inner">
+                          <button
+                            type="button"
+                            onClick={() => setWbViewMode("list")}
+                            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                              wbViewMode === "list"
+                                ? "bg-white text-adasa-dark shadow-sm font-black"
+                                : "text-slate-600 hover:text-slate-900 hover:bg-white/40"
+                            }`}
+                            title="Visualização em formato de lista / tabela (Padrão)"
+                          >
+                            <List size={14} className={wbViewMode === "list" ? "text-adasa-dark" : "text-slate-500"} />
+                            <span>Lista</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setWbViewMode("grouped")}
+                            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                              wbViewMode === "grouped"
+                                ? "bg-white text-adasa-dark shadow-sm font-black"
+                                : "text-slate-600 hover:text-slate-900 hover:bg-white/40"
+                            }`}
+                            title="Visualização agrupada por categoria"
+                          >
+                            <Tags size={14} className={wbViewMode === "grouped" ? "text-adasa-dark" : "text-slate-500"} />
+                            <span>Por Categoria</span>
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            const maxWbId = waterBalances.length > 0 ? Math.max(...waterBalances.map(w => Number(w.id) || 0)) : 0;
+                            const newId = maxWbId + 1;
+                            const today = new Date().toISOString().split('T')[0];
+                            const userName = currentUser?.name || "Administrador";
+                            setWaterBalances([...waterBalances, {
+                              id: newId,
+                              description: `Novo Balanço Hídrico`,
+                              etapa: "Criado",
+                              status: "Pendente",
+                              datasEtapas: { "Criado": today },
+                              responsaveisEtapas: { "Criado": userName },
+                              createdAt: today,
+                              createdBy: userName
+                            }]);
+                            setSelectedWaterBalanceId(newId);
+                            setManageSubTab("balance");
+                          }}
+                          className="px-6 py-2.5 bg-adasa-mid text-white font-black uppercase tracking-widest text-xs rounded-xl shadow-md hover:shadow-lg hover:bg-adasa-dark transition-all flex items-center gap-2"
+                        >
+                          <Plus size={16} /> Novo Balanço
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="space-y-4">
-                      {waterBalances.map(wb => (
-                        <div key={wb.id} className="border border-slate-200 rounded-2xl p-6 bg-white hover:border-slate-300 transition-all shadow-sm">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h3 className="text-lg font-black text-slate-800">{wb.description || "Sem Descrição"}</h3>
-                              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-50 text-[#1A3E8A] border border-blue-200/60">
-                                  Etapa: {wb.etapa || wb.status || "Criado"}
-                                </span>
-                                {(wb.createdBy || wb.responsible) && (
-                                  <span className="text-xs font-semibold text-slate-500">
-                                    • Responsável/Criador: <strong className="text-slate-700">{wb.createdBy || wb.responsible}</strong>
+                    {/* Visualização 1: Lista / Tabela (Padrão) */}
+                    {wbViewMode === "list" && (
+                      <div className="overflow-hidden border border-slate-200 rounded-2xl bg-white shadow-sm">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50/90 border-b border-slate-200 text-xs font-black text-slate-600 uppercase tracking-wider select-none">
+                                <th
+                                  onClick={() => handleToggleWbSort('description')}
+                                  className="px-6 py-4 cursor-pointer hover:bg-slate-100/80 transition-colors group"
+                                  title="Clique para ordenar por Descrição"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className={wbSortField === 'description' ? 'text-adasa-dark font-black' : ''}>Descrição</span>
+                                    {wbSortField === 'description' ? (
+                                      wbSortDirection === 'asc' ? (
+                                        <ArrowUp size={14} className="text-adasa-dark shrink-0" />
+                                      ) : (
+                                        <ArrowDown size={14} className="text-adasa-dark shrink-0" />
+                                      )
+                                    ) : (
+                                      <ArrowUpDown size={14} className="text-slate-400 opacity-40 group-hover:opacity-100 transition-opacity shrink-0" />
+                                    )}
+                                  </div>
+                                </th>
+                                <th
+                                  onClick={() => handleToggleWbSort('category')}
+                                  className="px-6 py-4 cursor-pointer hover:bg-slate-100/80 transition-colors group"
+                                  title="Clique para ordenar por Categoria"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className={wbSortField === 'category' ? 'text-adasa-dark font-black' : ''}>Categoria</span>
+                                    {wbSortField === 'category' ? (
+                                      wbSortDirection === 'asc' ? (
+                                        <ArrowUp size={14} className="text-adasa-dark shrink-0" />
+                                      ) : (
+                                        <ArrowDown size={14} className="text-adasa-dark shrink-0" />
+                                      )
+                                    ) : (
+                                      <ArrowUpDown size={14} className="text-slate-400 opacity-40 group-hover:opacity-100 transition-opacity shrink-0" />
+                                    )}
+                                  </div>
+                                </th>
+                                <th
+                                  onClick={() => handleToggleWbSort('etapa')}
+                                  className="px-6 py-4 cursor-pointer hover:bg-slate-100/80 transition-colors group"
+                                  title="Clique para ordenar por Etapa"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className={wbSortField === 'etapa' ? 'text-adasa-dark font-black' : ''}>Etapa</span>
+                                    {wbSortField === 'etapa' ? (
+                                      wbSortDirection === 'asc' ? (
+                                        <ArrowUp size={14} className="text-adasa-dark shrink-0" />
+                                      ) : (
+                                        <ArrowDown size={14} className="text-adasa-dark shrink-0" />
+                                      )
+                                    ) : (
+                                      <ArrowUpDown size={14} className="text-slate-400 opacity-40 group-hover:opacity-100 transition-opacity shrink-0" />
+                                    )}
+                                  </div>
+                                </th>
+                                <th className="px-6 py-4 text-right">
+                                  <span>Ações</span>
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-sm">
+                              {sortedWaterBalances.map(wb => {
+                                const catObj = waterBalanceCategories.find(c => c.name === wb.category);
+                                const isSelected = Number(selectedWaterBalanceId) === Number(wb.id);
+
+                                return (
+                                  <tr 
+                                    key={wb.id}
+                                    className={`hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-blue-50/30' : ''}`}
+                                  >
+                                    <td className="px-6 py-4">
+                                      <div className="flex flex-col">
+                                        <span className="font-bold text-slate-800 text-sm">
+                                          {wb.description || "Sem Descrição"}
+                                        </span>
+                                        {(wb.createdBy || wb.responsible) && (
+                                          <span className="text-[11px] text-slate-400 font-medium mt-0.5">
+                                            Criador/Resp: <strong className="text-slate-600 font-semibold">{wb.createdBy || wb.responsible}</strong>
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                      {wb.category ? (
+                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${getCategoryBadgeClasses(catObj?.color)}`}>
+                                          <Tag size={11} className="shrink-0" />
+                                          {wb.category}
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs text-slate-400 font-medium italic">
+                                          Sem categoria
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-50 text-[#1A3E8A] border border-blue-200/70">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-[#1A3E8A]"></span>
+                                        {wb.etapa || wb.status || "Criado"}
+                                      </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                      <div className="flex items-center justify-end gap-2">
+                                        <button
+                                          onClick={() => handleDuplicateWb(wb)}
+                                          className="p-2.5 text-slate-500 bg-slate-50 rounded-xl hover:bg-slate-100 hover:text-slate-700 transition-all border border-slate-200"
+                                          title="Duplicar Balanço"
+                                        >
+                                          <Files size={15} />
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setSelectedWaterBalanceId(wb.id);
+                                            setManageSubTab("balance");
+                                          }}
+                                          className="p-2.5 text-adasa-mid bg-adasa-light/10 rounded-xl hover:bg-adasa-light/20 transition-all border border-adasa-light/20"
+                                          title="Editar Balanço"
+                                        >
+                                          <Edit3 size={15} />
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteWb(wb)}
+                                          className="p-2.5 text-rose-500 bg-rose-50 rounded-xl hover:bg-rose-100 transition-all border border-rose-200"
+                                          title="Excluir Balanço"
+                                        >
+                                          <Trash2 size={15} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              {sortedWaterBalances.length === 0 && (
+                                <tr>
+                                  <td colSpan={4} className="text-center py-12 text-slate-400 bg-slate-50/50">
+                                    Nenhum balanço hídrico cadastrado. Clique em Novo Balanço para começar.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Visualização 2: Agrupada por Categoria */}
+                    {wbViewMode === "grouped" && (
+                      <div className="space-y-6">
+                        {groupedWaterBalances.map(group => {
+                          const isCollapsed = !!collapsedWbCategories[group.id];
+                          const hasItems = group.items.length > 0;
+
+                          return (
+                            <div 
+                              key={group.id}
+                              className="border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden transition-all"
+                            >
+                              {/* Header do Grupo / Categoria */}
+                              <div className="flex items-center justify-between p-4 sm:p-5 bg-slate-50/80 border-b border-slate-200/80 gap-3">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border shadow-xs ${getCategoryBadgeClasses(group.color)}`}>
+                                    <Tag size={12} className="shrink-0" />
+                                    {group.name}
                                   </span>
-                                )}
+
+                                  <span className="text-xs font-bold text-slate-500 bg-slate-200/70 px-2.5 py-0.5 rounded-full">
+                                    {group.items.length} {group.items.length === 1 ? 'balanço' : 'balanços'}
+                                  </span>
+
+                                  {group.description && (
+                                    <span className="text-xs text-slate-400 font-medium truncate hidden md:inline-block max-w-md">
+                                      — {group.description}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {group.id !== 'uncategorized' && (
+                                    <button
+                                      onClick={() => {
+                                        const maxWbId = waterBalances.length > 0 ? Math.max(...waterBalances.map(w => Number(w.id) || 0)) : 0;
+                                        const newId = maxWbId + 1;
+                                        const today = new Date().toISOString().split('T')[0];
+                                        const userName = currentUser?.name || "Administrador";
+                                        setWaterBalances([...waterBalances, {
+                                          id: newId,
+                                          description: `Novo Balanço - ${group.name}`,
+                                          category: group.name,
+                                          etapa: "Criado",
+                                          status: "Pendente",
+                                          datasEtapas: { "Criado": today },
+                                          responsaveisEtapas: { "Criado": userName },
+                                          createdAt: today,
+                                          createdBy: userName
+                                        }]);
+                                        setSelectedWaterBalanceId(newId);
+                                        setManageSubTab("balance");
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-adasa-dark bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
+                                      title={`Criar novo balanço vinculado à categoria "${group.name}"`}
+                                    >
+                                      <Plus size={12} className="text-adasa-mid" />
+                                      <span className="hidden sm:inline">Adicionar nesta categoria</span>
+                                    </button>
+                                  )}
+
+                                  <button
+                                    onClick={() => toggleWbCategoryCollapse(group.id)}
+                                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 rounded-lg transition-colors cursor-pointer"
+                                    title={isCollapsed ? "Expandir categoria" : "Recolher categoria"}
+                                  >
+                                    <ChevronDown
+                                      size={16}
+                                      className={`transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
+                                    />
+                                  </button>
+                                </div>
                               </div>
+
+                              {/* Conteúdo do Grupo / Tabela de Balanços */}
+                              {!isCollapsed && (
+                                <div>
+                                  {hasItems ? (
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-left border-collapse">
+                                        <thead>
+                                          <tr className="bg-slate-50/40 border-b border-slate-100 text-[11px] font-black text-slate-500 uppercase tracking-wider select-none">
+                                            <th className="px-6 py-3">Descrição do Balanço</th>
+                                            <th className="px-6 py-3">Etapa do Processo</th>
+                                            <th className="px-6 py-3 text-right">Ações</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 text-sm">
+                                          {group.items.map(wb => {
+                                            const isSelected = Number(selectedWaterBalanceId) === Number(wb.id);
+
+                                            return (
+                                              <tr 
+                                                key={wb.id}
+                                                className={`hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-blue-50/30' : ''}`}
+                                              >
+                                                <td className="px-6 py-3.5">
+                                                  <div className="flex flex-col">
+                                                    <span className="font-bold text-slate-800 text-sm">
+                                                      {wb.description || "Sem Descrição"}
+                                                    </span>
+                                                    {(wb.createdBy || wb.responsible) && (
+                                                      <span className="text-[11px] text-slate-400 font-medium mt-0.5">
+                                                        Criador/Resp: <strong className="text-slate-600 font-semibold">{wb.createdBy || wb.responsible}</strong>
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                </td>
+                                                <td className="px-6 py-3.5">
+                                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-50 text-[#1A3E8A] border border-blue-200/70">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-[#1A3E8A]"></span>
+                                                    {wb.etapa || wb.status || "Criado"}
+                                                  </span>
+                                                </td>
+                                                <td className="px-6 py-3.5 text-right">
+                                                  <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                      onClick={() => handleDuplicateWb(wb)}
+                                                      className="p-2 text-slate-500 bg-slate-50 rounded-xl hover:bg-slate-100 hover:text-slate-700 transition-all border border-slate-200 cursor-pointer"
+                                                      title="Duplicar Balanço"
+                                                    >
+                                                      <Files size={14} />
+                                                    </button>
+                                                    <button
+                                                      onClick={() => {
+                                                        setSelectedWaterBalanceId(wb.id);
+                                                        setManageSubTab("balance");
+                                                      }}
+                                                      className="p-2 text-adasa-mid bg-adasa-light/10 rounded-xl hover:bg-adasa-light/20 transition-all border border-adasa-light/20 cursor-pointer"
+                                                      title="Editar Balanço"
+                                                    >
+                                                      <Edit3 size={14} />
+                                                    </button>
+                                                    <button
+                                                      onClick={() => handleDeleteWb(wb)}
+                                                      className="p-2 text-rose-500 bg-rose-50 rounded-xl hover:bg-rose-100 transition-all border border-rose-200 cursor-pointer"
+                                                      title="Excluir Balanço"
+                                                    >
+                                                      <Trash2 size={14} />
+                                                    </button>
+                                                  </div>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  ) : (
+                                    <div className="p-6 text-center text-slate-400 bg-slate-50/30 text-xs font-medium flex flex-col items-center justify-center gap-2">
+                                      <p>Nenhum balanço cadastrado nesta categoria.</p>
+                                      {group.id !== 'uncategorized' && (
+                                        <button
+                                          onClick={() => {
+                                            const maxWbId = waterBalances.length > 0 ? Math.max(...waterBalances.map(w => Number(w.id) || 0)) : 0;
+                                            const newId = maxWbId + 1;
+                                            const today = new Date().toISOString().split('T')[0];
+                                            const userName = currentUser?.name || "Administrador";
+                                            setWaterBalances([...waterBalances, {
+                                              id: newId,
+                                              description: `Novo Balanço - ${group.name}`,
+                                              category: group.name,
+                                              etapa: "Criado",
+                                              status: "Pendente",
+                                              datasEtapas: { "Criado": today },
+                                              responsaveisEtapas: { "Criado": userName },
+                                              createdAt: today,
+                                              createdBy: userName
+                                            }]);
+                                            setSelectedWaterBalanceId(newId);
+                                            setManageSubTab("balance");
+                                          }}
+                                          className="text-xs font-bold text-adasa-mid hover:underline mt-1 cursor-pointer"
+                                        >
+                                          + Criar primeiro balanço para "{group.name}"
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                            <div className="flex items-center gap-3">
-                              <button
-                                onClick={() => {
-                                  // Find the maximum ID in waterBalances safely, filtering out NaN
-                                  const validWbIds = waterBalances.map(w => Number(w.id)).filter(id => !isNaN(id));
-                                  const maxWbId = validWbIds.length > 0 ? Math.max(...validWbIds) : 0;
-                                  const newWbId = maxWbId + 1;
-
-                                  const inWb = (id: any) => Number(id) === Number(wb.id) || (!id && Number(wb.id) === 2026);
-                                  
-                                  const sysMap = new Map();
-                                  const regMap = new Map();
-                                  const supMap = new Map();
-                                  
-                                  // Safely find the maximum IDs of all related state arrays, filtering out non-numeric values
-                                  const validSysIds = systems.map(s => Number(s.id)).filter(id => !isNaN(id));
-                                  let maxSysId = validSysIds.length > 0 ? Math.max(...validSysIds) : 0;
-
-                                  const validRegIds = regions.map(r => Number(r.id)).filter(id => !isNaN(id));
-                                  let maxRegId = validRegIds.length > 0 ? Math.max(...validRegIds) : 0;
-
-                                  const validCentIds = demands.map(s => Number(s.id)).filter(id => !isNaN(id));
-                                  let maxCentId = validCentIds.length > 0 ? Math.max(...validCentIds) : 0;
-
-                                  const validSupIds = supplySources.map(s => Number(s.id)).filter(id => !isNaN(id));
-                                  let maxSupId = validSupIds.length > 0 ? Math.max(...validSupIds) : 0;
-
-                                  const validAdjIds = operationalAdjustments.map(s => Number(s.id)).filter(id => !isNaN(id));
-                                  let maxAdjId = validAdjIds.length > 0 ? Math.max(...validAdjIds) : 0;
-
-                                  const newSystems = systems.filter(s => inWb(s.waterBalanceId)).map(s => {
-                                    const newId = ++maxSysId;
-                                    sysMap.set(s.id, newId);
-                                    return { ...s, id: newId, waterBalanceId: newWbId };
-                                  });
-                                  
-                                  const newRegions = regions.filter(r => inWb(r.waterBalanceId)).map(r => {
-                                    const newId = ++maxRegId;
-                                    regMap.set(r.id, newId);
-                                    return { ...r, id: newId, systemId: sysMap.get(r.systemId) || r.systemId, waterBalanceId: newWbId };
-                                  });
-                                  
-                                  const newDemands = demands.filter(s => inWb(s.waterBalanceId)).map(s => {
-                                    const newId = ++maxCentId;
-                                    return { 
-                                      ...s, 
-                                      id: newId, 
-                                      waterBalanceId: newWbId,
-                                      entries: s.entries.map(e => ({
-                                        ...e,
-                                        regionId: regMap.get(e.regionId) || e.regionId
-                                      }))
-                                    };
-                                  });
-                                  
-                                  const newSupply = supplySources.filter(s => inWb(s.waterBalanceId)).map(s => {
-                                    const newId = ++maxSupId;
-                                    supMap.set(s.id, newId);
-                                    return {
-                                      ...s,
-                                      id: newId,
-                                      systemId: sysMap.get(s.systemId) || s.systemId,
-                                      waterBalanceId: newWbId
-                                    };
-                                  });
-                                  
-                                  const adjMap = new Map();
-                                  let newAdj = operationalAdjustments.filter(a => inWb(a.waterBalanceId)).map(a => {
-                                    const newId = ++maxAdjId;
-                                    adjMap.set(a.id, newId);
-                                    return {
-                                      ...a,
-                                      id: newId,
-                                      systemId: sysMap.get(a.systemId) || a.systemId,
-                                      waterBalanceId: newWbId
-                                    };
-                                  });
-                                  newAdj = newAdj.map(a => {
-                                    if (a.linkedAdjustmentId) {
-                                      return { ...a, linkedAdjustmentId: adjMap.get(a.linkedAdjustmentId) || a.linkedAdjustmentId };
-                                    }
-                                    return a;
-                                  });
-
-                                  const updatedWaterBalances = [...waterBalances, { ...wb, id: newWbId, description: `${wb.description} (Cópia)` }];
-                                  const updatedSystems = [...systems, ...newSystems];
-                                  const updatedRegions = [...regions, ...newRegions];
-                                  const updatedDemands = [...demands, ...newDemands];
-                                  const updatedSupplySources = [...supplySources, ...newSupply];
-                                  const updatedOperationalAdjustments = [...operationalAdjustments, ...newAdj];
-
-                                  setWaterBalances(updatedWaterBalances);
-                                  setSystems(updatedSystems);
-                                  setRegions(updatedRegions);
-                                  setDemands(updatedDemands);
-                                  setSupplySources(updatedSupplySources);
-                                  setOperationalAdjustments(updatedOperationalAdjustments);
-
-                                  // Select the newly duplicated balance, mark it as registered, and switch sub-tab so form is fully active
-                                  setSelectedWaterBalanceId(newWbId);
-                                  setSavedBalanceIds(prev => Array.from(new Set([...prev, newWbId])));
-                                  setManageSubTab("balance");
-
-                                  // Immediately trigger global save call with newly created state payload to synchronize DB instantly
-                                  const fullPayload = {
-                                    waterBalances: updatedWaterBalances,
-                                    systems: updatedSystems,
-                                    regions: updatedRegions,
-                                    demands: updatedDemands,
-                                    supplySources: updatedSupplySources,
-                                    operationalAdjustments: updatedOperationalAdjustments
-                                  };
-                                  
-                                  setTimeout(() => {
-                                    handleSaveToCloud(true, fullPayload).then(() => {
-                                      showToast("Sucesso", `Balanço "${wb.description}" duplicado e salvo com sucesso! Redirecionado para edição.`, "success");
-                                    }).catch(err => {
-                                      showToast("Erro", "Erro ao salvar duplicação: " + err.message, "error");
-                                    });
-                                  }, 100);
-                                }}
-                                className="p-3 text-slate-500 bg-slate-50 rounded-xl hover:bg-slate-100 hover:text-slate-700 transition-all border border-slate-200"
-                                title="Duplicar"
-                              >
-                                <Files size={16} />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setSelectedWaterBalanceId(wb.id);
-                                  setManageSubTab("balance");
-                                }}
-                                className="p-3 text-adasa-mid bg-adasa-light/10 rounded-xl hover:bg-adasa-light/20 transition-all border border-adasa-light/20"
-                                title="Editar"
-                              >
-                                <Edit3 size={16} />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setConfirmState({
-                                    message: "Tem certeza que deseja excluir este balanço e todos os registros vinculados a ele?",
-                                    onConfirm: () => {
-                                      const isLinkedToDeletedWb = (itemWbId: any) => {
-                                        const numId = itemWbId ? Number(itemWbId) : 2026;
-                                        return numId === Number(wb.id);
-                                      };
-                                      
-                                      const updatedWaterBalances = waterBalances.filter(w => w.id !== wb.id);
-                                      const updatedSystems = systems.filter(s => !isLinkedToDeletedWb(s.waterBalanceId));
-                                      const updatedRegions = regions.filter(r => !isLinkedToDeletedWb(r.waterBalanceId));
-                                      const updatedDemands = demands.filter(d => !isLinkedToDeletedWb(d.waterBalanceId));
-                                      const updatedSupplySources = supplySources.filter(s => !isLinkedToDeletedWb(s.waterBalanceId));
-                                      const updatedOperationalAdjustments = operationalAdjustments.filter(a => !isLinkedToDeletedWb(a.waterBalanceId));
-
-                                      setWaterBalances(updatedWaterBalances);
-                                      setSystems(updatedSystems);
-                                      setRegions(updatedRegions);
-                                      setDemands(updatedDemands);
-                                      setSupplySources(updatedSupplySources);
-                                      setOperationalAdjustments(updatedOperationalAdjustments);
-
-                                      if (Number(selectedWaterBalanceId) === Number(wb.id)) {
-                                        setSelectedWaterBalanceId(null);
-                                      }
-
-                                      const fullPayload = {
-                                        waterBalances: updatedWaterBalances,
-                                        systems: updatedSystems,
-                                        regions: updatedRegions,
-                                        demands: updatedDemands,
-                                        supplySources: updatedSupplySources,
-                                        operationalAdjustments: updatedOperationalAdjustments
-                                      };
-
-                                      setTimeout(() => {
-                                        handleSaveToCloud(true, fullPayload).then(() => {
-                                          showToast("Sucesso", "Balanço hídrico e todos os registros vinculados excluídos com sucesso!", "success");
-                                        }).catch(err => {
-                                          showToast("Erro", "Erro ao sincronizar exclusão: " + err.message, "error");
-                                        });
-                                      }, 100);
-                                    }
-                                  });
-                                }}
-                                className="p-3 text-rose-500 bg-rose-50 rounded-xl hover:bg-rose-100 transition-all border border-rose-200"
-                                title="Excluir"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      {waterBalances.length === 0 && (
-                        <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-2xl border border-slate-200 border-dashed">
-                          <p>Nenhum balanço hídrico cadastrado. Clique em Novo Balanço para começar.</p>
-                        </div>
-                      )}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -7601,32 +8129,85 @@ const renderSupplyTable = () => {
                         </div>
                       </div>
 
-                      {/* Campos do formulário: Descrição e Etapas */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <label className="text-xs font-black text-slate-500 uppercase tracking-widest pl-2">Descrição</label>
-                          <input
-                            type="text"
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-adasa-mid transition-all"
-                            placeholder="Ex: Balanço Hídrico 2026"
-                            value={activeBalance?.description || ""}
-                            onChange={(e) => updateActiveBalance({ description: e.target.value })}
-                          />
+                      {/* Campos do formulário: Descrição, Categoria e Etapas */}
+                      <div className="space-y-6">
+                        {/* Linha 1: Descrição e Categoria com Botão de Gerenciamento */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest pl-2">
+                              Descrição <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-adasa-mid transition-all shadow-sm"
+                              placeholder="Ex: Balanço Hídrico 2026"
+                              value={activeBalance?.description || ""}
+                              onChange={(e) => updateActiveBalance({ description: e.target.value })}
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between pl-2">
+                              <label className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                                Categoria
+                              </label>
+                              <span className="text-[10px] text-slate-400 font-semibold">
+                                Classificação temática
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="relative flex-1">
+                                <select
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-adasa-mid transition-all shadow-sm cursor-pointer appearance-none pr-10"
+                                  value={activeBalance?.category || ""}
+                                  onChange={(e) => updateActiveBalance({ category: e.target.value })}
+                                >
+                                  <option value="">Selecione uma Categoria...</option>
+                                  {waterBalanceCategories.map((cat) => (
+                                    <option key={cat.id} value={cat.name}>
+                                      {cat.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setIsWbCategoryModalOpen(true)}
+                                className="px-3.5 py-3 bg-slate-100 hover:bg-adasa-light/20 text-slate-700 hover:text-adasa-dark rounded-xl border border-slate-200 hover:border-adasa-light/40 transition-all flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer font-bold text-xs"
+                                title="Gerenciar Categorias do Balanço Hídrico"
+                              >
+                                <Settings2 size={16} className="text-adasa-mid" />
+                                <span className="hidden sm:inline">Gerenciar</span>
+                              </button>
+                            </div>
+                          </div>
                         </div>
 
+                        {/* Linha 2 (Linha de baixo): Campo Etapas */}
                         <div className="space-y-2">
-                          <label className="text-xs font-black text-slate-500 uppercase tracking-widest pl-2">Etapas</label>
-                          <select
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-adasa-mid transition-all"
-                            value={currentWbStage}
-                            onChange={(e) => handleWbStageChange(e.target.value as WaterBalanceEtapa)}
-                          >
-                            {WATER_BALANCE_ETAPAS.map((stage) => (
-                              <option key={stage} value={stage}>
-                                {stage}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="flex items-center justify-between pl-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                              Etapas
+                            </label>
+                            <span className="text-[10px] text-slate-400 font-semibold">
+                              Estágio de validação institucional
+                            </span>
+                          </div>
+                          <div className="relative">
+                            <select
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-adasa-mid transition-all shadow-sm cursor-pointer appearance-none pr-10"
+                              value={currentWbStage}
+                              onChange={(e) => handleWbStageChange(e.target.value as WaterBalanceEtapa)}
+                            >
+                              {WATER_BALANCE_ETAPAS.map((stage) => (
+                                <option key={stage} value={stage}>
+                                  {stage}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          </div>
                         </div>
                       </div>
 
@@ -8954,6 +9535,19 @@ const renderSupplyTable = () => {
               <TomadaSubsidiosModule view="cadastro" showToast={showToast} currentUser={currentUser} />
             </motion.div>
             </RequirePermission>
+          ) : activeTab === "reg_subsidios_painel" ? (
+            <RequirePermission moduleId="reg_subsidios_painel" action="view" fallback={<div className="p-8 text-center text-white/50">Acesso negado.</div>}>
+            <motion.div
+              key="reg_subsidios_painel"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="w-full"
+            >
+              <TomadaSubsidiosModule view="painel" showToast={showToast} currentUser={currentUser} onTabChange={handleTabChange} />
+            </motion.div>
+            </RequirePermission>
           ) : activeTab === "reg_agenda_painel" ? (
             <RequirePermission moduleId="reg_agenda_painel" action="view" fallback={<div className="p-8 text-center text-white/50">Acesso negado.</div>}>
             <motion.div
@@ -8993,177 +9587,10 @@ const renderSupplyTable = () => {
               <PublicationsModule view="painel" showToast={showToast} />
             </motion.div>
             </RequirePermission>
-          ) : activeTab === "gerencial" ? (
-            <motion.div
-              key="gerencial"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className="w-full space-y-6"
-            >
-              <ManagerialHub 
-                onOpenPlanning={() => {
-                  setActivePlanningSubTab("dashboard");
-                  handleTabChange("planning");
-                }}
-                onOpenResolutions={() => {
-                  handleTabChange("reg_painel");
-                }}
-                onOpenWaterBalance={() => {
-                  handleTabChange("analyze");
-                }}
-                onOpenFiscalizacao={() => {
-                  handleTabChange("fisc_operational");
-                }}
-                onOpenRecursoPainel={() => {
-                  handleTabChange("recurso_painel");
-                }}
-                onOpenPublications={() => {
-                  handleTabChange("pub_painel");
-                }}
-                onOpenRegulatoryAgenda={() => {
-                  handleTabChange("reg_agenda_painel");
-                }}
-                isPublic={false}
-                showOnlyPublic={false}
-              />
-            </motion.div>
-          ) : activeTab === "public_hub" ? (
-            <motion.div
-              key="public_hub"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className="w-full space-y-6"
-            >
-              <ManagerialHub 
-                onOpenPlanning={() => {}}
-                onOpenResolutions={() => {
-                  handleTabChange("reg_painel");
-                }}
-                onOpenWaterBalance={() => {}}
-                onOpenPublications={() => {
-                  handleTabChange("pub_painel");
-                }}
-                onOpenRegulatoryAgenda={() => {
-                  handleTabChange("reg_agenda_painel");
-                }}
-                isPublic={false}
-                showOnlyPublic={true}
-              />
-            </motion.div>
-          ) : activeTab === "fisc_operational" ? (
-            <motion.div
-              key="fisc_operational"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className="w-full"
-            >
-              <FiscalizacaoPainel 
-                tasks={tasks} 
-                plans={plans}
-                onEditTaskClick={(taskId) => {
-                  setEditingTaskIdFromPainel(taskId);
-                  setActivePlanningSubTab("tasks");
-                  handleTabChange("planning");
-                }}
-              />
-            </motion.div>
-          ) : activeTab === "recurso_painel" ? (
-            <motion.div
-              key="recurso_painel"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className="w-full"
-            >
-              <RecursoPainel 
-                tasks={tasks} 
-                plans={plans}
-                onEditTaskClick={(taskId) => {
-                  setEditingTaskIdFromPainel(taskId);
-                  setActivePlanningSubTab("tasks");
-                  handleTabChange("planning");
-                }}
-              />
-            </motion.div>
           ) : null}
         </AnimatePresence>
-        
-        <ChangePasswordModal 
-          isOpen={isChangePasswordModalOpen}
-          onClose={() => setIsChangePasswordModalOpen(false)}
-          showToast={(msg, type) => showToast(type === "success" ? "Sucesso" : "Erro", msg, type)}
-        />
       </main>
-
-
-
-      {confirmState && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setConfirmState(null)} />
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full animate-in fade-in zoom-in-95 duration-200 relative z-10 overflow-hidden border border-slate-200">
-            <div className={`${confirmState.type === 'alert' ? 'bg-amber-50/50' : 'bg-rose-50/50'} p-5 border-b border-slate-100 flex items-start gap-4`}>
-              <div className={`p-3 bg-white rounded-xl shadow-sm border ${confirmState.type === 'alert' ? 'text-amber-500 border-amber-100' : 'text-rose-500 border-rose-100'}`}>
-                <AlertTriangle size={24} />
-              </div>
-              <div>
-                <h3 className="text-lg font-black text-slate-800">{confirmState.title || (confirmState.type === 'alert' ? "Atenção" : "Confirmar Ação")}</h3>
-                <p className="text-sm font-medium text-slate-600 mt-1 whitespace-pre-wrap leading-relaxed">{confirmState.message}</p>
-              </div>
-            </div>
-            
-            <div className="p-4 bg-slate-50 flex justify-end gap-3">
-              {confirmState.type === 'alert' ? (
-                <button
-                  onClick={() => setConfirmState(null)}
-                  className="px-5 py-2 font-bold text-sm text-white bg-amber-500 hover:bg-amber-600 rounded-xl transition-colors shadow-sm shadow-amber-500/20"
-                >
-                  Entendi
-                </button>
-              ) : (
-                <>
-                  <button
-                    onClick={() => setConfirmState(null)}
-                    className="px-4 py-2 font-bold text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (confirmState.onConfirm) confirmState.onConfirm();
-                      setConfirmState(null);
-                    }}
-                    className="px-5 py-2 font-bold text-sm text-white bg-rose-500 hover:bg-rose-600 rounded-xl transition-colors shadow-sm shadow-rose-500/20"
-                  >
-                    Confirmar
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isSaving && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-3xl p-8 shadow-2xl flex flex-col items-center gap-6 animate-in zoom-in-95 duration-300">
-            <div className="relative flex items-center justify-center w-16 h-16">
-              <div className="absolute inset-0 border-4 border-slate-100 rounded-full"></div>
-              <div className="absolute inset-0 border-4 border-adasa-mid border-t-transparent rounded-full animate-spin"></div>
-            </div>
-            <div className="text-center max-w-[240px]">
-              <h3 className="text-base font-black text-slate-800 uppercase tracking-widest mb-2">Processando Dados</h3>
-              <p className="text-xs font-semibold text-slate-500 leading-relaxed">Por favor, aguarde enquanto as informações são salvas no banco...</p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
+

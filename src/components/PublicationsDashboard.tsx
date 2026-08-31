@@ -367,20 +367,20 @@ export function PublicationsDashboard({ showToast }: PublicationsDashboardProps)
       </div>
 
       {/* Main KPI Card Row */}
-      <div className="bg-gradient-to-r from-adasa-dark to-adasa-mid p-6 md:p-8 rounded-2xl border border-adasa-mid/20 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:translate-y-[-2px] transition-all text-white">
+      <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:border-adasa-mid/30 transition-all text-slate-800">
         <div className="flex items-center gap-4">
-          <div className="p-4 bg-white/10 rounded-2xl text-white backdrop-blur-md border border-white/25">
+          <div className="p-4 bg-adasa-dark/5 rounded-2xl text-adasa-dark border border-adasa-dark/10">
             <FileText size={32} />
           </div>
           <div>
-            <span className="block text-xs font-black uppercase tracking-widest text-adasa-light">Acervo de Publicações Total</span>
-            <span className="text-4xl md:text-5xl font-black leading-none mt-1">{totalCount}</span>
-            <span className="block text-xs text-blue-100 font-bold mt-1.5">Publicações cadastradas no acervo</span>
+            <span className="block text-xs font-black uppercase tracking-widest text-adasa-dark">Acervo de Publicações Total</span>
+            <span className="text-4xl md:text-5xl font-black leading-none mt-1 text-slate-800">{totalCount}</span>
+            <span className="block text-xs text-slate-500 font-bold mt-1.5">Publicações cadastradas no acervo</span>
           </div>
         </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-white/15 rounded-xl border border-white/20 text-xs font-semibold tracking-wide shadow-inner">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-450 animate-pulse"></span>
-          <span className="font-extrabold text-blue-50">Base de Dados Integrada em Tempo Real</span>
+        <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-semibold tracking-wide shadow-inner">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span className="font-extrabold text-slate-600">Base de Dados Integrada em Tempo Real</span>
         </div>
       </div>
 

@@ -17,7 +17,8 @@ import {
   BarChart2,
   BookOpen,
   Shield,
-  Scale
+  Scale,
+  MessageSquare
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Task, Area } from "../types";
@@ -138,6 +139,26 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Painel de Participação Social Card */}
+            <motion.div 
+              whileHover={{ y: -2 }}
+              onClick={() => setActiveTab("reg_subsidios_painel")}
+              className="p-6 rounded-2xl border border-blue-200 bg-gradient-to-br from-white to-blue-50/20 shadow-sm cursor-pointer hover:shadow-md transition-all duration-300 flex flex-col justify-between group text-left h-full"
+            >
+              <div>
+                <div className="mb-4 p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
+                  <MessageSquare size={24} />
+                </div>
+                <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Painel Participação Social</h3>
+                <p className="text-slate-600 text-xs font-medium leading-relaxed mb-6">
+                  Acompanhamento gerencial das ações de participação social, consultas públicas, audiências, tomadas de subsídios e análise de contribuições.
+                </p>
+              </div>
+              <div className="mt-8 flex items-center gap-2 text-xs font-bold text-blue-700">
+                Abrir Painel Participação Social <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+              </div>
+            </motion.div>
+
             {/* Painel do Balanço Hídrico Card */}
             <motion.div 
               whileHover={{ y: -2 }}
@@ -377,13 +398,13 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
         </div>
         
         <div className="pt-2 space-y-8">
-          {/* Sub-Módulo 2.1: Resoluções */}
+          {/* Sub-Módulo 2.1: Resoluções e Participação Social */}
           <div>
             <div className="flex items-center gap-2 mb-4">
               <div className="p-1 px-2.5 bg-slate-100 text-slate-500 rounded-lg text-[10px] font-black uppercase tracking-widest border border-slate-200">
                 Sub-Módulo 2.1
               </div>
-              <h3 className="text-xs font-black text-slate-600 uppercase tracking-widest">Resoluções</h3>
+              <h3 className="text-xs font-black text-slate-600 uppercase tracking-widest">Resoluções e Participação Social</h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Item 2.1.1: Cadastrar Resoluções */}
@@ -419,6 +440,46 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
                   <h3 className="text-base font-bold text-slate-800 mb-1.5 leading-tight">Painel de Resoluções</h3>
                   <p className="text-slate-500 text-xs font-medium leading-relaxed mb-4">
                     Visualize estatísticas gerenciais do estoque regulatório, painel de monitoramento de obrigações e relatórios analíticos de resoluções.
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 text-xs font-bold text-indigo-600 mt-2">
+                  Visualizar painel <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+                </div>
+              </motion.div>
+
+              {/* Item 2.1.3: Participação Social */}
+              <motion.div 
+                whileHover={{ y: -3 }}
+                onClick={() => setActiveTab("reg_subsidios")}
+                className="p-6 rounded-2xl border border-slate-200 hover:border-blue-300 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
+              >
+                <div>
+                  <div className="mb-4 p-3 rounded-xl bg-blue-50 text-blue-500 w-max border border-blue-100 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                    <MessageSquare size={24} />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-800 mb-1.5 leading-tight">Participação Social</h3>
+                  <p className="text-slate-500 text-xs font-medium leading-relaxed mb-4">
+                    Gerencie tomadas de subsídios, consultas e audiências públicas, cadastre minutas e receba contribuições da sociedade.
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 text-xs font-bold text-blue-600 mt-2">
+                  Acessar participação <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+                </div>
+              </motion.div>
+
+              {/* Item 2.1.4: Painel de Participação Social */}
+              <motion.div 
+                whileHover={{ y: -3 }}
+                onClick={() => setActiveTab("reg_subsidios_painel")}
+                className="p-6 rounded-2xl border border-indigo-200 hover:border-indigo-300 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
+              >
+                <div>
+                  <div className="mb-4 p-3 rounded-xl bg-indigo-50 text-indigo-500 w-max border border-indigo-100 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
+                    <BarChart2 size={24} />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-800 mb-1.5 leading-tight">Painel de Participação Social</h3>
+                  <p className="text-slate-500 text-xs font-medium leading-relaxed mb-4">
+                    Acompanhamento gerencial das ações de participação social, consultas públicas, audiências, tomadas de subsídios e análise de contribuições.
                   </p>
                 </div>
                 <div className="flex items-center gap-1 text-xs font-bold text-indigo-600 mt-2">
