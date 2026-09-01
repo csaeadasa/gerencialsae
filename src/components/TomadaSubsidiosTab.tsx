@@ -986,7 +986,7 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
                       article.contentType === 'table' || isTableJson(article.proposedText || article.originalText)
                         ? "Tabela Final do Dispositivo mantida conforme Proposta em Consulta. Sem altera√ß√µes acatadas."
                         : "Texto Final do Dispositivo igual ao Texto Proposto em Consulta. Sem contribui√ß√µes recebidas"
-                    );
+                    )
                   } else {
                     setFinalText(article.finalText || "");
                     setFinalJustification(article.finalJustification || "");
@@ -2841,7 +2841,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         >
                           {part.value}
                         </span>
-                      );
+                      )
                     }
                     if (part.removed) {
                       return (
@@ -2852,7 +2852,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         >
                           {part.value}
                         </span>
-                      );
+                      )
                     }
                     return <span key={pIdx}>{part.value}</span>;
                   })}
@@ -4195,7 +4195,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                 </div>
                               )}
                             </div>
-                          );
+                          )
                         })}
                       </div>
                     )}
@@ -4979,7 +4979,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                         <Eye size={13} className="text-indigo-500 shrink-0" />
                                       )}
                                     </button>
-                                  );
+                                  )
                                 })}
                               </div>
                             </div>
@@ -5454,14 +5454,14 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                             <span key={index} className="text-emerald-950 font-bold bg-emerald-100 border border-emerald-300 px-1 py-0.5 rounded mx-0.5 inline-block">
                                               {part.value}
                                             </span>
-                                          );
+                                          )
                                         }
                                         if (part.removed) {
                                           return (
                                             <span key={index} className="text-rose-950 bg-rose-100 border border-rose-300 px-1 py-0.5 rounded line-through decoration-rose-600 mx-0.5 inline-block font-medium">
                                               {part.value}
                                             </span>
-                                          );
+                                          )
                                         }
                                         return <span key={index}>{part.value}</span>;
                                       })}
@@ -5589,7 +5589,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                 </td>
                               )}
                             </tr>
-                          );
+                          )
                         })}
                       </tbody>
                     </table>
@@ -5932,7 +5932,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             showToast={showToast}
                           />
                         </div>
-                      );
+                      )
                     })}
 
                     {filteredAnalysisArticles.length === 0 && currentArticles.length > 0 && (
@@ -6489,7 +6489,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                           <Eye size={13} className="text-indigo-500 shrink-0" />
                                         )}
                                       </button>
-                                    );
+                                    )
                                   })}
                                 </div>
                               </div>
@@ -6956,7 +6956,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                                   </div>
                                                 </div>
                                               </div>
-                                            );
+                                            )
                                           })}
                                         </div>
                                       </div>
@@ -6964,7 +6964,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                   </tr>
                                 )}
                               </React.Fragment>
-                            );
+                            )
                           })}
                           
                           {currentArticles.length === 0 && (
@@ -7628,7 +7628,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           >
                             {trimmed}
                           </div>
-                        );
+                        )
                       }
 
                       const parsed = parseNormativePrefix(trimmed);
@@ -7638,14 +7638,14 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             <strong className="font-bold text-slate-950">{parsed.prefix}</strong>
                             <span>{parsed.rest}</span>
                           </p>
-                        );
+                        )
                       }
 
                       return (
                         <p key={idx} className={cn("leading-relaxed", isIndented ? "pl-2" : "indent-8")}>
                           {trimmed}
                         </p>
-                      );
+                      )
                     })}
                   </div>
                 );
@@ -8148,7 +8148,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                               "{unit.text}"
                                             </p>
                                           </div>
-                                        );
+                                        )
                                       })}
                                       {ana.deletedSubunits?.map((delUnit, dIdx) => (
                                           <div
@@ -8467,7 +8467,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             <p key={cIdx} className="indent-8">
                               <strong>Considerando</strong> {cleanC}{cIdx === arr.length - 1 ? ";" : ";"}
                             </p>
-                          );
+                          )
                         })}
 
                         <p className="font-bold pt-2">
@@ -8485,7 +8485,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                   <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl text-amber-800 text-xs italic text-center font-sans">
                                     Nenhum dispositivo possui texto final cadastrado ainda. Salve o parecer/texto final nos artigos na aba "An√°lise das Contribui√ß√µes" para que constem nesta minuta.
                                   </div>
-                                );
+                                )
                               }
                               return textArticlesWithFinalText.map((art) => {
                                 const body = (art.finalText && art.finalText.trim()) || "";
@@ -8495,7 +8495,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                       {renderNormativeBlock(body.trim())}
                                     </div>
                                   </div>
-                                );
+                                )
                               });
                             })()}
                           </>
@@ -8507,7 +8507,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                   <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl text-amber-800 text-xs italic text-center font-sans my-4">
                                     Nenhum dispositivo possui texto final cadastrado ainda. Salve o parecer/texto final nos artigos na aba "An√°lise das Contribui√ß√µes" para que constem nesta minuta.
                                   </div>
-                                );
+                                )
                               }
 
                               let articleCounter = 1;
@@ -8542,7 +8542,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                                 {renderNormativeBlock(blockText, true)}
                                               </div>
                                             </div>
-                                          );
+                                          )
                                         })}
                                       </div>
                                     </div>
@@ -8573,7 +8573,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                                 {renderNormativeBlock(blockText, true)}
                                               </div>
                                             </div>
-                                          );
+                                          )
                                         })}
                                       </div>
                                     </div>
@@ -8606,7 +8606,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                     </p>
                                   </div>
                                 </div>
-                              );
+                              )
                             })()}
                           </>
                         )}
@@ -9103,7 +9103,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                     </span>
                                   )}
                                 </div>
-                              );
+                              )
                             })()}
                             <button type="button" onClick={() => { setPickerModalType("edit"); setPickerModalIndex(idx); }} className="text-[10px] font-bold text-indigo-600 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-100 px-2 py-1 rounded-md transition-colors flex items-center gap-1 shrink-0 shadow-2xs active:scale-95">
                               <Tag size={12} /> Vincular Assunto
@@ -9134,18 +9134,131 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             <button
                               type="button"
                               onClick={() => {
-                                if (idx > xú‰ZKsπæ˚W ¨‘µÒ•áΩ4)óV∂S>x£äî\T™Zp$aa≥P§ÃÂèIÂêSé˘˛ci`ƒÃ j•ç◊(èFw›_Ï†ı3‘¯ÁÛHHëÂY"£ÎNßC*·ë˙åàõW{Lrùçø¶¡
-y®Û-77j^≥°ÙZÿkA‰[C¥v6…AÛÿMCèMSáÄ
-<a$Øïƒ„ÒıöÜ¯Ò…∏%…Jz+Å¶<íﬁÑ≥ È¡∞$ﬁqØáÊ¸é$C›H£ÄŒ∏w≠˘¢Ccü {Ô∞á‚ï◊Ô£¯ﬁÎg£&≥|Ãq%|ÊOp$®§<Ú|Œxk3≤BTíPx>â$I–«^ø’∞I%É|PK°'ù”Ôu⁄0ÁË,I¯Úo1ÙØ˚G‘=E#„»‘⁄úâêá4b4"≠SµÙ®´˙Ì^b‘ù,§‰MΩ“NM
-∏èAñ¥kì≤xtŒ®;^∑–¯t¸—)j+á!sF¢ôú+`|!W˙'Ö–
-àucÁ_àZˇÖˆ˜òÆ¯S`˚_FF∑^˝wÔ'¿e6∏#bXö®`Ò¢BÛ∏_
-≥F5˚~BÇ™Á´¶=áãß˝5ˇ˛+	µá+UÃÎ›W	Û¡É];ì·©ú{‘ËùªCˆ˙ôªº7û%4@ÍCi\Äm¬`∏}huµvJ¥S ›É·	aÊ™∆˝€‘eÆ˚Ωxu„¢ã8&âèQﬁ·ﬂ“hÊ-i F'ﬁ`ß`ÍÔ
-&„Ë/	ù—3Ùw:S^ÙÙÉF]Ω«=®≠·Ñ‡˝q∂Ù¶∆2ùÑh¬µıÙ_¶§(i ˝Ö&J9Û¡H;ik62kW∏Ã∞Á≠äΩC“»õÉQ⁄* —‹]ÖS¢ºﬂªoÇ_Ã∞OÊ`Líå[Ô“ê`∏ﬁG<S+ƒ√¶iÓ0[ ÷p";˘(eÙÛœ®’j
-V±Á8ö¡¯6˘ü«lÕâ`Ü5Ç) ‰ ‹…ë8ƒå»éﬁ+⁄|±Ëﬁ}D–˘*b¿E¬c.‡K˚ç¸ˆú°ÚWtA+ªÉßAtúiˆaàNGë‡ÎG¥πìﬂ	¢wæﬁÒÚ¿Ü™É∫ú÷)†_•e≠lıÅ-ÒDWm-ë-ÙÕ7®]ü∂BnÄr˘‡‹SÌ]ÁöB“ÈΩ7!rIÄ÷ï–Û¢ßî÷ úœ˝^œ£F±çSõ„wËCP≈"Då‡@≈ÅÑ0º"Å3ˆ˝ô$$Ú)A\† ER_	¬1ß¡≠H§&ÚÅp„ 0"BÂ–>ÇwÏBwc«nvV]˚T[Ü2†\8LÀÖÅ°ˆì¢∂ÿ∂©òßU∂úÉÒ
-k∞≤)€CvT∞ÆòC∏Ωız4≥ÑXmóŸâë∂Á4@Á√±ÆŒ™’Eâ2ÄC√Ó:¿	>ç=gqú°œ*—kPÙL˜áçRïe∫0»ü€«(ä†r´1R#Éè°”_ —‹[;%Ú1Ã
-¶
-úË–¡ÓπŸ<2:%2ı‚∏›÷≤=GÛuÚ±ØS¨uKÓıY”Êaä-•˜‘ï]lkå∆¬l˜Í €›»fyG—I:ı„AoSZÖù[ª≥Œ>D—Å*Y…·Z◊⁄2ù∫oú¡©òºë 6vH¡YhnïTœBü≠ùs4Ÿ†|ˆp≤iJÓMÁ;7y`Iÿ;˝“üVòmÎÓ∑ËÃW™AﬂÎMÙm∑<ø’Ø’áR¶:z—ﬂæ¥CçDAÍ¯ ∂ìRêÀÄ&kà´ô«ïÍv'π !b∆˚ ù_ÒB^;Ç“¿¢Àz˘ {\zx°∏˜ Kì$‰¨"nîRCNËéÊ€SdŸB;ı√9gn¨;…9é|`IUèO}§~°LπƒwD)¯¡=14™RˆBò#’(ß[õJ3µÑA¶ƒÏI°‘t÷ '∑Õî$˜[#fö>Rªœ∆Kk¿∏ƒÏNÒ”‚œˇ˙¸"ˆ2O€ï„±Êu@Ÿ∫zôæ◊ MÅ⁄"@ÄÅ>\XBM@Ìî\`ÄE¢3Cì TR˝‰]7@1h®fõ‚Äºá¿-‰=≠—ß˜`¿’©nP[ï6X∞@Znı¡÷Ï-Û©Ø<Ì*Œ‰Ñ„∏@¯ò)	NõÉ[∫9Ö•t»Vá-ôõ´u ’©™B≤3zıtb–-l£FúÖä£¸ãûÔÿV‚åŒI‰UB°j/x‡»‚å÷t·‚l}JØo[o~XÀ√Ä∫Zµ7Ω‰’î§≥π¥Ê‡∑+ü-hÇ.∞™Œi¨pÚOé.πO1≥dΩ˘°E,7ü…™:C¨G±xEB‰É6…'å~Z®‰˘ıZ&V∑x¶Ñ# –<ö9x…KÕõ òÏDP%&ÍÖˇhµA˙(v´µ©v–.¿æ“UO_[TS#f£€Å|ôÀUíW·Ê•∞£"DoΩ_Ÿ>˜¶˙˘aŸ^€ÏÈ¨mÆhalËLíH[gàﬁòQf™H}ƒ∂˘@
-e€)°W´õ•3UFÖÙ*|35bl2jÛ≥Kêƒ—~ı˘ﬂÍP Û§”5ÔàÙÁ`Ù7 ¯‰‘,¯KKù¸©“+wäÙÕÎŒé¥‘˘^Ô`ÎÎ9Å@pÖ$X¶^Èç∫6	˜?JlLûPH}T—œ™Ï˘[ö¶L§w@˜‹¿®ª`wy7√Mâ¨ImcisÈ'‚´oJ®ﬂÉ∞~Q~™µ‘/ÙÒà¸6ôÍ9è¶4	Sˇ¨Î”¯Òä»-–§uì√ˇ))¨ûÙEπòÕ	lEÈ{í⁄˙/cÄU4⁄À–â„®k‰8Æ¨ﬁ›/!WÃ∑ºfê—
-ÎnÎ√
-˘”¸©`u1J∑Î∂?•Q†ÓK¨|ıaÆs-◊Œˆ=.»¸ä -îÄ∫ØDUˇ{t©`¨c I“ì í*å&M‘—∆c§P•ñ∏\L>_^lªÀãÙ•◊V–óÍ»Ø•ºH}y«ë≤p>HeÇÎmã©„ù©e¢à‚⁄*"ÀºÕrÅ•~Ë´˛s¿Ï¸ ó≥≠Ø¶L…ü˚"ci¥©\-maÇÿÊ/œ=}Ëº∆SÈ≤J `}IÇl‰˚ Rπ√:!3cÂóg◊U7πyù€V…¨Tô¬¥gŒX^w:S≈Ùzá‘∏≤‹*
-Ü?Åı|µô_Z÷ˆUΩ’¨u(ÏíõWz®›oÓwõÈp9€¶Í∆…îˇwË¬E.·∞ÿ√ﬁòPî R™˝Ü∞‰EŸ7RÓıjG/Ω≥z7c—Æy’ø4–CoÿÚ3≤äy"°ô‚ì(e|†A ≈ûº˙/   ˇˇ èΩ∂Ó
+                                  if (idx > 0) { const newArts = [...editArticles]; const temp = newArts[idx]; newArts[idx] = newArts[idx - 1]; newArts[idx - 1] = temp; setEditArticles(newArts); }
+                                }}
+                                disabled={idx === 0}
+                                className="text-slate-400 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-400 transition-colors flex items-center gap-1"
+                                title="Mover para cima"
+                              >
+                                <ArrowUp size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (idx < (editArticles.length - 1)) { const newArts = [...editArticles]; const temp = newArts[idx]; newArts[idx] = newArts[idx + 1]; newArts[idx + 1] = temp; setEditArticles(newArts); }
+                                }}
+                                disabled={idx === (editArticles.length - 1)}
+                                className="text-slate-400 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-400 transition-colors flex items-center gap-1"
+                                title="Mover para baixo"
+                              >
+                                <ArrowDown size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleConfirmDeleteArticle(art.id, false, idx)}
+                                className="text-rose-400 hover:text-rose-600 transition-colors flex items-center gap-1 ml-2"
+                                title="Remover Dispositivo"
+                              >
+                                <Trash2 size={14} /> Remover
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-3">
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Texto Original Vigente</label>
+                              <textarea
+                                value={art.originalText || ""}
+                                onChange={e => {
+                                  const newArts = [...editArticles];
+                                  newArts[idx] = { ...newArts[idx], originalText: e.target.value };
+                                  setEditArticles(newArts);
+                                }}
+                                className="w-full text-sm rounded-lg border-slate-300 focus:border-indigo-500 focus:ring-indigo-500 min-h-[120px] resize-y"
+                                placeholder="Insira o texto original..."
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Texto Proposto (Minuta)</label>
+                              <textarea
+                                value={art.proposedText || ""}
+                                onChange={e => {
+                                  const newArts = [...editArticles];
+                                  newArts[idx] = { ...newArts[idx], proposedText: e.target.value };
+                                  setEditArticles(newArts);
+                                }}
+                                className="w-full text-sm rounded-lg border-indigo-200 bg-indigo-50/30 focus:border-indigo-500 focus:ring-indigo-500 min-h-[120px] resize-y"
+                                placeholder="Insira o texto proposto..."
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-200 bg-slate-50 rounded-b-xl flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingTomada(null);
+                  setEditArticles([]);
+                  setEditFormData({});
+                }}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 bg-white hover:bg-slate-50 font-medium transition-colors shadow-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={isSubmittingEdit}
+                className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                {isSubmittingEdit ? (
+                  <><RefreshCw size={16} className="animate-spin" /> Salvando...</>
+                ) : (
+                  <><Save size={16} /> Salvar Altera√ß√µes</>
+                )}
+              </button>
+            </div>
+          </div>
+      )}
+
+      {pickerModalType && pickerModalIndex !== null && (
+        <SubjectPickerModal
+          subjects={pickerModalType === "edit" ? (editFormData.subjects || []) : (formData.subjects || [])}
+          onSubjectsChange={(newSubjects) => {
+            if (pickerModalType === "edit") {
+              setEditFormData({ ...editFormData, subjects: newSubjects });
+            } else {
+              setFormData({ ...formData, subjects: newSubjects });
+            }
+          }}
+          selectedSubjectIds={
+            pickerModalType === "edit" 
+              ? (editArticles[pickerModalIndex]?.subjectIds || [])
+              : (formData.articles?.[pickerModalIndex]?.subjectIds || [])
+          }
+          onSelectionChange={(newSubjectIds) => {
+            if (pickerModalType === "edit") {
+              const newArts = [...editArticles];
+              newArts[pickerModalIndex] = { ...newArts[pickerModalIndex], subjectIds: newSubjectIds };
+              setEditArticles(newArts);
+            } else {
+              const newArts = [...(formData.articles || [])];
+              newArts[pickerModalIndex] = { ...newArts[pickerModalIndex], subjectIds: newSubjectIds };
+              setFormData({ ...formData, articles: newArts });
+            }
+          }}
+          onClose={() => {
+            setPickerModalType(null);
+            setPickerModalIndex(null);
+          }}
+        />
+      )}
+    </>
+  );
+};

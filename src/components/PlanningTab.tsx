@@ -6951,7 +6951,7 @@ export function PlanningTab({
                                   <div className="space-y-1.5 pl-1.5 border-l border-slate-100">
                                     {group.tasks.map(t => {
                                       const normStatus = normalizeStatus(t.status);
-                                      let statusClasses = "bg-slate-150 text-slate-600";
+                                      let statusClasses = "bg-slate-200 text-slate-600";
                                       if (normStatus === "Concluída") {
                                         statusClasses = "bg-emerald-500 text-white";
                                       } else if (normStatus === "Em andamento") {
@@ -10555,7 +10555,7 @@ export function PlanningTab({
                             const monthDays = getMonthDays(calendarYear, mIdx);
                             
                             return (
-                              <div key={mIdx} className="bg-slate-50/40 border border-slate-150 rounded-xl p-3 flex flex-col">
+                              <div key={mIdx} className="bg-slate-50/40 border border-slate-200 rounded-xl p-3 flex flex-col">
                                 <h5 
                                   onClick={() => {
                                     setCalendarMonth(mIdx);
@@ -10573,7 +10573,7 @@ export function PlanningTab({
                                   ))}
                                 </div>
                                 
-                                <div className="grid grid-cols-7 gap-0.5 bg-white p-1 rounded-lg border border-slate-150 flex-1">
+                                <div className="grid grid-cols-7 gap-0.5 bg-white p-1 rounded-lg border border-slate-200 flex-1">
                                   {monthDays.map(({ date, isCurrentMonth, dayNum }, idx) => {
                                     const activeTasks = tasksWithDates.filter(t => isTaskActiveOnDay(t, date));
                                     const isToday = new Date().toDateString() === date.toDateString();
@@ -10676,7 +10676,7 @@ export function PlanningTab({
                                       <span>Progresso</span>
                                       <span className="text-indigo-600 font-extrabold">{t.progress || 0}%</span>
                                     </div>
-                                    <div className="h-1 bg-slate-100 rounded-full overflow-hidden border border-slate-150">
+                                    <div className="h-1 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
                                       <div 
                                         className={cn(
                                           "h-full transition-all duration-300",

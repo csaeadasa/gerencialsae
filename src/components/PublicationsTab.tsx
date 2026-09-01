@@ -561,7 +561,7 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-250 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
             {/* Modal Header */}
-            <div className="bg-slate-50 px-6 py-4 border-b border-slate-150 flex items-center justify-between">
+            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
                   <BookOpen size={18} />
@@ -577,7 +577,7 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
               </div>
               <button 
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 hover:bg-slate-150 rounded-xl text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                className="p-1.5 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -898,7 +898,7 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
       {isImportModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="bg-slate-50 px-6 py-4 border-b border-slate-150 flex items-center justify-between">
+            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="text-indigo-600" size={18} />
                 <div>
@@ -908,7 +908,7 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
               </div>
               <button 
                 onClick={() => setIsImportModalOpen(false)}
-                className="p-1.5 hover:bg-slate-150 rounded-xl text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="p-1.5 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X size={18} />
               </button>

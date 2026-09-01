@@ -795,7 +795,7 @@ export function PublicationsDashboard({ showToast }: PublicationsDashboardProps)
             className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4 border-b border-slate-150 flex items-center justify-between bg-slate-50">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2">
                 <span className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
                   <ImageIcon size={16} />

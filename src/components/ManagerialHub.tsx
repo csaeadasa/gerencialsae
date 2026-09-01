@@ -170,7 +170,7 @@ export function ManagerialHub({
 
       {/* Module Group */}
       <section className="space-y-6">
-        <div className="flex items-center justify-between border-b border-slate-150 pb-3">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
           <div className="flex items-center gap-2">
             <div className={`p-2 px-4 rounded-xl text-sm sm:text-lg font-black uppercase tracking-wider border ${showOnlyPublic ? "bg-emerald-50 text-emerald-800 border-emerald-150" : "bg-blue-50 text-blue-700 border-blue-150"}`}>
               {showOnlyPublic ? "Painéis Externos (Públicos)" : "Painéis Gerenciais"}

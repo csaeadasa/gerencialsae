@@ -424,7 +424,7 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
                           {/* Components Details List */}
                           <div className="space-y-3">
                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Graus de Relevância por Subtarefa</h4>
-                            <div className="divide-y divide-slate-100 border border-slate-150 rounded-2xl bg-white shadow-xs overflow-hidden">
+                            <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl bg-white shadow-xs overflow-hidden">
                               {subtaskDetails.map(sub => (
                                 <div key={sub.id} className="flex flex-wrap items-center justify-between p-4 gap-3 hover:bg-slate-50/50 transition-colors">
                                   <div className="space-y-1 max-w-md">
@@ -696,7 +696,7 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
 
       {/* Filtros Estratégicos da Agenda */}
       <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-slate-150 pb-3">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-slate-200 pb-3">
           <div>
             <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
               <Filter size={15} className="text-adasa-dark" />
@@ -1098,7 +1098,7 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
         <div className="overflow-x-auto border border-slate-100 rounded-2xl">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-150 text-slate-500 uppercase tracking-widest font-black text-[10px]">
+              <tr className="bg-slate-50/50 border-b border-slate-200 text-slate-500 uppercase tracking-widest font-black text-[10px]">
                 <th className="px-5 py-3.5 pl-8">Item / Atividade Regulatória</th>
                 <th className="px-5 py-3.5 text-center">Prazo</th>
                 <th className="px-5 py-3.5 text-center">Status</th>
