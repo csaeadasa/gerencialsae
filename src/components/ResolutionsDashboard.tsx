@@ -1,6 +1,7 @@
+import { ResolutionDetailsModal } from "./ResolutionDetailsModal";
 import { useState, useEffect } from "react";
 import { ResponsiveContainer, ComposedChart, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, CartesianGrid, Line, LabelList } from "recharts";
-import { FileText, CheckCircle2, AlertTriangle, HelpCircle, Activity, BookmarkCheck, Calendar, History, Search, ArrowUpDown, Filter, ExternalLink, Share2, ChevronDown, ChevronUp } from "lucide-react";
+import { FileText, CheckCircle2, AlertTriangle, HelpCircle, Activity, BookmarkCheck, Calendar, History, Search, ArrowUpDown, Filter, ExternalLink, Share2, ChevronDown, ChevronUp, X } from "lucide-react";
 
 interface Resolution {
   id: number;
@@ -14,6 +15,8 @@ interface Resolution {
   segmento: string;
   tipo: string;
   link: string;
+  imagem_capa?: string;
+  participations?: any[];
 }
 
 interface ResolutionsDashboardProps {
@@ -34,6 +37,7 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
   const [expandedYears, setExpandedYears] = useState<Record<number, boolean>>({});
   const [expandedEmentas, setExpandedEmentas] = useState<number[]>([]);
   const [tableSort, setTableSort] = useState<{ field: string, dir: "asc" | "desc" } | null>({ field: "data", dir: "desc" });
+  const [selectedResolutionDetails, setSelectedResolutionDetails] = useState<Resolution | null>(null);
 
   // Load resolutions
   useEffect(() => {
@@ -234,9 +238,12 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
         <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
         <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">Estruturando Métricas...</h4>
         <p className="text-xs text-slate-400 mt-1">Carregando painel de resoluções.</p>
-      </div>
-    );
-  }
+  
+      {/* RESOLUTION DETAILS MODAL */}
+      <ResolutionDetailsModal resolution={selectedResolutionDetails} onClose={() => setSelectedResolutionDetails(null)} />
+    </div>
+  );
+}
 
   return (
     <div className="w-full bg-slate-50 rounded-3xl p-8 border border-slate-200 text-left flex flex-col gap-6">
@@ -596,9 +603,12 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
                           ></div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                
+      {/* RESOLUTION DETAILS MODAL */}
+      <ResolutionDetailsModal resolution={selectedResolutionDetails} onClose={() => setSelectedResolutionDetails(null)} />
+    </div>
+  );
+})}
               </div>
             )}
           </div>
@@ -770,6 +780,7 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
 
                                 return (
                                   <div key={res.id} className="bg-slate-50/60 hover:bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col gap-2 transition-colors relative overflow-hidden group/item">
+
                                     {/* Number / Species and Status Badge */}
                                     <div className="flex justify-between items-start gap-4 flex-wrap">
                                       <span className="font-extrabold text-slate-800 text-xs tracking-tight">
@@ -823,18 +834,24 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
                                         </a>
                                       )}
                                     </div>
-                                  </div>
-                                );
-                              })}
+                              
+      {/* RESOLUTION DETAILS MODAL */}
+      <ResolutionDetailsModal resolution={selectedResolutionDetails} onClose={() => setSelectedResolutionDetails(null)} />
+    </div>
+  );
+})}
                             </div>
                           )}
                         </div>
 
                       </div>
 
-                    </div>
-                  );
-                })}
+                
+      {/* RESOLUTION DETAILS MODAL */}
+      <ResolutionDetailsModal resolution={selectedResolutionDetails} onClose={() => setSelectedResolutionDetails(null)} />
+    </div>
+  );
+})}
               </div>
             )}
 
@@ -844,7 +861,7 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase tracking-widest font-black">
-                  <th className="px-5 py-4 w-44 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("numero")}>
+                  <th className="px-5 py-4 w-60 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("numero")}>
                     <div className="flex items-center">Resolução / Ato {getSortIcon("numero")}</div>
                   </th>
                   <th className="px-5 py-4 w-28 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("data")}>
@@ -859,6 +876,7 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
                   <th className="px-5 py-4 w-48 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort("segmento")}>
                     <div className="flex items-center">Segmentação {getSortIcon("segmento")}</div>
                   </th>
+                  <th className="px-5 py-4 w-28 text-center">Detalhes</th>
                   <th className="px-5 py-4 w-24 text-right">Acessar</th>
                 </tr>
               </thead>
@@ -868,10 +886,17 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
                   return (
                     <tr key={res.id} className="hover:bg-slate-50/40 transition-colors group align-top">
                       <td className="px-5 py-4 font-semibold text-slate-700">
-                        <div className="flex flex-col">
-                          <span className="text-xs text-indigo-600 font-bold uppercase tracking-widest">{res.especie}</span>
+                        <div className="flex items-start gap-4">
+                          {res.imagem_capa && (
+                            <div className="w-20 h-28 rounded shadow-sm border border-slate-200 overflow-hidden shrink-0 bg-white">
+                              <img src={res.imagem_capa} alt={`Capa da ${res.especie} ${res.numero}`} className="w-full h-full object-cover" />
+                            </div>
+                          )}
+                          <div className="flex flex-col">
+                            <span className="text-xs text-indigo-600 font-bold uppercase tracking-widest">{res.especie}</span>
                           <span className="text-sm font-bold text-slate-800">Nº {res.numero} / {res.ano}</span>
                           <span className="text-[10px] text-slate-400 font-semibold mt-1 bg-slate-100 px-1.5 py-0.5 rounded w-fit uppercase">{res.tipo}</span>
+                          </div>
                         </div>
                       </td>
                       <td className="px-5 py-4 text-xs font-semibold text-slate-500">
@@ -913,6 +938,14 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
                           <span className="text-[10px] text-slate-400 font-medium truncate" title={res.segmento}>{res.segmento || "--"}</span>
                         </div>
                       </td>
+                      <td className="px-5 py-4 text-center align-middle">
+                        <button
+                          onClick={() => setSelectedResolutionDetails(res)}
+                          className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold tracking-widest uppercase transition-colors"
+                        >
+                          Detalhes
+                        </button>
+                      </td>
                       <td className="px-5 py-4 text-right align-middle">
                         <div className="flex gap-1 justify-end">
                           {res.link && (
@@ -945,6 +978,9 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
         </div>
 
       </div>
+
+      {/* RESOLUTION DETAILS MODAL */}
+      <ResolutionDetailsModal resolution={selectedResolutionDetails} onClose={() => setSelectedResolutionDetails(null)} />
     </div>
   );
 }

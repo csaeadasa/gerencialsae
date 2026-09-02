@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Plus, Tag, Edit3, Trash2, Check, X, FileText, MessageSquare, Save, ArrowLeft, ArrowRight, CornerDownRight, Search, ArrowUpDown, ArrowUp, ArrowDown, Users, Lock, AlertTriangle, AlertCircle, RefreshCw, FileCode, PlusCircle, Wrench, Paperclip, Upload, CheckCircle2, ChevronDown, ChevronUp, CheckCircle, Eye, EyeOff, Columns, Sparkles, BarChart2, PieChart as PieChartIcon, FileSpreadsheet, Download, ScrollText, Copy, Printer, CheckCheck, RotateCcw, Table as TableIcon, FileCheck, Info, Move, List, Ban, Layers, FolderTree, Hash, Mic, Building, Mail, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Plus, Tag, Edit3, Trash2, Check, X, FileText, MessageSquare, Save, ArrowLeft, ArrowRight, CornerDownRight, Search, ArrowUpDown, ArrowUp, ArrowDown, Users, Lock, AlertTriangle, AlertCircle, RefreshCw, FileCode, PlusCircle, Wrench, Paperclip, Upload, CheckCircle2, ChevronDown, ChevronUp, CheckCircle, Eye, EyeOff, Columns, Sparkles, BarChart2, PieChart as PieChartIcon, FileSpreadsheet, Download, ScrollText, Copy, Printer, CheckCheck, RotateCcw, Table as TableIcon, FileCheck, Info, Move, List, Ban, Layers, FolderTree, Hash, Mic, Building, Mail, ShieldAlert, ShieldCheck, Book } from "lucide-react";
+import { ResolutionDetailsModal } from "./ResolutionDetailsModal";
 import * as XLSX from "xlsx";
 import * as diff from "diff";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
@@ -249,7 +250,7 @@ export interface TomadaSubsidio {
   dataInicio: string;
   dataFim: string;
   createdAt: string;
-  anexos?: { id: string | number; name: string; url: string }[];
+  anexos?: { id: string | number; name: string; url: string; category?: string }[];
   subjects?: { id: string; name: string }[];
 }
 
@@ -1146,6 +1147,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [publicTab, setPublicTab] = useState<"contribuir" | "ver">("contribuir");
   const [analysisTab, setAnalysisTab] = useState<"contribuicoes" | "painel" | "minuta">("contribuicoes");
   const [expandedRowArtId, setExpandedRowArtId] = useState<string | number | null>(null);
+  const [selectedResolutionForModal, setSelectedResolutionForModal] = useState<any>(null);
   const [selectedTomada, setSelectedTomada] = useState<TomadaSubsidio | null>(null);
   const [participantRankingViewMode, setParticipantRankingViewMode] = useState<"chart" | "bento">("bento");
   const [rankingMetricType, setRankingMetricType] = useState<"participantes" | "assuntos">("participantes");
@@ -1206,7 +1208,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     dataInicio: string;
     dataFim: string;
     rawText: string;
-    anexos: File[];
+    anexos: { file?: File; name: string; category: string; url?: string }[];
     subjects: { id: string; name: string }[];
   }>({
     numero: "",
@@ -1736,7 +1738,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [editArticles, setEditArticles] = useState<Article[]>([]);
   const [selectedArticlesToMove, setSelectedArticlesToMove] = useState<(string | number)[]>([]);
     const [targetTomadaIdToMove, setTargetTomadaIdToMove] = useState<string>("");
-    const [editAnexos, setEditAnexos] = useState<{ id: string | number; name: string; url: string }[]>([]);
+    const [editAnexos, setEditAnexos] = useState<{ id?: string | number; file?: File; name: string; url?: string; category: string }[]>([]);
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
 
   // Duplicate Modal State
@@ -2065,10 +2067,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       }
     }
 
-    const anexosMapped = formData.anexos.map(f => ({
+    const anexosMapped = formData.anexos.map(a => ({
       id: crypto.randomUUID(),
-      name: f.name,
-      url: URL.createObjectURL(f)
+      name: a.name || (a.file ? a.file.name : "Documento"),
+      category: a.category || "Documentos preliminares",
+      url: a.file ? URL.createObjectURL(a.file) : (a.url || "")
     }));
 
     const autoNumero = formData.numero || getNextSequentialNumber(formData.meioParticipacao || "Consulta Pública", tomadas);
@@ -2136,7 +2139,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       dataInicio: tomada.dataInicio ? tomada.dataInicio.split("T")[0] : "",
       dataFim: tomada.dataFim ? tomada.dataFim.split("T")[0] : ""
     });
-    setEditAnexos(tomada.anexos ? [...tomada.anexos] : []);
+    setEditAnexos(tomada.anexos ? tomada.anexos.map(a => ({...a, category: a.category || "Documentos preliminares"})) : []);
 
     // Fetch articles for editing
     try {
@@ -2176,7 +2179,12 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...editFormData,
-          anexos: editAnexos
+          anexos: editAnexos.map(a => ({
+            id: a.id,
+            name: a.name,
+            category: a.category || "Documentos preliminares",
+            url: a.file ? URL.createObjectURL(a.file) : a.url
+          }))
         })
       });
 
@@ -3054,31 +3062,63 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
             </div>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Material de Apoio (Anexos)</label>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Documentos</label>
             <input 
               type="file" 
               multiple
               className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-700 transition-all text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
               onChange={e => {
                 if (e.target.files) {
-                  setFormData({ ...formData, anexos: [...formData.anexos, ...Array.from(e.target.files)] });
+                  const newFiles = Array.from(e.target.files).map(f => ({
+                    file: f,
+                    name: f.name,
+                    category: "Documentos preliminares" as const
+                  }));
+                  setFormData({ ...formData, anexos: [...formData.anexos, ...newFiles] });
                 }
               }}
             />
             {formData.anexos.length > 0 && (
-              <ul className="mt-3 space-y-2">
-                {formData.anexos.map((file, i) => (
-                  <li key={i} className="text-xs font-medium text-slate-700 flex items-center justify-between bg-slate-100 px-4 py-2 rounded-lg border border-slate-200">
-                    <span className="truncate flex items-center gap-2">
-                      <FileText size={14} className="text-indigo-500"/> {file.name}
-                    </span>
-                    <button 
-                      onClick={() => setFormData({...formData, anexos: formData.anexos.filter((_, idx) => idx !== i)})} 
-                      className="text-slate-400 hover:text-rose-500 transition-colors p-1"
-                      title="Remover anexo"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+              <ul className="mt-3 space-y-3">
+                {formData.anexos.map((anexo, i) => (
+                  <li key={i} className="text-xs font-medium text-slate-700 flex flex-col gap-2 bg-slate-100 px-4 py-3 rounded-lg border border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <span className="truncate flex items-center gap-2">
+                        <FileText size={14} className="text-indigo-500"/> {anexo.file ? anexo.file.name : anexo.name}
+                      </span>
+                      <button 
+                        onClick={() => setFormData({...formData, anexos: formData.anexos.filter((_, idx) => idx !== i)})} 
+                        className="text-slate-400 hover:text-rose-500 transition-colors p-1"
+                        title="Remover documento"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        placeholder="Nome do documento" 
+                        className="flex-1 px-3 py-1.5 border border-slate-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                        value={anexo.name}
+                        onChange={(e) => {
+                          const newAnexos = [...formData.anexos];
+                          newAnexos[i].name = e.target.value;
+                          setFormData({ ...formData, anexos: newAnexos });
+                        }}
+                      />
+                      <select 
+                        className="px-3 py-1.5 border border-slate-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                        value={anexo.category}
+                        onChange={(e) => {
+                          const newAnexos = [...formData.anexos];
+                          newAnexos[i].category = e.target.value as "Documentos preliminares" | "Documentos finais";
+                          setFormData({ ...formData, anexos: newAnexos });
+                        }}
+                      >
+                        <option value="Documentos preliminares">Documentos preliminares</option>
+                        <option value="Documentos finais">Documentos finais</option>
+                      </select>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -3842,13 +3882,39 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           </div>
 
           {selectedTomada.anexos && selectedTomada.anexos.length > 0 && (
-            <div className="pt-2 border-t border-slate-100">
-              <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Material de Apoio</span>
+            <div className="pt-2 border-t border-slate-100 space-y-4">
+              {["Documentos preliminares", "Documentos finais"].map(cat => {
+                const catAnexos = selectedTomada.anexos!.filter((a: any) => (a.category || "Documentos preliminares") === cat);
+                if (catAnexos.length === 0) return null;
+                return (
+                  <div key={cat}>
+                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">{cat}</span>
+                    <div className="flex flex-wrap gap-2">
+                      {catAnexos.map((anexo: any) => (
+                        <a key={anexo.id} href={anexo.url} download={anexo.name} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg hover:bg-indigo-100 hover:border-indigo-200 transition-colors text-xs font-bold shadow-sm">
+                          <FileText size={14} /> {anexo.name}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {selectedTomada.resolutions && selectedTomada.resolutions.length > 0 && (
+            <div className="pt-4 mt-2 border-t border-slate-100">
+              <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Resoluções Relacionadas</span>
               <div className="flex flex-wrap gap-2">
-                {selectedTomada.anexos.map(anexo => (
-                  <a key={anexo.id} href={anexo.url} download={anexo.name} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg hover:bg-indigo-100 hover:border-indigo-200 transition-colors text-xs font-bold">
-                    <FileText size={14} /> {anexo.name}
-                  </a>
+                {selectedTomada.resolutions.map((res: any) => (
+                  <button 
+                    key={res.id} 
+                    onClick={() => setSelectedResolutionForModal(res)}
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-slate-50 text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors text-xs font-bold shadow-sm"
+                  >
+                    <Book size={14} className="text-indigo-600" />
+                    {res.especie} {res.numero}/{res.ano}
+                  </button>
                 ))}
               </div>
             </div>
@@ -8921,7 +8987,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                     : "border-transparent text-slate-500 hover:text-slate-800"
                 )}
               >
-                <Paperclip size={15} /> Material de Apoio (Anexos) ({editAnexos.length})
+                <Paperclip size={15} /> Documentos ({editAnexos.length})
               </button>
             </div>
 
@@ -9197,9 +9263,79 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                     )}
                   </div>
                 )}
-              </div>
+              {editModalTab === "anexos" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">INCLUIR NOVO DOCUMENTO</label>
+                    <input 
+                      type="file" 
+                      multiple
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-700 transition-all text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                      onChange={e => {
+                        if (e.target.files) {
+                          const newFiles = Array.from(e.target.files).map(f => ({
+                            file: f,
+                            name: f.name,
+                            category: "Documentos preliminares" as const
+                          }));
+                          setEditAnexos([...editAnexos, ...newFiles]);
+                        }
+                      }}
+                    />
+                  </div>
+                  {editAnexos.length > 0 && (
+                    <div className="pt-2">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">DOCUMENTOS CADASTRADOS ({editAnexos.length})</label>
+                      <ul className="space-y-3">
+                        {editAnexos.map((anexo, i) => (
+                          <li key={i} className="text-xs font-medium text-slate-700 flex flex-col gap-2 bg-slate-100 px-4 py-3 rounded-lg border border-slate-200">
+                            <div className="flex items-center justify-between">
+                              <span className="truncate flex items-center gap-2">
+                                <FileText size={14} className="text-indigo-500"/> {anexo.file ? anexo.file.name : (anexo.name)}
+                              </span>
+                              <button 
+                                type="button"
+                                onClick={() => setEditAnexos(editAnexos.filter((_, idx) => idx !== i))} 
+                                className="text-slate-400 hover:text-rose-500 transition-colors p-1"
+                                title="Remover documento"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                            <div className="flex gap-2">
+                              <input 
+                                type="text" 
+                                placeholder="Nome do documento" 
+                                className="flex-1 px-3 py-1.5 border border-slate-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                                value={anexo.name}
+                                onChange={(e) => {
+                                  const newAnexos = [...editAnexos];
+                                  newAnexos[i].name = e.target.value;
+                                  setEditAnexos(newAnexos);
+                                }}
+                              />
+                              <select 
+                                className="px-3 py-1.5 border border-slate-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                                value={anexo.category || "Documentos preliminares"}
+                                onChange={(e) => {
+                                  const newAnexos = [...editAnexos];
+                                  newAnexos[i].category = e.target.value as "Documentos preliminares" | "Documentos finais";
+                                  setEditAnexos(newAnexos);
+                                }}
+                              >
+                                <option value="Documentos preliminares">Documentos preliminares</option>
+                                <option value="Documentos finais">Documentos finais</option>
+                              </select>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="p-4 border-t border-slate-200 bg-slate-50 rounded-b-xl flex justify-end gap-3">
+            <div className="pt-4 border-t border-slate-200 flex justify-end gap-3 shrink-0 mt-2">
               <button
                 type="button"
                 onClick={() => {
@@ -9225,6 +9361,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               </button>
             </div>
           </div>
+        </div>
       )}
 
       {pickerModalType && pickerModalIndex !== null && (
@@ -9259,6 +9396,10 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           }}
         />
       )}
+      <ResolutionDetailsModal 
+        resolution={selectedResolutionForModal} 
+        onClose={() => setSelectedResolutionForModal(null)} 
+      />
     </>
   );
 };

@@ -156,6 +156,8 @@ export interface WaterBalanceCategory {
 export interface WaterBalance {
   id: number;
   description: string;
+  tipoBalanco?: 'Projetado' | 'Estimado';
+  systemDemands?: Record<string, number>;
   category?: string;
   responsible?: string;
   deliveryDate?: string;

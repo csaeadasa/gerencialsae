@@ -1299,6 +1299,8 @@ export default function App() {
 
   const handleDeleteWb = (wb: WaterBalance) => {
     setConfirmState({
+      title: "Excluir Balanço Hídrico",
+      type: "confirm",
       message: `Tem certeza que deseja excluir o balanço "${wb.description}" e todos os registros vinculados a ele?`,
       onConfirm: () => {
         const isLinkedToDeletedWb = (itemWbId: any) => {
@@ -1672,6 +1674,7 @@ export default function App() {
 
     selectedWbs.forEach(wb => {
       const bId = wb.id;
+      const isEstimado = wb.tipoBalanco === 'Estimado';
       const wbDemands = demands.filter(s => isSameWb(s.waterBalanceId, bId));
       const baseDemand = wbDemands[0];
 
@@ -1680,6 +1683,17 @@ export default function App() {
       const years = Array.from<number>(new Set<number>(baseDemand.entries.map(e => e.year))).sort((a: number, b: number) => a - b);
       years.forEach(y => globalYears.add(y));
       
+      if (isEstimado) {
+        years.forEach(year => {
+           if (!dataByYear[year]) dataByYear[year] = { year: year };
+           const wbSystems = systems.filter(s => isSameWb(s.waterBalanceId, bId));
+           let yearDem = 0;
+           wbSystems.forEach(sys => {
+               yearDem += (wb.systemDemands?.[`${sys.id}-${year}`] || 0);
+           });
+           dataByYear[year][`Demanda - ${wb.description}`] = yearDem;
+        });
+      } else {
       const mods = baseDemand.modifiers;
       baseDemand.entries.forEach(entry => {
         if (!dataByYear[entry.year]) dataByYear[entry.year] = { year: entry.year };
@@ -1690,6 +1704,7 @@ export default function App() {
         const dem = calculateDemand(pop, cov, cons, loss);
         dataByYear[entry.year][`Demanda - ${wb.description}`] = (dataByYear[entry.year][`Demanda - ${wb.description}`] || 0) + dem;
       });
+      }
     });
 
     const sortedYears = Array.from(globalYears).sort((a: number, b: number) => a - b);
@@ -1724,7 +1739,7 @@ export default function App() {
 
     selectedWbs.forEach(wb => {
       const bId = wb.id;
-      
+      const isEstimado = wb.tipoBalanco === 'Estimado';
       const wbDemands = demands.filter(s => isSameWb(s.waterBalanceId, bId));
       const baseDemand = wbDemands[0];
 
@@ -1746,14 +1761,20 @@ export default function App() {
         let totalDem = 0;
         let totalPopAtendida = 0;
         const mods = baseDemand.modifiers;
-        baseDemand.entries.filter(e => e.year === year && relevantRegions.includes(e.regionId)).forEach(entry => {
-          const pop = entry.population * (1 + mods.population / 100);
-          const cov = mods.coverage !== null ? mods.coverage / 100 : entry.coverage;
-          const cons = entry.perCapitaConsumption * (1 + mods.perCapitaConsumption / 100);
-          const loss = mods.losses !== null ? mods.losses / 100 : entry.losses;
-          totalDem += calculateDemand(pop, cov, cons, loss);
-          totalPopAtendida += pop * cov;
-        });
+        if (isEstimado) {
+           wbSystems.forEach(sys => {
+               totalDem += (wb.systemDemands?.[`${sys.id}-${year}`] || 0);
+           });
+        } else {
+           baseDemand.entries.filter(e => e.year === year && relevantRegions.includes(e.regionId)).forEach(entry => {
+             const pop = entry.population * (1 + mods.population / 100);
+             const cov = mods.coverage !== null ? mods.coverage / 100 : entry.coverage;
+             const cons = entry.perCapitaConsumption * (1 + mods.perCapitaConsumption / 100);
+             const loss = mods.losses !== null ? mods.losses / 100 : entry.losses;
+             totalDem += calculateDemand(pop, cov, cons, loss);
+             totalPopAtendida += pop * cov;
+           });
+        }
 
         let totalSupply = 0;
         wbSystems.forEach(sys => {
@@ -1808,6 +1829,8 @@ export default function App() {
     if (!analyzeBalanceId) return {};
 
     const bId = analyzeBalanceId;
+    const activeWb = waterBalances.find(wb => wb.id === bId);
+    const isEstimado = activeWb?.tipoBalanco === 'Estimado';
     const wbDemands = demands.filter(s => isSameWb(s.waterBalanceId, bId));
     const baseDemand = wbDemands[0];
     if (!baseDemand) return {};
@@ -1828,9 +1851,16 @@ export default function App() {
           const cov = mods.coverage !== null ? mods.coverage / 100 : entry.coverage;
           const cons = entry.perCapitaConsumption * (1 + mods.perCapitaConsumption / 100);
           const loss = mods.losses !== null ? mods.losses / 100 : entry.losses;
-          totalDem += calculateDemand(pop, cov, cons, loss);
+          
+          if (!isEstimado) {
+            totalDem += calculateDemand(pop, cov, cons, loss);
+          }
           totalDemHab += pop * cov;
         });
+
+        if (isEstimado) {
+          totalDem = activeWb?.systemDemands?.[`${sys.id}-${year}`] || 0;
+        }
 
         let totalSupply = 0;
         const sysSources = supplySources.filter(s => isSameWb(s.waterBalanceId, bId) && s.systemId === sys.id);
@@ -1897,6 +1927,7 @@ export default function App() {
    */
   const analyzeSupplyData = useMemo(() => {
     const activeWb = waterBalances.find(wb => wb.id === analyzeBalanceId);
+    const isEstimado = activeWb?.tipoBalanco === 'Estimado';
     if (!activeWb) return { evolution: [], overview: null, systemIncrement: [], systemDistributionStart: [], systemDistributionEnd: [] };
 
     const bId = activeWb.id;
@@ -2255,6 +2286,7 @@ export default function App() {
 
     selectedWbs.forEach(wb => {
       const bId = wb.id;
+      const isEstimado = wb.tipoBalanco === 'Estimado';
       const wbDemands = demands.filter(s => isSameWb(s.waterBalanceId, bId));
       const baseDemand = wbDemands[0];
       const wbSystems = systems.filter(s => isSameWb(s.waterBalanceId, bId));
@@ -3032,6 +3064,7 @@ export default function App() {
                     .filter((r) => r.systemId === system.id)
                     .sort((a, b) => a.year - b.year);
                   if (systemResults.length === 0) return null;
+                  const isEstimado = activeBalance?.tipoBalanco === 'Estimado';
                   const isExpanded =
                     expandedGroups[`sys-${system.id}`] !== false;
 
@@ -3053,7 +3086,37 @@ export default function App() {
                           Subsistema: {system.name}
                         </td>
                       </tr>
-                      {isExpanded &&
+
+                      {isExpanded && isEstimado && (
+                        Array.from(new Set(systemResults.map(r => r.year)))
+                          .sort((a, b) => a - b)
+                          .map(year => (
+                            <tr
+                              key={`${system.id}-${year}`}
+                              className="hover:bg-adasa-light/10 transition-colors group"
+                            >
+                              <td className="px-3 py-2">
+                                <p className="font-bold text-slate-400 tracking-tight text-[10px] uppercase pl-8 border-l-2 border-slate-200">
+                                  Ano: {year}
+                                </p>
+                              </td>
+                              <td className="px-3 py-1.5 text-right">-</td>
+                              <td className="px-3 py-1.5 text-right">-</td>
+                              <td className="px-3 py-1.5 text-right">-</td>
+                              <td className="px-3 py-1.5 text-right">-</td>
+                              <td className="px-5 py-2 text-right">
+                                <input
+                                  type="number"
+                                  className="w-24 text-right bg-transparent border-b border-slate-300 focus:border-adasa-mid focus:ring-0 text-xs font-black text-adasa-dark p-0 outline-none"
+                                  value={activeBalance?.systemDemands?.[`${system.id}-${year}`] || ""}
+                                  placeholder="0"
+                                  onChange={(e) => handleUpdateSystemDemand(system.id, year, parseFloat(e.target.value) || 0)}
+                                />
+                              </td>
+                            </tr>
+                          ))
+                      )}
+                      {isExpanded && !isEstimado &&
                         Array.from(
                           new Set(systemResults.map((r) => r.regionId)),
                         )
@@ -3221,6 +3284,7 @@ export default function App() {
                   .sort()
                   .map((year) => {
                     const yearResults = results.filter((r) => r.year === year);
+                    const isEstimado = activeBalance?.tipoBalanco === 'Estimado';
                     const totalPopulation = yearResults.reduce(
                       (sum, r) => sum + r.population,
                       0,
@@ -3271,13 +3335,13 @@ export default function App() {
                             <React.Fragment key={`${year}-${system.id}`}>
                               <tr
                                 className="bg-slate-50/50 cursor-pointer hover:bg-slate-100 transition-colors"
-                                onClick={() =>
-                                  toggleExpand(`year-${year}-sys-${system.id}`)
-                                }
+                                onClick={() => {
+                                  if (!isEstimado) toggleExpand(`year-${year}-sys-${system.id}`)
+                                }}
                               >
                                 <td className="px-3 py-2">
                                   <p className="font-bold text-slate-700 tracking-tight text-[10px] uppercase flex items-center gap-2 pl-2">
-                                    {isExpanded ? (
+                                    {!isEstimado && (isExpanded ? (
                                       <ChevronDown
                                         size={12}
                                         className="text-adasa-mid"
@@ -3287,26 +3351,40 @@ export default function App() {
                                         size={12}
                                         className="text-adasa-mid"
                                       />
-                                    )}
+                                    ))}
+                                    {isEstimado && <span className="w-4" />}
                                     {system.name}
                                   </p>
                                 </td>
                                 <td className="px-3 py-2 text-right">
+                                  {!isEstimado && (
                                   <span className="text-[11px] font-bold text-slate-500">
                                     {formatInteger(sysPop)}
                                   </span>
+                                  )}
                                 </td>
                                 <td className="px-3 py-2"></td>
                                 <td className="px-3 py-2"></td>
                                 <td className="px-3 py-2"></td>
                                 <td className="px-5 py-2 text-right">
+                                  {isEstimado ? (
+                                    <input
+                                      type="number"
+                                      className="w-24 text-right bg-transparent border-b border-slate-300 focus:border-adasa-mid focus:ring-0 text-xs font-black text-adasa-dark p-0 outline-none"
+                                      value={activeBalance?.systemDemands?.[`${system.id}-${year}`] || ""}
+                                      placeholder="0"
+                                      onChange={(e) => handleUpdateSystemDemand(system.id, year, parseFloat(e.target.value) || 0)}
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                  ) : (
                                   <span className="font-black text-xs text-adasa-dark tracking-tighter">
                                     {formatNumber(sysDemand)}
                                   </span>
+                                  )}
                                 </td>
                               </tr>
 
-                              {isExpanded &&
+                              {isExpanded && !isEstimado &&
                                 sysResults.map((entry) => {
                                   return (
                                     <tr
@@ -3515,20 +3593,21 @@ const renderSupplyTable = () => {
                   <React.Fragment key={system.id}>
                     <tr
                       className="bg-slate-50/50 cursor-pointer hover:bg-slate-100/50 transition-colors"
-                      onClick={() => toggleExpand(`sys-${system.id}`)}
+                        onClick={() => toggleExpand(`sys-${system.id}`)}
                     >
                       <td
                         colSpan={4}
                         className="px-3 py-2 text-[10px] font-black text-adasa-mid border-y border-slate-100 uppercase tracking-widest flex items-center gap-2"
                       >
-                        {isExpanded ? (
-                          <ChevronDown size={14} />
-                        ) : (
-                          <ChevronRight size={14} />
-                        )}
+                          {isExpanded ? (
+                            <ChevronDown size={14} />
+                          ) : (
+                            <ChevronRight size={14} />
+                          )}
                         Subsistema: {system.name}
                       </td>
                     </tr>
+
                     {isExpanded &&
                       years.map((year) => {
                         let qOperante = initialSupply;
@@ -3581,6 +3660,18 @@ const renderSupplyTable = () => {
   };
 
   const activeBalance = waterBalances.find(b => isSameWb(b.id, selectedWaterBalanceId)) || null;
+  const handleUpdateSystemDemand = (systemId: number, year: number, value: number) => {
+    if (!activeBalance) return;
+    const currentSystemDemands = activeBalance.systemDemands || {};
+    const key = `${systemId}-${year}`;
+    updateActiveBalance({
+      systemDemands: {
+        ...currentSystemDemands,
+        [key]: value
+      }
+    });
+  };
+
   const updateActiveBalance = (updates: Partial<import('./types').WaterBalance>) => {
     setWaterBalances(prev => prev.map(b => isSameWb(b.id, selectedWaterBalanceId) ? { ...b, ...updates } : b));
   };
@@ -3913,6 +4004,54 @@ const renderSupplyTable = () => {
           </button>
         </div>
       )}
+
+      <AnimatePresence>
+        {confirmState && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-100 flex flex-col"
+            >
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`p-3 rounded-full ${confirmState.type === 'alert' ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'}`}>
+                    <AlertTriangle size={24} />
+                  </div>
+                  <h3 className="font-black text-slate-800 text-lg uppercase tracking-tighter">
+                    {confirmState.title || "Confirmar Ação"}
+                  </h3>
+                </div>
+                <p className="text-slate-600 text-sm font-medium leading-relaxed">
+                  {confirmState.message}
+                </p>
+              </div>
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                <button
+                  onClick={() => setConfirmState(null)}
+                  className="px-5 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200 bg-slate-100 rounded-xl transition-colors"
+                >
+                  Cancelar
+                </button>
+                {confirmState.onConfirm && (
+                  <button
+                    onClick={() => {
+                      confirmState.onConfirm!();
+                      setConfirmState(null);
+                    }}
+                    className={`px-5 py-2.5 text-xs font-bold text-white rounded-xl transition-colors shadow-sm ${
+                      confirmState.type === 'alert' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-red-500 hover:bg-red-600'
+                    }`}
+                  >
+                    Confirmar
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Mobile Header Menu */}
       <div className="md:hidden flex items-center justify-between p-4 bg-adasa-dark text-white sticky top-0 z-40 shadow-md">
@@ -7630,6 +7769,7 @@ const renderSupplyTable = () => {
                             setWaterBalances([...waterBalances, {
                               id: newId,
                               description: `Novo Balanço Hídrico`,
+                              responsible: userName,
                               etapa: "Criado",
                               status: "Pendente",
                               datasEtapas: { "Criado": today },
@@ -7839,6 +7979,7 @@ const renderSupplyTable = () => {
                                         setWaterBalances([...waterBalances, {
                                           id: newId,
                                           description: `Novo Balanço - ${group.name}`,
+                                          responsible: userName,
                                           category: group.name,
                                           etapa: "Criado",
                                           status: "Pendente",
@@ -7958,6 +8099,7 @@ const renderSupplyTable = () => {
                                             setWaterBalances([...waterBalances, {
                                               id: newId,
                                               description: `Novo Balanço - ${group.name}`,
+                                              responsible: userName,
                                               category: group.name,
                                               etapa: "Criado",
                                               status: "Pendente",
@@ -8184,8 +8326,31 @@ const renderSupplyTable = () => {
                           </div>
                         </div>
 
-                        {/* Linha 2 (Linha de baixo): Campo Etapas */}
-                        <div className="space-y-2">
+                        {/* Linha 2 (Linha de baixo): Tipo de Balanço e Etapas */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between pl-2">
+                              <label className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                                Tipo de Balanço
+                              </label>
+                              <span className="text-[10px] text-slate-400 font-semibold">
+                                Modelo de cálculo de demanda
+                              </span>
+                            </div>
+                            <div className="relative">
+                              <select
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-adasa-mid transition-all shadow-sm cursor-pointer appearance-none pr-10"
+                                value={activeBalance?.tipoBalanco || "Projetado"}
+                                onChange={(e) => updateActiveBalance({ tipoBalanco: e.target.value as any })}
+                              >
+                                <option value="Projetado">Projetado (Cálculo por Região)</option>
+                                <option value="Estimado">Estimado (Digitação por Subsistema)</option>
+                              </select>
+                              <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
                           <div className="flex items-center justify-between pl-2">
                             <label className="text-xs font-black text-slate-500 uppercase tracking-widest">
                               Etapas
@@ -8208,6 +8373,7 @@ const renderSupplyTable = () => {
                             </select>
                             <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                           </div>
+                        </div>
                         </div>
                       </div>
 
@@ -9575,7 +9741,7 @@ const renderSupplyTable = () => {
             </motion.div>
             </RequirePermission>
           ) : activeTab === "pub_painel" ? (
-            <RequirePermission moduleId="pub_painel" action="view" fallback={<div className="p-8 text-center text-white/50">Acesso negado.</div>}>
+            <RequirePermission moduleId="pub_painel" action="view" fallback={<div className="p-8 text-center text-slate-500">Acesso negado.</div>}>
             <motion.div
               key="pub_painel"
               initial={{ opacity: 0, scale: 0.98 }}
@@ -9587,6 +9753,74 @@ const renderSupplyTable = () => {
               <PublicationsModule view="painel" showToast={showToast} />
             </motion.div>
             </RequirePermission>
+          ) : activeTab === "fisc_operational" ? (
+            <RequirePermission moduleId="fisc_operational" action="view" fallback={<div className="p-8 text-center text-slate-500">Acesso negado.</div>}>
+            <motion.div
+              key="fisc_operational"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="w-full"
+            >
+              <FiscalizacaoPainel tasks={tasks} plans={plans} onEditTaskClick={(id) => console.log('Edit', id)} />
+            </motion.div>
+            </RequirePermission>
+          ) : activeTab === "recurso_painel" ? (
+            <RequirePermission moduleId="recurso_painel" action="view" fallback={<div className="p-8 text-center text-slate-500">Acesso negado.</div>}>
+            <motion.div
+              key="recurso_painel"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="w-full"
+            >
+              <RecursoPainel tasks={tasks} plans={plans} onEditTaskClick={(id) => console.log('Edit', id)} />
+            </motion.div>
+            </RequirePermission>
+          ) : activeTab === "gerencial" ? (
+            <motion.div
+              key="gerencial"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="w-full"
+            >
+              <ManagerialHub 
+                onOpenPlanning={() => handleTabChange("planning")}
+                onOpenResolutions={() => handleTabChange("reg_painel")}
+                onOpenWaterBalance={() => handleTabChange("analyze")}
+                onOpenPublications={() => handleTabChange("pub_painel")}
+                onOpenRegulatoryAgenda={() => handleTabChange("reg_agenda_painel")}
+                onOpenParticipacaoSocialPainel={() => handleTabChange("reg_subsidios_painel")}
+                isPublic={false}
+                showOnlyPublic={false}
+                showToast={showToast}
+              />
+            </motion.div>
+          ) : activeTab === "public_hub" ? (
+            <motion.div
+              key="public_hub"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="w-full"
+            >
+              <ManagerialHub 
+                onOpenPlanning={() => handleTabChange("planning")}
+                onOpenResolutions={() => handleTabChange("reg_painel")}
+                onOpenWaterBalance={() => handleTabChange("analyze")}
+                onOpenPublications={() => handleTabChange("pub_painel")}
+                onOpenRegulatoryAgenda={() => handleTabChange("reg_agenda_painel")}
+                onOpenParticipacaoSocialPainel={() => handleTabChange("reg_subsidios_painel")}
+                isPublic={false}
+                showOnlyPublic={true}
+                showToast={showToast}
+              />
+            </motion.div>
           ) : null}
         </AnimatePresence>
       </main>

@@ -15,6 +15,7 @@ interface Resolution {
   tipo: string;
   link: string;
   imagem_capa?: string;
+  participations?: any[];
 }
 
 interface ResolutionsTabProps {
@@ -51,6 +52,9 @@ export function ResolutionsTab({ showToast, currentUser }: ResolutionsTabProps) 
   const [formTipo, setFormTipo] = useState("Principal");
   const [formLink, setFormLink] = useState("");
   const [formImagemCapa, setFormImagemCapa] = useState("");
+  const [formParticipations, setFormParticipations] = useState<number[]>([]);
+  const [participationSearchQuery, setParticipationSearchQuery] = useState("");
+  const [participationsList, setParticipationsList] = useState<any[]>([]);
 
   const [csvText, setCsvText] = useState("");
   const [isImporting, setIsImporting] = useState(false);
@@ -84,8 +88,19 @@ export function ResolutionsTab({ showToast, currentUser }: ResolutionsTabProps) 
     }
   };
 
+  const fetchParticipations = async () => {
+    try {
+      const res = await fetch('/api/reg/participations');
+      const data = await res.json();
+      setParticipationsList(data);
+    } catch (error) {
+      console.error("Erro ao carregar participações:", error);
+    }
+  };
+
   useEffect(() => {
     fetchResolutions();
+    fetchParticipations();
   }, []);
 
   // Unique lists for filters
@@ -114,6 +129,8 @@ export function ResolutionsTab({ showToast, currentUser }: ResolutionsTabProps) 
     setFormTipo("Principal");
     setFormLink("");
     setFormImagemCapa("");
+    setFormParticipations([]);
+    setParticipationSearchQuery("");
     setIsModalOpen(true);
   };
 
@@ -130,6 +147,8 @@ export function ResolutionsTab({ showToast, currentUser }: ResolutionsTabProps) 
     setFormTipo(res.tipo);
     setFormLink(res.link);
     setFormImagemCapa(res.imagem_capa || "");
+    setFormParticipations(res.participations ? res.participations.map((p: any) => p.id) : []);
+    setParticipationSearchQuery("");
     setIsModalOpen(true);
   };
 
@@ -169,7 +188,8 @@ export function ResolutionsTab({ showToast, currentUser }: ResolutionsTabProps) 
       segmento: formSegmento,
       tipo: formTipo,
       link: formLink,
-      imagem_capa: formImagemCapa
+      imagem_capa: formImagemCapa,
+      participation_ids: formParticipations
     };
 
     try {
@@ -724,6 +744,58 @@ export function ResolutionsTab({ showToast, currentUser }: ResolutionsTabProps) 
                   className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-xs font-medium text-slate-700 focus:border-indigo-500 outline-none transition-all"
                 />
               </div>
+
+              {/* Participações Sociais Vinculadas */}
+              {editingId !== null && (
+                <div className="space-y-2 md:col-span-2 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Participações Sociais Vinculadas</label>
+                  <p className="text-[11px] text-slate-500 font-medium mb-3">Selecione quais processos de participação social estão vinculados a esta resolução.</p>
+                  
+                  <div className="relative mb-3">
+                    <input
+                      type="text"
+                      placeholder="Filtrar participações sociais..."
+                      value={participationSearchQuery}
+                      onChange={(e) => setParticipationSearchQuery(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs font-medium text-slate-700 focus:border-indigo-500 outline-none transition-all"
+                    />
+                    <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-2">
+                    {participationsList.filter(part => part.title.toLowerCase().includes(participationSearchQuery.toLowerCase()) || (part.numero && part.numero.toLowerCase().includes(participationSearchQuery.toLowerCase()))).map(part => {
+                      const isSelected = formParticipations.includes(part.id);
+                      return (
+                        <div 
+                          key={part.id} 
+                          onClick={() => {
+                            if (isSelected) {
+                              setFormParticipations(formParticipations.filter(id => id !== part.id));
+                            } else {
+                              setFormParticipations([...formParticipations, part.id]);
+                            }
+                          }}
+                          className={`cursor-pointer border p-3 rounded-xl transition-all flex items-start gap-3 ${isSelected ? 'bg-indigo-50 border-indigo-300' : 'bg-white border-slate-200 hover:border-indigo-200'}`}
+                        >
+                          <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'}`}>
+                            {isSelected && <CheckCircle2 size={12} strokeWidth={3} />}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-slate-700 line-clamp-1" title={part.title}>{part.title}</span>
+                            <span className="text-[10px] text-slate-500 font-semibold mt-0.5">{part.meio_participacao || "Consulta Pública"} • Nº {part.numero || part.id}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {participationsList.length === 0 && (
+                      <span className="text-xs text-slate-500 font-medium">Nenhuma participação social cadastrada no sistema.</span>
+                    )}
+                    {participationsList.length > 0 && participationsList.filter(part => part.title.toLowerCase().includes(participationSearchQuery.toLowerCase()) || (part.numero && part.numero.toLowerCase().includes(participationSearchQuery.toLowerCase()))).length === 0 && (
+                      <span className="text-xs text-slate-500 font-medium">Nenhuma participação encontrada para o filtro.</span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="md:col-span-2 pt-4 flex gap-3">
                 <button

@@ -339,7 +339,8 @@ async function runStartupMigration() {
           id SERIAL PRIMARY KEY,
           name VARCHAR(255) NOT NULL,
           description TEXT,
-          url TEXT
+          url TEXT,
+          category VARCHAR(100)
         );
       `);
 
@@ -1031,7 +1032,16 @@ async function runStartupMigration() {
           id SERIAL PRIMARY KEY,
           participation_id INTEGER REFERENCES re_participations(id) ON DELETE CASCADE,
           name TEXT,
-          url TEXT
+          url TEXT,
+          category VARCHAR(100)
+        );
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS re_resolution_participations (
+          resolution_id INTEGER REFERENCES re_resolutions(id) ON DELETE CASCADE,
+          participation_id INTEGER REFERENCES re_participations(id) ON DELETE CASCADE,
+          PRIMARY KEY (resolution_id, participation_id)
         );
       `);
 
@@ -2004,11 +2014,11 @@ export async function startServer(isVercel = false) {
               parseSafeInt(wb.id),
               wb.description,
               wb.category || null,
-              wb.responsible,
+              wb.responsible || "Não atribuído",
               wb.deliveryDate ? new Date(wb.deliveryDate) : null,
               wb.receivedBy,
               wb.receiptDate ? new Date(wb.receiptDate) : null,
-              wb.status
+              wb.status || "Pendente"
             );
             paramIndex += 8;
           }
@@ -2281,11 +2291,11 @@ export async function startServer(isVercel = false) {
                 wbId,
                 wb.description,
                 wb.category || null,
-                wb.responsible,
+                wb.responsible || "Não atribuído",
                 wb.deliveryDate ? new Date(wb.deliveryDate) : null,
                 wb.receivedBy,
                 wb.receiptDate ? new Date(wb.receiptDate) : null,
-                wb.status
+                wb.status || "Pendente"
               );
               wbParamIndex += 8;
             }
@@ -3560,7 +3570,36 @@ export async function startServer(isVercel = false) {
     try {
       const pool = getDbPool();
       const result = await pool.query("SELECT * FROM re_resolutions ORDER BY numero DESC, ano DESC");
-      res.json({ success: true, data: result.rows });
+      
+      const participationsRes = await pool.query(`
+        SELECT rp.resolution_id, p.* 
+        FROM re_resolution_participations rp
+        JOIN re_participations p ON rp.participation_id = p.id
+      `);
+      
+      const articlesRes = await pool.query("SELECT participation_id, COUNT(*) as cnt FROM re_participation_articles GROUP BY participation_id");
+      const contribsRes = await pool.query("SELECT a.participation_id, COUNT(*) as cnt FROM re_participation_contributions c JOIN re_participation_articles a ON c.article_id = a.id GROUP BY a.participation_id");
+      const attachRes = await pool.query("SELECT * FROM re_participation_attachments");
+
+      const articlesCount = {};
+      articlesRes.rows.forEach(r => articlesCount[r.participation_id] = parseInt(r.cnt));
+      
+      const contribsCount = {};
+      contribsRes.rows.forEach(r => contribsCount[r.participation_id] = parseInt(r.cnt));
+
+      const participations = participationsRes.rows.map(p => ({
+        ...p,
+        totalArticles: articlesCount[p.id] || 0,
+        totalContributions: contribsCount[p.id] || 0,
+        anexos: attachRes.rows.filter(a => a.participation_id === p.id)
+      }));
+
+      const resolutions = result.rows.map(r => ({
+        ...r,
+        participations: participations.filter(p => p.resolution_id === r.id)
+      }));
+
+      res.json({ success: true, data: resolutions });
     } catch (error: any) {
       console.error("Erro ao obter resoluções:", error);
       res.status(500).json({ success: false, error: error.message });
@@ -3569,12 +3608,20 @@ export async function startServer(isVercel = false) {
 
   app.post("/api/resolutions", async (req, res) => {
     try {
-      const { especie, numero, ano, data, ementa, situacao, area, segmento, tipo, link, imagem_capa } = req.body;
+      const { especie, numero, ano, data, ementa, situacao, area, segmento, tipo, link, imagem_capa, participation_ids } = req.body;
       const pool = getDbPool();
       const result = await pool.query(
         "INSERT INTO re_resolutions (especie, numero, ano, data, ementa, situacao, area, segmento, tipo, link, imagem_capa) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *",
         [especie || "Resolução", parseInt(numero) || 0, parseInt(ano) || 0, data || "", ementa || "", situacao || "Vigente", area || "", segmento || "", tipo || "Principal", link || "", imagem_capa || ""]
       );
+      
+      const newId = result.rows[0].id;
+      if (participation_ids && Array.isArray(participation_ids)) {
+        for (const pid of participation_ids) {
+          await pool.query("INSERT INTO re_resolution_participations (resolution_id, participation_id) VALUES ($1, $2)", [newId, pid]);
+        }
+      }
+
       res.json({ success: true, data: result.rows[0] });
     } catch (error: any) {
       console.error("Erro ao criar resolução:", error);
@@ -3585,15 +3632,24 @@ export async function startServer(isVercel = false) {
   app.put("/api/resolutions/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { especie, numero, ano, data, ementa, situacao, area, segmento, tipo, link, imagem_capa } = req.body;
+      const { especie, numero, ano, data, ementa, situacao, area, segmento, tipo, link, imagem_capa, participation_ids } = req.body;
       const pool = getDbPool();
       const result = await pool.query(
         "UPDATE re_resolutions SET especie = $1, numero = $2, ano = $3, data = $4, ementa = $5, situacao = $6, area = $7, segmento = $8, tipo = $9, link = $10, imagem_capa = $11 WHERE id = $12 RETURNING *",
         [especie || "Resolução", parseInt(numero) || 0, parseInt(ano) || 0, data || "", ementa || "", situacao || "Vigente", area || "", segmento || "", tipo || "Principal", link || "", imagem_capa || "", id]
       );
+      
       if (result.rows.length === 0) {
         return res.status(404).json({ success: false, error: "Resolução não encontrada" });
       }
+      
+      if (participation_ids && Array.isArray(participation_ids)) {
+        await pool.query("DELETE FROM re_resolution_participations WHERE resolution_id = $1", [id]);
+        for (const pid of participation_ids) {
+          await pool.query("INSERT INTO re_resolution_participations (resolution_id, participation_id) VALUES ($1, $2)", [id, pid]);
+        }
+      }
+
       res.json({ success: true, data: result.rows[0] });
     } catch (error: any) {
       console.error("Erro ao atualizar resolução:", error);
@@ -5223,6 +5279,13 @@ const getParticipationsHandler = async (req: express.Request, res: express.Respo
     // Fetch attachments
     const { rows: anexos } = await dbPool.query("SELECT * FROM re_participation_attachments");
     
+    // Fetch related resolutions
+    const { rows: resParticipations } = await dbPool.query(`
+      SELECT rp.participation_id, r.* 
+      FROM re_resolution_participations rp
+      JOIN re_resolutions r ON rp.resolution_id = r.id
+    `);
+    
     const result = participations.map(t => {
       const dInicio = t.dataInicio || (t as any).datainicio || (t as any).data_inicio || "";
       const dFim = t.dataFim || (t as any).datafim || (t as any).data_fim || "";
@@ -5234,7 +5297,8 @@ const getParticipationsHandler = async (req: express.Request, res: express.Respo
         dataFim: dFim ? String(dFim).split("T")[0] : "",
         createdAt: cAt,
         meioParticipacao: t.meioParticipacao || (t as any).meio_participacao || "Consulta Pública",
-        anexos: anexos.filter(a => a.participation_id === t.id)
+        anexos: anexos.filter(a => a.participation_id === t.id),
+        resolutions: resParticipations.filter(rp => rp.participation_id === t.id).map(r => ({ ...r }))
       };
     });
     
@@ -5276,6 +5340,13 @@ const getSingleParticipationHandler = async (req: express.Request, res: express.
       [Number(id)]
     );
 
+    const { rows: resolutions } = await dbPool.query(`
+      SELECT r.* 
+      FROM re_resolution_participations rp
+      JOIN re_resolutions r ON rp.resolution_id = r.id
+      WHERE rp.participation_id = $1
+    `, [Number(id)]);
+
     const t = participations[0];
     const dInicio = t.dataInicio || (t as any).datainicio || (t as any).data_inicio || "";
     const dFim = t.dataFim || (t as any).datafim || (t as any).data_fim || "";
@@ -5288,7 +5359,8 @@ const getSingleParticipationHandler = async (req: express.Request, res: express.
       dataFim: dFim ? String(dFim).split("T")[0] : "",
       createdAt: cAt,
       meioParticipacao: t.meioParticipacao || (t as any).meio_participacao || "Consulta Pública",
-      anexos: anexos || []
+      anexos: anexos || [],
+      resolutions: resolutions || []
     });
   } catch (error) {
     console.error("Error fetching single participation:", error);
@@ -5348,8 +5420,8 @@ const createParticipationHandler = async (req: express.Request, res: express.Res
     if (anexos && anexos.length > 0) {
       for (const anexo of anexos) {
         await client.query(
-          `INSERT INTO re_participation_attachments (participation_id, name, url) VALUES ($1, $2, $3)`,
-          [participationId, anexo.name, anexo.url]
+          `INSERT INTO re_participation_attachments (participation_id, name, url, category) VALUES ($1, $2, $3, $4)`,
+          [participationId, anexo.name, anexo.url, anexo.category || "Documentos preliminares"]
         );
       }
     }
@@ -5402,8 +5474,8 @@ const updateParticipationHandler = async (req: express.Request, res: express.Res
       for (const anexo of anexos) {
         if (anexo && anexo.name) {
           await client.query(
-            `INSERT INTO re_participation_attachments (participation_id, name, url) VALUES ($1, $2, $3)`,
-            [Number(id), anexo.name, anexo.url || '']
+            `INSERT INTO re_participation_attachments (participation_id, name, url, category) VALUES ($1, $2, $3, $4)`,
+            [Number(id), anexo.name, anexo.url || '', anexo.category || "Documentos preliminares"]
           );
         }
       }
@@ -5942,7 +6014,7 @@ app.get("/api/reg/participations-dashboard", async (req: express.Request, res: e
        JOIN re_participation_articles a ON c.article_id = a.id`
     );
 
-    const { rows: anexos } = await dbPool.query("SELECT id, participation_id as \"participationId\", name, url FROM re_participation_attachments");
+    const { rows: anexos } = await dbPool.query("SELECT id, participation_id as \"participationId\", name, url, category FROM re_participation_attachments");
 
     const dashboardData = participations.map(p => {
       const pArticles = articles.filter(a => Number(a.participationId) === Number(p.id));
