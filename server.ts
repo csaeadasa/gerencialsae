@@ -5,24 +5,28 @@ import path from "path";
 import fs from "fs";
 import { Pool } from "pg";
 import { parse } from "csv-parse/sync";
-import cron from "node-cron";
 import { hashPassword, PASSWORD_HASH_PREFIX, verifyPassword } from "./server/core/security/password.js";
 import { GoogleGenAI, Type } from "@google/genai";
-import { execFile } from "child_process";
-import { promisify } from "util";
-const execFileAsync = promisify(execFile);
+import { createHash, randomBytes } from "node:crypto";
 
 export const app = express();
 let dbPool: Pool | null = null;
+let aiClient: GoogleGenAI | null = null;
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    }
+function getAiClient(): GoogleGenAI {
+  if (!process.env.GEMINI_API_KEY) {
+    const error = new Error("A funcionalidade de IA não está configurada neste ambiente.");
+    (error as any).statusCode = 503;
+    throw error;
   }
-});
+  if (!aiClient) {
+    aiClient = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: { headers: { "User-Agent": "gerencial-sae" } },
+    });
+  }
+  return aiClient;
+}
 
 function parseSafeInt(val: any): number | null {
   if (val === undefined || val === null || val === "") return null;
@@ -70,22 +74,127 @@ function getDbPool(): Pool {
     if (!connectionString) {
       throw new Error("As variáveis de conexão (DATABASE_URL ou POSTGRES_URL) estão ausentes no ambiente.");
     }
-    // Remove o parâmetro "channel_binding=require" se existir, pois o Node.js pg
-    // node-postgres pode ter problemas de compatibilidade com ele em algumas versões,
-    // embora no Vercel (PgBouncer) e Neon às vezes seja necessário, no Node 
-    // com ssl: { rejectUnauthorized: false } já é suficiente.
-    const cleanConnectionString = connectionString.replace(/&?channel_binding=require/g, "");
-    
+    const parsedConnection = new URL(connectionString);
+    parsedConnection.searchParams.delete("channel_binding");
+    const isLocalDatabase = ["localhost", "127.0.0.1", "::1"].includes(parsedConnection.hostname);
+    if (!isLocalDatabase && parsedConnection.searchParams.get("sslmode") !== "disable") {
+      parsedConnection.searchParams.set("sslmode", "verify-full");
+    }
+    const configuredPoolMax = Number(process.env.DB_POOL_MAX);
+
     dbPool = new Pool({
-      connectionString: cleanConnectionString,
-      // O banco de dados Neon exige conexões seguras por SSL
-      ssl: { rejectUnauthorized: false },
-      max: process.env.VERCEL ? 1 : 10,
-      connectionTimeoutMillis: 5000,
+      connectionString: parsedConnection.toString(),
+      max: Number.isInteger(configuredPoolMax) && configuredPoolMax > 0
+        ? configuredPoolMax
+        : process.env.VERCEL ? 1 : 10,
+      connectionTimeoutMillis: 10000,
       idleTimeoutMillis: 30000,
+    });
+    dbPool.on("error", (error) => {
+      console.error("Conexão ociosa com o PostgreSQL falhou:", error.message);
     });
   }
   return dbPool;
+}
+
+const SESSION_COOKIE = "adasa_session";
+const SESSION_DURATION_MS = 12 * 60 * 60 * 1000;
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function hashSessionToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function readCookie(req: express.Request, name: string): string | null {
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator < 0) continue;
+    const key = part.slice(0, separator).trim();
+    if (key === name) return decodeURIComponent(part.slice(separator + 1).trim());
+  }
+  return null;
+}
+
+function setSessionCookie(req: express.Request, res: express.Response, token: string, maxAge: number) {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const secure = Boolean(process.env.VERCEL || process.env.NODE_ENV === "production" || forwardedProto === "https");
+  res.cookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure,
+    sameSite: "strict",
+    path: "/",
+    maxAge,
+  });
+}
+
+function isPublicApiRequest(req: express.Request): boolean {
+  if (req.method === "POST" && req.path === "/auth/login") return true;
+  if (req.method !== "GET") return false;
+  if (req.path === "/db-status") return true;
+  if (req.path === "/load-data" && req.query.scope === "regulatory-agenda") return true;
+  return new Set([
+    "/resolutions",
+    "/agendas",
+    "/publications",
+    "/reg/participations",
+    "/reg/tomadas",
+    "/reg/participations-dashboard",
+  ]).has(req.path);
+}
+
+function requiredModuleForPath(apiPath: string): string | null {
+  const rules: Array<[string, string]> = [
+    ["/users", "users"], ["/roles", "users"], ["/departments", "users"], ["/au/departments", "users"],
+    ["/plans", "planning_plans"], ["/save-planos", "planning_plans"], ["/areas", "planning_areas"], ["/categories", "planning_categories"],
+    ["/responsibles", "planning_responsibles"], ["/task-models", "planning_models"], ["/radar-activities", "planning_radar"],
+    ["/tasks/import", "planning_import"], ["/tasks", "planning_tasks"], ["/diagnostic", "planning_plans"],
+    ["/resolutions", "reg_cadastro"], ["/agendas", "reg_agenda"], ["/publications", "pub_cadastro"],
+    ["/reg/", "reg_subsidios"], ["/fiscalizacao-mapas", "fisc_operational"], ["/upload", "fisc_operational"],
+    ["/extract-text", "reg_subsidios"], ["/save-geojson", "water_balances"], ["/load-geojson", "water_balances"],
+    ["/save-templates", "templates"], ["/save-data", "water_balances"], ["/save-module", "water_balances"],
+    ["/load-data", "water_balances"],
+  ];
+  return rules.find(([prefix]) => apiPath.startsWith(prefix))?.[1] || null;
+}
+
+async function authenticateApiRequest(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (isPublicApiRequest(req)) return next();
+  const token = readCookie(req, SESSION_COOKIE);
+  if (!token) return res.status(401).json({ success: false, error: "Sessão necessária." });
+
+  try {
+    const result = await getDbPool().query(
+      `SELECT u.id, u.name, u.email, u.role_id, u.status, u.department_id,
+              d.sigla AS department_sigla, d.nome AS department_nome,
+              COALESCE(r.permissions, '[]'::jsonb) AS permissions
+       FROM au_sessions s
+       JOIN au_users u ON u.id = s.user_id
+       LEFT JOIN au_departments d ON d.id = u.department_id
+       LEFT JOIN au_roles r ON r.id = u.role_id
+       WHERE s.token_hash = $1 AND s.expires_at > NOW() AND u.status = 'active'`,
+      [hashSessionToken(token)],
+    );
+    if (result.rows.length === 0) {
+      setSessionCookie(req, res, "", 0);
+      return res.status(401).json({ success: false, error: "Sessão inválida ou expirada." });
+    }
+
+    const user = result.rows[0];
+    (req as any).authUser = user;
+    const requiredModule = requiredModuleForPath(req.path);
+    if (requiredModule && user.role_id !== "admin") {
+      const action = req.method === "GET" ? "view" : req.method === "DELETE" ? "delete" : req.method === "POST" ? "create" : "edit";
+      const permissions = Array.isArray(user.permissions) ? user.permissions : [];
+      const allowed = permissions.some((permission: any) => permission.moduleId === requiredModule && permission.actions?.includes(action));
+      if (!allowed) return res.status(403).json({ success: false, error: "Permissão insuficiente para esta operação." });
+    }
+    return next();
+  } catch (error) {
+    console.error("Falha ao validar sessão:", error);
+    return res.status(503).json({ success: false, error: "Não foi possível validar a sessão." });
+  }
 }
 
 async function rollUpTask(client: any, parentId: number | null) {
@@ -641,6 +750,18 @@ async function runStartupMigration() {
           
           department_id INTEGER REFERENCES au_departments(id) ON DELETE SET NULL
         );
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS au_sessions (
+          token_hash VARCHAR(64) PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES au_users(id) ON DELETE CASCADE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          expires_at TIMESTAMPTZ NOT NULL,
+          last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_au_sessions_user_id ON au_sessions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_au_sessions_expires_at ON au_sessions(expires_at);
       `);
 
       try {
@@ -1474,21 +1595,27 @@ async function runStartupMigration() {
     }
   } catch (err) {
     console.error("Erro detalhado na migração:", err);
-    console.warn("Aviso: Não foi possível verificar/migrar o esquema de banco de dados na inicialização (Verifique a configuração da variável DATABASE_URL). Continuando em modo offline/local.");
+    if (process.env.NODE_ENV === "production" || process.env.VERCEL) throw err;
+    console.warn("Aviso: não foi possível verificar o banco. O servidor não deve ser usado em produção neste estado.");
   }
 }
 
 export async function startServer(isVercel = false) {
-  try {
-    await runStartupMigration();
-  } catch (err) {
-    console.error("Erro na migração no Vercel:", err);
-  }
+  await runStartupMigration();
 
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
-  // For parsing application/json. Increase limit for large GeoJSONs
-  app.use(express.json({ limit: "50mb" }));
+  app.disable("x-powered-by");
+  if (process.env.VERCEL || process.env.NODE_ENV === "production") app.set("trust proxy", 1);
+  app.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(self)");
+    next();
+  });
+  app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "30mb" }));
+  app.use("/api", authenticateApiRequest);
 
   const publicPath = path.join(process.cwd(), "public");
   if (!fs.existsSync(publicPath)) {
@@ -1517,17 +1644,27 @@ export async function startServer(isVercel = false) {
   }
   app.use("/uploads", express.static(uploadsDir));
   const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
+    destination: function (_req, _file, cb) {
       cb(null, uploadsDir)
     },
-    filename: function (req, file, cb) {
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
-      cb(null, uniqueSuffix + '-' + file.originalname)
+    filename: function (_req, file, cb) {
+      const safeExtension = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, "").slice(0, 10);
+      cb(null, `${Date.now()}-${randomBytes(12).toString("hex")}${safeExtension}`)
     }
   });
-  const upload = multer({ storage: storage });
+  const maxUploadBytes = Math.max(1, Number(process.env.MAX_UPLOAD_MB) || 25) * 1024 * 1024;
+  const imageUpload = multer({
+    storage,
+    limits: { fileSize: maxUploadBytes, files: 10 },
+    fileFilter: (_req, file, cb) => cb(null, /^image\/(png|jpe?g|gif|webp)$/i.test(file.mimetype)),
+  });
+  const documentUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: maxUploadBytes, files: 1 },
+    fileFilter: (_req, file, cb) => cb(null, /\.(pdf|docx|txt)$/i.test(file.originalname)),
+  });
 
-  app.post("/api/upload", upload.array("images", 10), (req, res) => {
+  app.post("/api/upload", imageUpload.array("images", 10), (req, res) => {
     try {
       if (!req.files || (req.files as any[]).length === 0) {
         return res.status(400).json({ success: false, error: "Nenhum arquivo enviado" });
@@ -1711,7 +1848,7 @@ export async function startServer(isVercel = false) {
     catch (error) { res.status(500).json({ success: false, error: "Não foi possível consultar a auditoria." }); }
   });
 
-  app.post("/api/extract-text", upload.single("file"), async (req, res) => {
+  app.post("/api/extract-text", documentUpload.single("file"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ success: false, error: "Nenhum arquivo enviado" });
@@ -1722,19 +1859,18 @@ export async function startServer(isVercel = false) {
       let extractedText = "";
 
       if (ext === '.pdf') {
-        const cmd = process.execPath;
-        const args = [path.resolve(process.cwd(), "parse-pdf.cjs"), file.path];
-        console.log("Executing:", cmd, args.join(" "));
-        const { stdout, stderr } = await execFileAsync(cmd, args, { maxBuffer: 1024 * 1024 * 50 });
-        console.log("parse-pdf.cjs stdout:", stdout);
-        if (stderr) console.error("parse-pdf.cjs stderr:", stderr);
-        const data = JSON.parse(stdout);
-        if (!data.success) throw new Error(data.error);
-        extractedText = data.text;
+        const { PDFParse } = await import("pdf-parse");
+        const parser = new PDFParse({ data: file.buffer });
+        try {
+          const result = await parser.getText();
+          extractedText = result.text;
+        } finally {
+          await parser.destroy();
+        }
       } else if (ext === '.docx') {
         const mammothModule = await import('mammoth');
         const mammoth = mammothModule.default || mammothModule;
-        const result = await (mammoth as any).convertToHtml({ path: file.path });
+        const result = await (mammoth as any).convertToHtml({ buffer: file.buffer });
         let html = result.value;
 
         // Custom HTML to text parser to preserve Roman numerals and letter lists
@@ -1777,22 +1913,15 @@ export async function startServer(isVercel = false) {
 
         extractedText = html;
       } else if (ext === '.txt') {
-        extractedText = fs.readFileSync(file.path, 'utf8');
+        extractedText = file.buffer.toString('utf8');
       } else {
-        return res.status(400).json({ success: false, error: "Formato de arquivo não suportado. Use PDF ou DOCX." });
-      }
-      
-      // Clean up the uploaded file to save space
-      try {
-        fs.unlinkSync(file.path);
-      } catch (err) {
-        console.error("Erro ao deletar arquivo temporário", err);
+        return res.status(400).json({ success: false, error: "Formato de arquivo não suportado. Use PDF, DOCX ou TXT." });
       }
 
       res.json({ success: true, text: extractedText });
     } catch (e: any) {
       console.error("Erro na extração de texto", e);
-      res.status(500).json({ success: false, error: "Erro na extração de texto: " + e.message, stack: e.stack });
+      res.status(500).json({ success: false, error: "Não foi possível extrair o texto do documento." });
     }
   });
 
@@ -1919,13 +2048,13 @@ export async function startServer(isVercel = false) {
   });
 
   // API to test Database connection
-  app.get("/api/db-status", async (req, res) => {
+  app.get("/api/db-status", async (_req, res) => {
     try {
       const pool = getDbPool();
       const client = await pool.connect();
       try {
-        const result = await client.query("SELECT NOW() as current_time, current_database() as database, version() as version");
-        res.json({ success: true, message: "Conectado com sucesso ao PostgreSQL!", data: result.rows[0] });
+        const result = await client.query("SELECT NOW() as current_time");
+        res.json({ success: true, message: "Serviço e banco de dados disponíveis.", data: result.rows[0] });
       } finally {
         client.release();
       }
@@ -2157,6 +2286,40 @@ export async function startServer(isVercel = false) {
             categoryIds: taskCategoriesMap[Number(t.id)] || []
           }))
         };
+
+        if (req.query.scope === "regulatory-agenda") {
+          const agendaTaskRows = await client.query("SELECT DISTINCT task_id FROM re_agenda_tasks WHERE task_id IS NOT NULL");
+          const relatedTaskIds = new Set<number>(agendaTaskRows.rows.map(row => Number(row.task_id)));
+          let changed = true;
+          while (changed) {
+            changed = false;
+            for (const task of payload.tasks) {
+              if (relatedTaskIds.has(task.id) && task.parentId && !relatedTaskIds.has(task.parentId)) {
+                relatedTaskIds.add(task.parentId);
+                changed = true;
+              }
+              if (task.parentId && relatedTaskIds.has(task.parentId) && !relatedTaskIds.has(task.id)) {
+                relatedTaskIds.add(task.id);
+                changed = true;
+              }
+            }
+          }
+          const publicTasks = payload.tasks.filter(task => relatedTaskIds.has(task.id));
+          const responsibleIds = new Set(publicTasks.flatMap(task => task.responsibleIds));
+          const categoryIds = new Set(publicTasks.flatMap(task => task.categoryIds));
+          return res.json({
+            success: true,
+            data: {
+              tasks: publicTasks,
+              responsibles: payload.responsibles
+                .filter(responsible => responsibleIds.has(responsible.id))
+                .map(({ id, name, role }) => ({ id, name, role })),
+              categories: payload.categories
+                .filter(category => categoryIds.has(category.id))
+                .map(({ id, name }) => ({ id, name })),
+            },
+          });
+        }
 
         res.json({ success: true, data: payload });
       } finally {
@@ -2840,67 +3003,9 @@ export async function startServer(isVercel = false) {
     }
   });
 
-  // Diagnostic endpoint for plans
-  app.get("/api/diagnostic/save-planos", async (req, res) => {
-    try {
-      console.log("[LOG] GET /api/diagnostic/save-planos diagnostics requested");
-      const pool = getDbPool();
-      const client = await pool.connect();
-      try {
-        const dbInfoRes = await client.query("SELECT version() as version, current_database() as database");
-        const columnsRes = await client.query(`
-          SELECT table_name, column_name, data_type, is_nullable
-          FROM information_schema.columns
-          WHERE table_schema = 'public' AND table_name IN ('pl_plans', 'pl_areas', 'pl_task_areas', 'pl_tasks')
-          ORDER BY table_name, column_name;
-        `);
-        const fksRes = await client.query(`
-          SELECT
-              tc.table_name, 
-              kcu.column_name, 
-              ccu.table_name AS foreign_table_name,
-              ccu.column_name AS foreign_column_name 
-          FROM 
-              information_schema.table_constraints AS tc 
-              JOIN information_schema.key_column_usage AS kcu
-                ON tc.constraint_name = kcu.constraint_name
-                AND tc.table_schema = kcu.table_schema
-              JOIN information_schema.constraint_column_usage AS ccu
-                ON ccu.constraint_name = tc.constraint_name
-                AND ccu.table_schema = tc.table_schema
-          WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = 'public'
-          AND tc.table_name IN ('pl_plans', 'pl_areas', 'pl_task_areas', 'pl_tasks');
-        `);
-        const plansCount = await client.query("SELECT COUNT(*) FROM pl_plans");
-        const areasCount = await client.query("SELECT COUNT(*) FROM pl_areas");
-        const taskAreasCount = await client.query("SELECT COUNT(*) FROM pl_task_areas");
-
-        res.json({
-          success: true,
-          message: "Diagnostic analysis performed successfully for Plans module",
-          dialect: "PostgreSQL (direct pool connections: pg)",
-          database: dbInfoRes.rows[0],
-          counts: {
-            plans: parseInt(plansCount.rows[0].count, 10),
-            areas: parseInt(areasCount.rows[0].count, 10),
-            task_areas: parseInt(taskAreasCount.rows[0].count, 10)
-          },
-          schemaColumns: columnsRes.rows,
-          foreignKeys: fksRes.rows
-        });
-      } finally {
-        client.release();
-      }
-    } catch (error: any) {
-      console.error("[DIAGNOSTIC ERROR]:", error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
   // Bulk / individual plan saving handler
   app.post("/api/save-planos", async (req, res) => {
     try {
-      console.log("[LOG] POST /api/save-planos received request:", req.body);
       if (!req.body || typeof req.body !== "object") {
         return res.status(400).json({ success: false, error: "O corpo da requisição é obrigatório." });
       }
@@ -3454,6 +3559,14 @@ export async function startServer(isVercel = false) {
       if (!email || !password) {
         return res.status(400).json({ success: false, error: "Identificador e senha são necessários" });
       }
+      const attemptKey = req.ip || req.socket.remoteAddress || "unknown";
+      const now = Date.now();
+      const attempt = loginAttempts.get(attemptKey);
+      if (attempt && attempt.resetAt > now && attempt.count >= 5) {
+        return res.status(429).json({ success: false, error: "Muitas tentativas. Aguarde 15 minutos e tente novamente." });
+      }
+      if (attempt && attempt.resetAt <= now) loginAttempts.delete(attemptKey);
+
       const pool = getDbPool();
       let result = await pool.query(
         `SELECT u.id, u.name, u.email, u.password, u.role_id, u.status, u.department_id,
@@ -3464,18 +3577,31 @@ export async function startServer(isVercel = false) {
         [email.trim()]
       );
       if (result.rows.length === 0) {
-        return res.status(401).json({ success: false, error: "Usuário não encontrado" });
+        const current = loginAttempts.get(attemptKey);
+        loginAttempts.set(attemptKey, { count: (current?.count || 0) + 1, resetAt: current?.resetAt || now + 15 * 60 * 1000 });
+        return res.status(401).json({ success: false, error: "Credenciais inválidas" });
       }
       const user = result.rows[0];
       if (user.status !== "active") {
         return res.status(403).json({ success: false, error: "Este usuário está inativo" });
       }
       if (!(await verifyPassword(password, user.password))) {
-        return res.status(401).json({ success: false, error: "Senha inválida" });
+        const current = loginAttempts.get(attemptKey);
+        loginAttempts.set(attemptKey, { count: (current?.count || 0) + 1, resetAt: current?.resetAt || now + 15 * 60 * 1000 });
+        return res.status(401).json({ success: false, error: "Credenciais inválidas" });
       }
       if (!user.password.startsWith(`${PASSWORD_HASH_PREFIX}$`)) {
         await pool.query("UPDATE au_users SET password = $1 WHERE id = $2", [await hashPassword(password), user.id]);
       }
+      loginAttempts.delete(attemptKey);
+      const sessionToken = randomBytes(32).toString("base64url");
+      const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+      await pool.query("DELETE FROM au_sessions WHERE expires_at <= NOW()");
+      await pool.query(
+        "INSERT INTO au_sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)",
+        [hashSessionToken(sessionToken), user.id, expiresAt],
+      );
+      setSessionCookie(req, res, sessionToken, SESSION_DURATION_MS);
       res.json({
         success: true,
         user: {
@@ -3494,8 +3620,35 @@ export async function startServer(isVercel = false) {
       });
     } catch (error: any) {
       console.error("Erro ao fazer login:", error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: "Não foi possível concluir a autenticação." });
     }
+  });
+
+  app.get("/api/auth/me", (req, res) => {
+    const user = (req as any).authUser;
+    res.json({
+      success: true,
+      user: {
+        id: user.id.toString(),
+        name: user.name,
+        email: user.email,
+        roleId: user.role_id,
+        status: user.status,
+        departmentId: user.department_id || null,
+        department: user.department_id ? {
+          id: user.department_id,
+          sigla: user.department_sigla,
+          nome: user.department_nome,
+        } : undefined,
+      },
+    });
+  });
+
+  app.post("/api/auth/logout", async (req, res) => {
+    const token = readCookie(req, SESSION_COOKIE);
+    if (token) await getDbPool().query("DELETE FROM au_sessions WHERE token_hash = $1", [hashSessionToken(token)]);
+    setSessionCookie(req, res, "", 0);
+    res.json({ success: true });
   });
 
   app.get("/api/users", async (req, res) => {
@@ -6016,14 +6169,14 @@ const updateContributionAnalysisHandler = async (req: express.Request, res: expr
   }
 };
 
-const deleteContributionHandler = async (req: express.Request, res: express.Response) => { console.log("[LOG] DELETE CONTRIB", req.params);
+const deleteContributionHandler = async (req: express.Request, res: express.Response) => {
   if (!dbPool) return res.status(500).json({ error: "DB not initialized" });
   try {
     const { id } = req.params;
     await dbPool.query("DELETE FROM re_participation_contributions WHERE id = $1", [Number(id)]);
     res.json({ success: true });
   } catch (error) {
-    console.log("DELETE CONTRIB HIT", req.params); console.error("Error deleting contribution:", error);
+    console.error("Error deleting contribution:", error);
     res.status(500).json({ error: "Failed to delete contribution" });
   }
 };
@@ -6355,7 +6508,7 @@ Forneça a resposta em formato JSON estrito com os seguintes campos:
     let retries = 3;
     while (retries > 0) {
       try {
-        response = await ai.models.generateContent({
+        response = await getAiClient().models.generateContent({
           model: "gemini-3.1-flash-lite",
           contents: prompt,
           config: {
@@ -6390,7 +6543,7 @@ Forneça a resposta em formato JSON estrito com os seguintes campos:
     }
   } catch (error: any) {
     console.error("AI Analysis Error:", error);
-    res.status(error?.status === 503 ? 503 : 500).json({ error: error?.message || "Failed to generate AI analysis" });
+    res.status(error?.statusCode === 503 || error?.status === 503 ? 503 : 500).json({ error: error?.message || "Failed to generate AI analysis" });
   }
 });
 
@@ -6430,7 +6583,7 @@ Forneça a resposta em formato JSON estrito com os seguintes campos:
     let retries = 3;
     while (retries > 0) {
       try {
-        response = await ai.models.generateContent({
+        response = await getAiClient().models.generateContent({
           model: "gemini-3.1-flash-lite",
           contents: prompt,
           config: {
@@ -6464,14 +6617,16 @@ Forneça a resposta em formato JSON estrito com os seguintes campos:
     }
   } catch (error: any) {
     console.error("AI Article Analysis Error:", error);
-    res.status(error?.status === 503 ? 503 : 500).json({ error: error?.message || "Failed to generate AI article analysis" });
+    res.status(error?.statusCode === 503 || error?.status === 503 ? 503 : 500).json({ error: error?.message || "Failed to generate AI article analysis" });
   }
 });
 
   // Global API error handler for things like PayloadTooLargeError from body-parser
-  app.use("/api", (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  app.use("/api", (err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error("Express API error:", err);
-    res.status(err.status || 500).json({ success: false, error: err.message || "Internal Server Error" });
+    const status = Number(err.status) || 500;
+    const publicMessage = status >= 500 ? "Erro interno do servidor." : err.message || "Requisição inválida.";
+    res.status(status).json({ success: false, error: publicMessage });
   });
 
   if (!isVercel) {

@@ -113,7 +113,7 @@ export const TaskModelManager: React.FC<TaskModelManagerProps> = ({
         showToast("Erro", "O servidor não retornou o formato esperado de dados.", "error");
       }
     } catch (err: any) {
-      console.error("DEBUG fetchModels error:", err);
+      console.error("Erro ao carregar modelos de tarefas:", err);
       showToast("Erro", `Comunicação falhou: ${err.message}`, "error");
     } finally {
       setLoading(false);

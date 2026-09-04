@@ -200,6 +200,16 @@ CREATE TABLE IF NOT EXISTS au_users (
   department_id INTEGER REFERENCES au_departments(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS au_sessions (
+  token_hash VARCHAR(64) PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES au_users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_au_sessions_user_id ON au_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_au_sessions_expires_at ON au_sessions(expires_at);
+
 CREATE TABLE IF NOT EXISTS pl_responsibles (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,

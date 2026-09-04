@@ -342,55 +342,6 @@ const isSameWb = (itemWbId: number | string | null | undefined, filterWbId: numb
   return false;
 };
 
-// Global fetch interceptor to debug 404s and timeouts
-try {
-  const originalFetch = window.fetch;
-  if (originalFetch) {
-    const fetchInterceptor = async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : String(input));
-      
-      if (url.includes('/api/')) {
-        console.log(`[FETCH DEBUG] Request: ${url}`, init);
-      }
-      
-      try {
-        const response = await originalFetch(input, init);
-        if (!response.ok && url.includes('/api/')) {
-          console.error(`[FETCH DEBUG] Error Response: ${url} - Status: ${response.status}`);
-          try {
-            const cloned = response.clone();
-            const text = await cloned.text();
-            console.error(`[FETCH DEBUG] Error Body: ${text.substring(0, 200)}`);
-          } catch (e) {
-            console.error(`[FETCH DEBUG] Could not read error body`, e);
-          }
-        }
-        return response;
-      } catch (err) {
-        console.warn(`[FETCH DEBUG] Fetch Warning / Network Retry: ${url}`, err);
-        throw new Error("Network error fetching URL: " + url + " - " + err.message);
-      }
-    };
-
-    try {
-      (window as any).fetch = fetchInterceptor;
-    } catch (e) {
-      console.warn("[FETCH DEBUG] Direct assignment of window.fetch failed, trying Object.defineProperty", e);
-      try {
-        Object.defineProperty(window, 'fetch', {
-          value: fetchInterceptor,
-          configurable: true,
-          writable: true
-        });
-      } catch (e2) {
-        console.error("[FETCH DEBUG] Could not intercept window.fetch. Debug logs may not appear.", e2);
-      }
-    }
-  }
-} catch (globalErr) {
-  console.error("[FETCH DEBUG] Global fetch wrapper failed to initialize:", globalErr);
-}
-
 export default function App() {
   const { currentUser, roles, logout, checkPermission } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -3094,7 +3045,7 @@ export default function App() {
             ) : (
               <button
                 onClick={() => {
-                  const years = Array.from(new Set(results.map((r) => r.year)));
+                  const years = Array.from(new Set<number>(results.map((r) => Number(r.year))));
                   const nextYear = years.length > 0 ? Math.max(...years) + 1 : 2024;
                   setNewYearInput(nextYear.toString());
                   setShowAddYear(true);
@@ -3209,7 +3160,7 @@ export default function App() {
                       </tr>
 
                       {isExpanded && isEstimado && (
-                        Array.from(new Set(systemResults.map(r => r.year)))
+                        Array.from(new Set<number>(systemResults.map(r => Number(r.year))))
                           .sort((a, b) => a - b)
                           .map(year => (
                             <tr
@@ -3239,7 +3190,7 @@ export default function App() {
                       )}
                       {isExpanded && !isEstimado &&
                         Array.from(
-                          new Set(systemResults.map((r) => r.regionId)),
+                          new Set<number>(systemResults.map((r) => Number(r.regionId))),
                         )
                           .sort((aId, bId) => {
                             const nameA =

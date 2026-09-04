@@ -3,6 +3,7 @@ import { Plus, Tag, Edit3, Trash2, Check, X, FileText, MessageSquare, Save, Arro
 import { ResolutionDetailsModal } from "./ResolutionDetailsModal";
 import * as XLSX from "xlsx";
 import * as diff from "diff";
+import DOMPurify from "dompurify";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { cn } from "../lib/utils";
 import { useAuth } from "../lib/auth";
@@ -639,7 +640,7 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
               </div>
               <div 
                 className="text-xs text-slate-700 leading-relaxed bg-emerald-50/50 p-3 rounded-lg border border-emerald-100 shadow-sm prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1"
-                dangerouslySetInnerHTML={{ __html: c.notes }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(c.notes || "") }}
               />
             </div>
           )}
@@ -672,8 +673,8 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
                 contentEditable
                 suppressContentEditableWarning
                 className="w-full flex-1 overflow-y-auto border border-slate-300 rounded-lg p-4 text-sm focus:outline-indigo-500 bg-white shadow-inner prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: notes }}
-                onBlur={(e) => setNotes(e.currentTarget.innerHTML)}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(notes || "") }}
+                onBlur={(e) => setNotes(DOMPurify.sanitize(e.currentTarget.innerHTML))}
               />
               <p className="text-[10px] text-slate-500 mt-2 font-medium shrink-0">As anotações são salvas internamente e podem conter destaques, listas e itálico.</p>
             </div>
@@ -2711,18 +2712,20 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
 
 
-  const handleConfirmDeleteArticle = async () => {
-    if (!deletingArticle) return;
+  const handleConfirmDeleteArticle = async (id?: string | number, hasContributions = false, indexToRemove?: number) => {
+    const target = id === undefined ? deletingArticle : { id, hasContributions, indexToRemove };
+    if (!target) return;
+    if (id !== undefined && !window.confirm("Deseja realmente remover este dispositivo?")) return;
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/reg/articles/${deletingArticle.id}`, {
+      const res = await fetch(`/api/reg/articles/${target.id}`, {
         method: 'DELETE'
       });
       if (res.ok) {
-        setArticles(prev => prev.filter(a => String(a.id) !== String(deletingArticle.id)));
-        setContributions(prev => prev.filter(c => String(c.articleId) !== String(deletingArticle.id)));
-        if (deletingArticle.indexToRemove !== undefined) {
-          setEditArticles(prev => prev.filter((_, i) => i !== deletingArticle.indexToRemove));
+        setArticles(prev => prev.filter(a => String(a.id) !== String(target.id)));
+        setContributions(prev => prev.filter(c => String(c.articleId) !== String(target.id)));
+        if (target.indexToRemove !== undefined) {
+          setEditArticles(prev => prev.filter((_, i) => i !== target.indexToRemove));
         }
         showToast("Sucesso", "Dispositivo excluído com sucesso.", "success");
         setDeletingArticle(null);
@@ -3069,7 +3072,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-700 transition-all text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
               onChange={e => {
                 if (e.target.files) {
-                  const newFiles = Array.from(e.target.files).map(f => ({
+                  const newFiles = Array.from(e.target.files as FileList).map((f: File) => ({
                     file: f,
                     name: f.name,
                     category: "Documentos preliminares" as const
@@ -9273,7 +9276,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-700 transition-all text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
                       onChange={e => {
                         if (e.target.files) {
-                          const newFiles = Array.from(e.target.files).map(f => ({
+                          const newFiles = Array.from(e.target.files as FileList).map((f: File) => ({
                             file: f,
                             name: f.name,
                             category: "Documentos preliminares" as const

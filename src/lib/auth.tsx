@@ -114,8 +114,7 @@ interface AuthContextType {
   users: AppUser[];
   roles: UserRole[];
   departments: Department[];
-  login: (email: string) => void;
-  loginWithCredentials: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithCredentials: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   checkPermission: (moduleId: ModuleId, action: ActionType) => boolean;
   hasRole: (roleId: string) => boolean;
@@ -136,8 +135,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(() => {
-    const saved = localStorage.getItem("adasa-sgi-user");
-    return saved ? JSON.parse(saved) : null; // Start as null to show login screen
+    try {
+      const saved = localStorage.getItem("adasa-sgi-user");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      localStorage.removeItem("adasa-sgi-user");
+      return null;
+    }
   });
   const [users, setUsers] = useState<AppUser[]>(DEFAULT_USERS);
   const [roles, setRoles] = useState<UserRole[]>(DEFAULT_ROLES);
@@ -189,17 +193,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
-    fetchRoles();
-    fetchDepartments();
-    fetchUsers();
-  }, []);
+    if (!currentUser) return;
+    let active = true;
+    const restoreSession = async () => {
+      try {
+        const response = await fetch("/api/auth/me", { credentials: "same-origin" });
+        const data = response.headers.get("content-type")?.includes("application/json") ? await response.json() : null;
+        if (!active) return;
+        if (!response.ok || !data?.success || !data.user) {
+          setCurrentUser(null);
+          localStorage.removeItem("adasa-sgi-user");
+          return;
+        }
+        setCurrentUser(data.user);
+        localStorage.setItem("adasa-sgi-user", JSON.stringify(data.user));
+        await Promise.all([fetchRoles(), fetchDepartments(), fetchUsers()]);
+      } catch {
+        if (active) {
+          setCurrentUser(null);
+          localStorage.removeItem("adasa-sgi-user");
+        }
+      }
+    };
+    void restoreSession();
+    return () => { active = false; };
+  }, [currentUser?.id]);
 
-  const loginWithCredentials = async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
+  const loginWithCredentials = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password: password || "1234" })
+        body: JSON.stringify({ email: email.trim(), password })
       });
       const contentType = response.headers.get("content-type");
       if (contentType && contentType.includes("application/json")) {
@@ -207,40 +233,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (data.success && data.user) {
           setCurrentUser(data.user);
           localStorage.setItem("adasa-sgi-user", JSON.stringify(data.user));
-          await fetchUsers(); // Refresh users list
+          await Promise.all([fetchRoles(), fetchDepartments(), fetchUsers()]);
           return { success: true };
         } else {
           return { success: false, error: data.error || "Erro na autenticação" };
         }
-      } else {
-        // Fallback for offline/local environment or proxy response
-        const cleanEmail = email.trim().toLowerCase();
-        const localUser = users.find(u => u.email.toLowerCase() === cleanEmail);
-        if (localUser) {
-          setCurrentUser(localUser);
-          localStorage.setItem("adasa-sgi-user", JSON.stringify(localUser));
-          return { success: true };
-        }
-        return { success: false, error: "Serviço de autenticação temporariamente indisponível. Tente novamente." };
       }
+      return { success: false, error: "Serviço de autenticação temporariamente indisponível. Tente novamente." };
     } catch (err: any) {
       console.error("Login verification error:", err);
-      const cleanEmail = email.trim().toLowerCase();
-      const localUser = users.find(u => u.email.toLowerCase() === cleanEmail);
-      if (localUser) {
-        setCurrentUser(localUser);
-        localStorage.setItem("adasa-sgi-user", JSON.stringify(localUser));
-        return { success: true };
-      }
       return { success: false, error: "Serviço de autenticação indisponível." };
     }
   };
 
-  const login = (email: string) => {
-    loginWithCredentials(email, "1234");
-  };
-
   const logout = () => {
+    void fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => undefined);
     setCurrentUser(null);
     localStorage.removeItem("adasa-sgi-user");
   };
@@ -496,7 +503,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   return (
     <AuthContext.Provider value={{ 
         currentUser, users, roles, departments,
-        login, loginWithCredentials, logout, checkPermission, hasRole,
+        loginWithCredentials, logout, checkPermission, hasRole,
         addUser, updateUser, deleteUser,
         fetchRoles, addRole, updateRole, deleteRole,
         fetchDepartments, addDepartment, updateDepartment, deleteDepartment

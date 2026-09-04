@@ -133,7 +133,7 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
         }
         
         try {
-          const loadDataRes = await fetch("/api/load-data");
+          const loadDataRes = await fetch("/api/load-data?scope=regulatory-agenda");
           if (loadDataRes.ok) {
             const loadDataJson = await loadDataRes.json();
             if (loadDataJson.success && loadDataJson.data) {
