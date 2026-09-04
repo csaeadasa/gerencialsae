@@ -330,10 +330,64 @@ CREATE TABLE IF NOT EXISTS reg_tomada_contributions (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Entidades exclusivas do módulo Mapas. Fiscalizações continuam em pl_tasks.
+-- Entidades persistentes do módulo Mapas.
+CREATE TABLE IF NOT EXISTS fisc_map_fiscalizacoes (
+  id BIGSERIAL PRIMARY KEY,
+  task_id INTEGER REFERENCES pl_tasks(id) ON DELETE CASCADE,
+  external_id TEXT,
+  processo_sei TEXT,
+  ano INTEGER,
+  objetivo TEXT,
+  regiao TEXT,
+  situacao TEXT,
+  tipo_documento TEXT,
+  destinatario TEXT,
+  modalidade TEXT,
+  programada TEXT,
+  sei_documento TEXT,
+  data_documento DATE,
+  constatacoes NUMERIC,
+  nao_conformes NUMERIC,
+  recomendacoes NUMERIC,
+  determinacoes NUMERIC,
+  tn NUMERIC,
+  ai NUMERIC,
+  tac NUMERIC,
+  conformidade NUMERIC,
+  latitude NUMERIC,
+  longitude NUMERIC,
+  coordenada_origem TEXT,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_fisc_map_fiscalizacoes_external_id ON fisc_map_fiscalizacoes(external_id);
+CREATE INDEX IF NOT EXISTS idx_fisc_map_fiscalizacoes_task_id ON fisc_map_fiscalizacoes(task_id);
+
 CREATE TABLE IF NOT EXISTS fisc_map_obras (
   id BIGSERIAL PRIMARY KEY,
   external_id TEXT,
+  item TEXT,
+  sistema TEXT,
+  tipo TEXT,
+  programa TEXT,
+  acao TEXT,
+  local TEXT,
+  numero_contrato TEXT,
+  objeto_contrato TEXT,
+  valor_total NUMERIC,
+  situacao TEXT,
+  fornecedor TEXT,
+  processo_sei TEXT,
+  tipo_recurso TEXT,
+  fonte_recurso TEXT,
+  execucao_inicio DATE,
+  execucao_termino DATE,
+  executado_2025 NUMERIC,
+  execucao_financeira NUMERIC,
+  execucao_fisica NUMERIC,
+  latitude NUMERIC,
+  longitude NUMERIC,
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
   imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -343,6 +397,28 @@ CREATE INDEX IF NOT EXISTS idx_fisc_map_obras_external_id ON fisc_map_obras(exte
 CREATE TABLE IF NOT EXISTS fisc_map_acoes_importadas (
   id BIGSERIAL PRIMARY KEY,
   external_id TEXT,
+  processo_sei TEXT,
+  ano INTEGER,
+  objetivo TEXT,
+  regiao TEXT,
+  situacao TEXT,
+  tipo_documento TEXT,
+  destinatario TEXT,
+  modalidade TEXT,
+  programada TEXT,
+  sei_documento TEXT,
+  data_documento DATE,
+  constatacoes NUMERIC,
+  nao_conformes NUMERIC,
+  recomendacoes_solicitacoes NUMERIC,
+  tn NUMERIC,
+  ai NUMERIC,
+  tac NUMERIC,
+  latitude NUMERIC,
+  longitude NUMERIC,
+  local_ra TEXT,
+  local_tipo TEXT,
+  local_motivo TEXT,
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
   imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -355,11 +431,16 @@ CREATE TABLE IF NOT EXISTS fisc_map_locais_importados (
 CREATE INDEX IF NOT EXISTS idx_fisc_map_acoes_external_id ON fisc_map_acoes_importadas(external_id);
 CREATE INDEX IF NOT EXISTS idx_fisc_map_locais_external_id ON fisc_map_locais_importados(external_id);
 
+ALTER TABLE fisc_map_obras
+  ADD COLUMN IF NOT EXISTS item TEXT, ADD COLUMN IF NOT EXISTS sistema TEXT, ADD COLUMN IF NOT EXISTS tipo TEXT, ADD COLUMN IF NOT EXISTS programa TEXT, ADD COLUMN IF NOT EXISTS acao TEXT, ADD COLUMN IF NOT EXISTS local TEXT, ADD COLUMN IF NOT EXISTS numero_contrato TEXT, ADD COLUMN IF NOT EXISTS objeto_contrato TEXT, ADD COLUMN IF NOT EXISTS valor_total NUMERIC, ADD COLUMN IF NOT EXISTS situacao TEXT, ADD COLUMN IF NOT EXISTS fornecedor TEXT, ADD COLUMN IF NOT EXISTS processo_sei TEXT, ADD COLUMN IF NOT EXISTS tipo_recurso TEXT, ADD COLUMN IF NOT EXISTS fonte_recurso TEXT, ADD COLUMN IF NOT EXISTS execucao_inicio DATE, ADD COLUMN IF NOT EXISTS execucao_termino DATE, ADD COLUMN IF NOT EXISTS executado_2025 NUMERIC, ADD COLUMN IF NOT EXISTS execucao_financeira NUMERIC, ADD COLUMN IF NOT EXISTS execucao_fisica NUMERIC, ADD COLUMN IF NOT EXISTS latitude NUMERIC, ADD COLUMN IF NOT EXISTS longitude NUMERIC;
+ALTER TABLE fisc_map_acoes_importadas
+  ADD COLUMN IF NOT EXISTS processo_sei TEXT, ADD COLUMN IF NOT EXISTS ano INTEGER, ADD COLUMN IF NOT EXISTS objetivo TEXT, ADD COLUMN IF NOT EXISTS regiao TEXT, ADD COLUMN IF NOT EXISTS situacao TEXT, ADD COLUMN IF NOT EXISTS tipo_documento TEXT, ADD COLUMN IF NOT EXISTS destinatario TEXT, ADD COLUMN IF NOT EXISTS modalidade TEXT, ADD COLUMN IF NOT EXISTS programada TEXT, ADD COLUMN IF NOT EXISTS sei_documento TEXT, ADD COLUMN IF NOT EXISTS data_documento DATE, ADD COLUMN IF NOT EXISTS constatacoes NUMERIC, ADD COLUMN IF NOT EXISTS nao_conformes NUMERIC, ADD COLUMN IF NOT EXISTS recomendacoes_solicitacoes NUMERIC, ADD COLUMN IF NOT EXISTS tn NUMERIC, ADD COLUMN IF NOT EXISTS ai NUMERIC, ADD COLUMN IF NOT EXISTS tac NUMERIC, ADD COLUMN IF NOT EXISTS latitude NUMERIC, ADD COLUMN IF NOT EXISTS longitude NUMERIC, ADD COLUMN IF NOT EXISTS local_ra TEXT, ADD COLUMN IF NOT EXISTS local_tipo TEXT, ADD COLUMN IF NOT EXISTS local_motivo TEXT;
+
 CREATE TABLE IF NOT EXISTS fisc_map_rvf_relatorios (
   id BIGSERIAL PRIMARY KEY,
   titulo TEXT NOT NULL,
   ano INTEGER,
-  mes INTEGER,
+  mes TEXT,
   url_original TEXT NOT NULL,
   url_final TEXT,
   dominio TEXT,
@@ -369,6 +450,7 @@ CREATE TABLE IF NOT EXISTS fisc_map_rvf_relatorios (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (ano, titulo, url_original)
 );
+ALTER TABLE fisc_map_rvf_relatorios ALTER COLUMN mes TYPE TEXT USING mes::text;
 
 CREATE TABLE IF NOT EXISTS fisc_map_camadas (
   id BIGSERIAL PRIMARY KEY,

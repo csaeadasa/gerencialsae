@@ -390,14 +390,20 @@ async function runStartupMigration() {
       `);
 
       await client.query(`
-        CREATE TABLE IF NOT EXISTS fisc_map_obras (id BIGSERIAL PRIMARY KEY, external_id TEXT, data JSONB NOT NULL DEFAULT '{}'::jsonb, imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+        CREATE TABLE IF NOT EXISTS fisc_map_fiscalizacoes (id BIGSERIAL PRIMARY KEY, task_id INTEGER REFERENCES pl_tasks(id) ON DELETE CASCADE, external_id TEXT, processo_sei TEXT, ano INTEGER, objetivo TEXT, regiao TEXT, situacao TEXT, tipo_documento TEXT, destinatario TEXT, modalidade TEXT, programada TEXT, sei_documento TEXT, data_documento DATE, constatacoes NUMERIC, nao_conformes NUMERIC, recomendacoes NUMERIC, determinacoes NUMERIC, tn NUMERIC, ai NUMERIC, tac NUMERIC, conformidade NUMERIC, latitude NUMERIC, longitude NUMERIC, coordenada_origem TEXT, data JSONB NOT NULL DEFAULT '{}'::jsonb, imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+        CREATE INDEX IF NOT EXISTS idx_fisc_map_fiscalizacoes_external_id ON fisc_map_fiscalizacoes(external_id);
+        CREATE INDEX IF NOT EXISTS idx_fisc_map_fiscalizacoes_task_id ON fisc_map_fiscalizacoes(task_id);
+        CREATE TABLE IF NOT EXISTS fisc_map_obras (id BIGSERIAL PRIMARY KEY, external_id TEXT, item TEXT, sistema TEXT, tipo TEXT, programa TEXT, acao TEXT, local TEXT, numero_contrato TEXT, objeto_contrato TEXT, valor_total NUMERIC, situacao TEXT, fornecedor TEXT, processo_sei TEXT, tipo_recurso TEXT, fonte_recurso TEXT, execucao_inicio DATE, execucao_termino DATE, executado_2025 NUMERIC, execucao_financeira NUMERIC, execucao_fisica NUMERIC, latitude NUMERIC, longitude NUMERIC, data JSONB NOT NULL DEFAULT '{}'::jsonb, imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
         CREATE INDEX IF NOT EXISTS idx_fisc_map_obras_external_id ON fisc_map_obras(external_id);
-        CREATE TABLE IF NOT EXISTS fisc_map_acoes_importadas (id BIGSERIAL PRIMARY KEY, external_id TEXT, data JSONB NOT NULL DEFAULT '{}'::jsonb, imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+        CREATE TABLE IF NOT EXISTS fisc_map_acoes_importadas (id BIGSERIAL PRIMARY KEY, external_id TEXT, processo_sei TEXT, ano INTEGER, objetivo TEXT, regiao TEXT, situacao TEXT, tipo_documento TEXT, destinatario TEXT, modalidade TEXT, programada TEXT, sei_documento TEXT, data_documento DATE, constatacoes NUMERIC, nao_conformes NUMERIC, recomendacoes_solicitacoes NUMERIC, tn NUMERIC, ai NUMERIC, tac NUMERIC, latitude NUMERIC, longitude NUMERIC, local_ra TEXT, local_tipo TEXT, local_motivo TEXT, data JSONB NOT NULL DEFAULT '{}'::jsonb, imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
         CREATE TABLE IF NOT EXISTS fisc_map_locais_importados (id BIGSERIAL PRIMARY KEY, external_id TEXT, data JSONB NOT NULL DEFAULT '{}'::jsonb, imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-        CREATE TABLE IF NOT EXISTS fisc_map_rvf_relatorios (id BIGSERIAL PRIMARY KEY, titulo TEXT NOT NULL, ano INTEGER, mes INTEGER, url_original TEXT NOT NULL, url_final TEXT, dominio TEXT, status TEXT NOT NULL DEFAULT 'pendente', erro_verificacao TEXT, imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (ano, titulo, url_original));
+        CREATE TABLE IF NOT EXISTS fisc_map_rvf_relatorios (id BIGSERIAL PRIMARY KEY, titulo TEXT NOT NULL, ano INTEGER, mes TEXT, url_original TEXT NOT NULL, url_final TEXT, dominio TEXT, status TEXT NOT NULL DEFAULT 'pendente', erro_verificacao TEXT, imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (ano, titulo, url_original));
+        ALTER TABLE fisc_map_rvf_relatorios ALTER COLUMN mes TYPE TEXT USING mes::text;
         CREATE TABLE IF NOT EXISTS fisc_map_camadas (id BIGSERIAL PRIMARY KEY, nome TEXT NOT NULL UNIQUE, geojson JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
         CREATE TABLE IF NOT EXISTS fisc_map_auditoria (id BIGSERIAL PRIMARY KEY, acao TEXT NOT NULL, entidade TEXT NOT NULL, entidade_id TEXT, origem TEXT NOT NULL DEFAULT 'mapas', antes JSONB, depois JSONB, autor TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
         CREATE INDEX IF NOT EXISTS idx_fisc_map_auditoria_created_at ON fisc_map_auditoria(created_at DESC);
+        ALTER TABLE fisc_map_obras ADD COLUMN IF NOT EXISTS item TEXT, ADD COLUMN IF NOT EXISTS sistema TEXT, ADD COLUMN IF NOT EXISTS tipo TEXT, ADD COLUMN IF NOT EXISTS programa TEXT, ADD COLUMN IF NOT EXISTS acao TEXT, ADD COLUMN IF NOT EXISTS local TEXT, ADD COLUMN IF NOT EXISTS numero_contrato TEXT, ADD COLUMN IF NOT EXISTS objeto_contrato TEXT, ADD COLUMN IF NOT EXISTS valor_total NUMERIC, ADD COLUMN IF NOT EXISTS situacao TEXT, ADD COLUMN IF NOT EXISTS fornecedor TEXT, ADD COLUMN IF NOT EXISTS processo_sei TEXT, ADD COLUMN IF NOT EXISTS tipo_recurso TEXT, ADD COLUMN IF NOT EXISTS fonte_recurso TEXT, ADD COLUMN IF NOT EXISTS execucao_inicio DATE, ADD COLUMN IF NOT EXISTS execucao_termino DATE, ADD COLUMN IF NOT EXISTS executado_2025 NUMERIC, ADD COLUMN IF NOT EXISTS execucao_financeira NUMERIC, ADD COLUMN IF NOT EXISTS execucao_fisica NUMERIC, ADD COLUMN IF NOT EXISTS latitude NUMERIC, ADD COLUMN IF NOT EXISTS longitude NUMERIC;
+        ALTER TABLE fisc_map_acoes_importadas ADD COLUMN IF NOT EXISTS processo_sei TEXT, ADD COLUMN IF NOT EXISTS ano INTEGER, ADD COLUMN IF NOT EXISTS objetivo TEXT, ADD COLUMN IF NOT EXISTS regiao TEXT, ADD COLUMN IF NOT EXISTS situacao TEXT, ADD COLUMN IF NOT EXISTS tipo_documento TEXT, ADD COLUMN IF NOT EXISTS destinatario TEXT, ADD COLUMN IF NOT EXISTS modalidade TEXT, ADD COLUMN IF NOT EXISTS programada TEXT, ADD COLUMN IF NOT EXISTS sei_documento TEXT, ADD COLUMN IF NOT EXISTS data_documento DATE, ADD COLUMN IF NOT EXISTS constatacoes NUMERIC, ADD COLUMN IF NOT EXISTS nao_conformes NUMERIC, ADD COLUMN IF NOT EXISTS recomendacoes_solicitacoes NUMERIC, ADD COLUMN IF NOT EXISTS tn NUMERIC, ADD COLUMN IF NOT EXISTS ai NUMERIC, ADD COLUMN IF NOT EXISTS tac NUMERIC, ADD COLUMN IF NOT EXISTS latitude NUMERIC, ADD COLUMN IF NOT EXISTS longitude NUMERIC, ADD COLUMN IF NOT EXISTS local_ra TEXT, ADD COLUMN IF NOT EXISTS local_tipo TEXT, ADD COLUMN IF NOT EXISTS local_motivo TEXT;
       `);
 
       // Add sei_process column
@@ -1535,6 +1541,93 @@ export async function startServer(isVercel = false) {
     acoes: { table: "fisc_map_acoes_importadas", limit: 10000 },
   } as const;
 
+  const normalizeImportKey = (value: unknown) => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  const importValue = (record: any, ...keys: string[]) => {
+    const entry = Object.entries(record || {}).find(([key]) => keys.some(candidate => normalizeImportKey(key) === normalizeImportKey(candidate)));
+    return String(entry?.[1] ?? "").trim();
+  };
+  const importNumber = (record: any, ...keys: string[]) => { const raw = importValue(record, ...keys); if (!raw) return null; const parsed = Number(raw.replace(/\s/g, "").replace(/R\$/gi, "").replace(/\./g, "").replace(",", ".").replace("%", "")); return Number.isFinite(parsed) ? parsed : null; };
+  const importInteger = (record: any, ...keys: string[]) => { const parsed = Number.parseInt(importValue(record, ...keys), 10); return Number.isFinite(parsed) ? parsed : null; };
+  const importDate = (record: any, ...keys: string[]) => { const raw = importValue(record, ...keys); if (!raw) return null; if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10); const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/); if (!match) return null; const year = match[3].length === 2 ? 2000 + Number(match[3]) : Number(match[3]); return `${year}-${match[1].padStart(2, "0")}-${match[2].padStart(2, "0")}`; };
+
+  app.post("/api/fiscalizacao-mapas/fiscalizacoes/import", async (req, res) => {
+    const records = req.body?.records;
+    if (!Array.isArray(records) || records.length < 1 || records.length > 999) return res.status(400).json({ success: false, error: "Carga inválida ou acima do limite de 999 registros." });
+    if (records.some((record: any) => !record || record.type !== "fiscalizacao" || (record.planId !== null && record.planId !== undefined && !Number.isInteger(Number(record.planId))))) return res.status(400).json({ success: false, error: "Há registros de fiscalização inválidos na carga." });
+    const client = await getDbPool().connect();
+    try {
+      await client.query("BEGIN");
+      for (const record of records) {
+        const progress = Math.max(0, Math.min(100, Number.parseInt(record.progress, 10) || 0));
+        const status = progress === 100 ? "Concluída" : progress > 0 ? "Em andamento" : "Não iniciada";
+        const taskResult = await client.query(
+          `INSERT INTO pl_tasks (title, description, start_date, end_date, status, progress, priority, category, assigned_to, notes, plan_id, updated_at, updated_by, sei_process, weight, type, fiscalizacao_data, checklist)
+           VALUES ($1, $2, $3, $4, $5, $6, 'Média', 'PONTUAIS', '', '', $7, NOW(), 'Importação Mapas', $8, 1, 'fiscalizacao', $9::jsonb, '[]'::jsonb)
+           RETURNING id`,
+          [record.title || "Fiscalização sem título", record.description || "", record.startDate || null, record.endDate || null, status, progress, Number(record.planId) > 0 ? Number(record.planId) : null, record.seiProcess || null, JSON.stringify(record.fiscalizacaoData || {})]
+        );
+        const taskId = taskResult.rows[0]?.id;
+        const data: any = record.fiscalizacaoData || {}; const metadata: any = data.mapasMetadata || {}; const document: any = data.documentos?.[0] || {};
+        await client.query(
+          `INSERT INTO fisc_map_fiscalizacoes (task_id, external_id, processo_sei, ano, objetivo, regiao, situacao, tipo_documento, destinatario, modalidade, programada, sei_documento, data_documento, constatacoes, nao_conformes, recomendacoes, determinacoes, tn, ai, tac, conformidade, latitude, longitude, coordenada_origem, data)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25::jsonb)`,
+          [taskId, data.codigo || null, record.seiProcess || null, metadata.ano ?? null, data.objetivo || record.description || null, data.regiaoAdministrativa || null, metadata.situacaoOriginal || status, document.tipo || null, document.destinatario || null, data.tipo || null, data.programacao || null, document.numeroSei || null, document.data || null, metadata.constataçõesAgregadas ?? null, metadata.naoConformidadesAgregadas ?? null, metadata.recomendacoes ?? null, metadata.determinacoes ?? null, metadata.termosNotificacaoAgregados ?? null, metadata.autosInfracaoAgregados ?? null, metadata.tac ?? null, metadata.conformidadeInformada ?? null, data.latitude || null, data.longitude || null, data.latitude && data.longitude ? "real" : "referencia", JSON.stringify(record)]
+        );
+      }
+      await client.query("COMMIT");
+      res.json({ success: true, data: { imported: records.length } });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Erro ao importar fiscalizações do mapa:", error);
+      res.status(500).json({ success: false, error: "A importação falhou; nenhuma fiscalização foi adicionada." });
+    } finally { client.release(); }
+  });
+
+  app.put("/api/fiscalizacao-mapas/rvf", async (req, res) => {
+    const records = req.body?.records;
+    if (!Array.isArray(records) || records.length > 5000) return res.status(400).json({ success: false, error: "Carga de relatórios inválida ou acima do limite permitido." });
+    const text = (record: any, ...keys: string[]) => {
+      const normalizeKey = (value: unknown) => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+      const entry = Object.entries(record || {}).find(([key]) => keys.some(candidate => normalizeKey(key) === normalizeKey(candidate)));
+      return String(entry?.[1] ?? "").trim();
+    };
+    if (records.some((record: any) => !text(record, "Título", "Titulo") || !text(record, "URL Original"))) return res.status(400).json({ success: false, error: "Todos os relatórios precisam conter Título e URL Original." });
+    const client = await getDbPool().connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("DELETE FROM fisc_map_rvf_relatorios");
+      for (const record of records) {
+        const ano = Number.parseInt(text(record, "Ano"), 10); const mes = text(record, "Mês", "Mes");
+        await client.query(
+          `INSERT INTO fisc_map_rvf_relatorios (titulo, ano, mes, url_original, url_final, dominio, status, imported_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::timestamptz, NOW()), COALESCE($9::timestamptz, NOW()))`,
+          [text(record, "Título", "Titulo"), Number.isFinite(ano) ? ano : null, mes || null, text(record, "URL Original"), text(record, "URL Final") || null, text(record, "Domínio", "Dominio") || null, text(record, "Status") || "pendente", text(record, "Data Importação", "Data Importacao") || null, text(record, "Data Atualização", "Data Atualizacao") || null]
+        );
+      }
+      await client.query("INSERT INTO fisc_map_auditoria(acao, entidade, depois) VALUES ('substituir', 'rvf', $1::jsonb)", [JSON.stringify({ quantidade: records.length })]);
+      await client.query("COMMIT");
+      res.json({ success: true, data: { imported: records.length } });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Erro ao importar relatórios RF/RVF:", error);
+      res.status(500).json({ success: false, error: "A importação falhou; o catálogo anterior foi preservado." });
+    } finally { client.release(); }
+  });
+
+  app.delete("/api/fiscalizacao-mapas/rvf", async (req, res) => {
+    if (req.query.confirm !== "true") return res.status(400).json({ success: false, error: "Confirmação explícita obrigatória." });
+    try { const result = await getDbPool().query("DELETE FROM fisc_map_rvf_relatorios"); res.json({ success: true, data: { deleted: result.rowCount || 0 } }); }
+    catch (error) { res.status(500).json({ success: false, error: "Não foi possível limpar o catálogo RF/RVF." }); }
+  });
+
+  app.delete("/api/fiscalizacao-mapas/fiscalizacoes", async (req, res) => {
+    if (req.query.confirm !== "true") return res.status(400).json({ success: false, error: "Confirmação explícita obrigatória." });
+    const client = await getDbPool().connect();
+    try { await client.query("BEGIN"); await client.query("DELETE FROM fisc_map_fiscalizacoes"); const result = await client.query("DELETE FROM pl_tasks WHERE type = 'fiscalizacao'"); await client.query("COMMIT"); res.json({ success: true, data: { deleted: result.rowCount || 0 } }); }
+    catch (error) { await client.query("ROLLBACK"); res.status(500).json({ success: false, error: "Não foi possível limpar as fiscalizações." }); }
+    finally { client.release(); }
+  });
+
   app.get("/api/fiscalizacao-mapas/:collection", async (req, res, next) => {
     const config = mapCollections[req.params.collection as keyof typeof mapCollections];
     if (!config) return next();
@@ -1557,7 +1650,21 @@ export async function startServer(isVercel = false) {
     try {
       await client.query("BEGIN");
       await client.query(`DELETE FROM ${config.table}`);
-      for (const [index, data] of records.entries()) await client.query(`INSERT INTO ${config.table}(external_id, data) VALUES ($1, $2::jsonb)`, [String(data?.id ?? data?.ID ?? index + 1), JSON.stringify(data)]);
+      for (const [index, data] of records.entries()) {
+        if (req.params.collection === "obras") {
+          await client.query(
+            `INSERT INTO fisc_map_obras (external_id,data,item,sistema,tipo,programa,acao,local,numero_contrato,objeto_contrato,valor_total,situacao,fornecedor,processo_sei,tipo_recurso,fonte_recurso,execucao_inicio,execucao_termino,executado_2025,execucao_financeira,execucao_fisica,latitude,longitude)
+             VALUES ($1,$2::jsonb,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
+            [String((data as any)?.Item ?? index + 1), JSON.stringify(data), importValue(data,"Item"), importValue(data,"Sistema"), importValue(data,"Tipo"), importValue(data,"Programa"), importValue(data,"Ação","Acao"), importValue(data,"Local"), importValue(data,"Número Contrato","Numero Contrato"), importValue(data,"Objeto Contrato"), importNumber(data,"Valor Total"), importValue(data,"Situação","Situacao"), importValue(data,"Fornecedor"), importValue(data,"Processo SEI"), importValue(data,"Tipo Recurso"), importValue(data,"Fonte Recurso"), importDate(data,"Execução Início","Execucao Inicio"), importDate(data,"Execução Término","Execucao Termino"), importNumber(data,"Executado 2025"), importNumber(data,"Execução Financeira","Execucao Financeira"), importNumber(data,"Execução Física","Execucao Fisica"), importNumber(data,"Latitude"), importNumber(data,"Longitude")]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO fisc_map_acoes_importadas (external_id,data,processo_sei,ano,objetivo,regiao,situacao,tipo_documento,destinatario,modalidade,programada,sei_documento,data_documento,constatacoes,nao_conformes,recomendacoes_solicitacoes,tn,ai,tac,latitude,longitude,local_ra,local_tipo,local_motivo)
+             VALUES ($1,$2::jsonb,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+            [String((data as any)?.ID ?? index + 1), JSON.stringify(data), importValue(data,"Processo SEI"), importInteger(data,"Ano"), importValue(data,"Objetivo"), importValue(data,"Região","Regiao"), importValue(data,"Situação","Situacao"), importValue(data,"Tipo Documento"), importValue(data,"Destinatário","Destinatario"), importValue(data,"Direta/Indireta"), importValue(data,"Programada"), importValue(data,"SEI Documento"), importDate(data,"Data"), importNumber(data,"Constatações","Constatacoes"), importNumber(data,"Não Conformes","Nao Conformes"), importNumber(data,"Recomendações/Solicitações","Recomendacoes/Solicitacoes"), importNumber(data,"TN"), importNumber(data,"AI"), importNumber(data,"TAC"), importNumber(data,"Latitude"), importNumber(data,"Longitude"), importValue(data,"Local RA"), importValue(data,"Local Tipo"), importValue(data,"Local Motivo")]
+          );
+        }
+      }
       if (req.params.collection === "acoes") {
         await client.query("DELETE FROM fisc_map_locais_importados");
         for (const [index, data] of locais.entries()) await client.query("INSERT INTO fisc_map_locais_importados(external_id, data) VALUES ($1, $2::jsonb)", [String(data?.id ?? data?.ID ?? index + 1), JSON.stringify(data)]);
