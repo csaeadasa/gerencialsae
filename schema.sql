@@ -330,3 +330,63 @@ CREATE TABLE IF NOT EXISTS reg_tomada_contributions (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Entidades exclusivas do módulo Mapas. Fiscalizações continuam em pl_tasks.
+CREATE TABLE IF NOT EXISTS fisc_map_obras (
+  id BIGSERIAL PRIMARY KEY,
+  external_id TEXT,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_fisc_map_obras_external_id ON fisc_map_obras(external_id);
+
+CREATE TABLE IF NOT EXISTS fisc_map_acoes_importadas (
+  id BIGSERIAL PRIMARY KEY,
+  external_id TEXT,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS fisc_map_locais_importados (
+  id BIGSERIAL PRIMARY KEY,
+  external_id TEXT,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_fisc_map_acoes_external_id ON fisc_map_acoes_importadas(external_id);
+CREATE INDEX IF NOT EXISTS idx_fisc_map_locais_external_id ON fisc_map_locais_importados(external_id);
+
+CREATE TABLE IF NOT EXISTS fisc_map_rvf_relatorios (
+  id BIGSERIAL PRIMARY KEY,
+  titulo TEXT NOT NULL,
+  ano INTEGER,
+  mes INTEGER,
+  url_original TEXT NOT NULL,
+  url_final TEXT,
+  dominio TEXT,
+  status TEXT NOT NULL DEFAULT 'pendente',
+  erro_verificacao TEXT,
+  imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (ano, titulo, url_original)
+);
+
+CREATE TABLE IF NOT EXISTS fisc_map_camadas (
+  id BIGSERIAL PRIMARY KEY,
+  nome TEXT NOT NULL UNIQUE,
+  geojson JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS fisc_map_auditoria (
+  id BIGSERIAL PRIMARY KEY,
+  acao TEXT NOT NULL,
+  entidade TEXT NOT NULL,
+  entidade_id TEXT,
+  origem TEXT NOT NULL DEFAULT 'mapas',
+  antes JSONB,
+  depois JSONB,
+  autor TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_fisc_map_auditoria_created_at ON fisc_map_auditoria(created_at DESC);
+

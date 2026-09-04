@@ -9763,7 +9763,11 @@ const renderSupplyTable = () => {
               transition={{ duration: 0.3, ease: "easeOut" }}
               className="w-full"
             >
-              <FiscalizacaoPainel tasks={tasks} plans={plans} onEditTaskClick={(id) => console.log('Edit', id)} />
+              <FiscalizacaoPainel tasks={tasks} plans={plans} onEditTaskClick={(id) => {
+                setEditingTaskIdFromPainel(id);
+                setActivePlanningSubTab("tasks");
+                setActiveTab("planning");
+              }} />
             </motion.div>
             </RequirePermission>
           ) : activeTab === "recurso_painel" ? (

@@ -389,6 +389,17 @@ async function runStartupMigration() {
         );
       `);
 
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS fisc_map_obras (id BIGSERIAL PRIMARY KEY, external_id TEXT, data JSONB NOT NULL DEFAULT '{}'::jsonb, imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+        CREATE INDEX IF NOT EXISTS idx_fisc_map_obras_external_id ON fisc_map_obras(external_id);
+        CREATE TABLE IF NOT EXISTS fisc_map_acoes_importadas (id BIGSERIAL PRIMARY KEY, external_id TEXT, data JSONB NOT NULL DEFAULT '{}'::jsonb, imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+        CREATE TABLE IF NOT EXISTS fisc_map_locais_importados (id BIGSERIAL PRIMARY KEY, external_id TEXT, data JSONB NOT NULL DEFAULT '{}'::jsonb, imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+        CREATE TABLE IF NOT EXISTS fisc_map_rvf_relatorios (id BIGSERIAL PRIMARY KEY, titulo TEXT NOT NULL, ano INTEGER, mes INTEGER, url_original TEXT NOT NULL, url_final TEXT, dominio TEXT, status TEXT NOT NULL DEFAULT 'pendente', erro_verificacao TEXT, imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (ano, titulo, url_original));
+        CREATE TABLE IF NOT EXISTS fisc_map_camadas (id BIGSERIAL PRIMARY KEY, nome TEXT NOT NULL UNIQUE, geojson JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+        CREATE TABLE IF NOT EXISTS fisc_map_auditoria (id BIGSERIAL PRIMARY KEY, acao TEXT NOT NULL, entidade TEXT NOT NULL, entidade_id TEXT, origem TEXT NOT NULL DEFAULT 'mapas', antes JSONB, depois JSONB, autor TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+        CREATE INDEX IF NOT EXISTS idx_fisc_map_auditoria_created_at ON fisc_map_auditoria(created_at DESC);
+      `);
+
       // Add sei_process column
       await client.query("ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS sei_process TEXT;");
 
@@ -1517,6 +1528,75 @@ export async function startServer(isVercel = false) {
       console.error(e);
       res.status(500).json({ success: false, error: "Erro no upload" });
     }
+  });
+
+  const mapCollections = {
+    obras: { table: "fisc_map_obras", limit: 5000 },
+    acoes: { table: "fisc_map_acoes_importadas", limit: 10000 },
+  } as const;
+
+  app.get("/api/fiscalizacao-mapas/:collection", async (req, res, next) => {
+    const config = mapCollections[req.params.collection as keyof typeof mapCollections];
+    if (!config) return next();
+    try {
+      const result = await getDbPool().query(`SELECT id, external_id AS "externalId", data, imported_at AS "importedAt" FROM ${config.table} ORDER BY id`);
+      res.json({ success: true, data: result.rows });
+    } catch (error) {
+      console.error(`Erro ao consultar ${req.params.collection}:`, error);
+      res.status(500).json({ success: false, error: "Banco de dados indisponível para esta consulta." });
+    }
+  });
+
+  app.put("/api/fiscalizacao-mapas/:collection", async (req, res, next) => {
+    const config = mapCollections[req.params.collection as keyof typeof mapCollections];
+    if (!config) return next();
+    const records = req.params.collection === "acoes" ? req.body?.acoes : req.body?.records;
+    const locais = req.params.collection === "acoes" ? req.body?.locais : [];
+    if (!Array.isArray(records) || records.length > config.limit || !Array.isArray(locais) || locais.length > 10000) return res.status(400).json({ success: false, error: "Carga inválida ou acima do limite permitido." });
+    const client = await getDbPool().connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`DELETE FROM ${config.table}`);
+      for (const [index, data] of records.entries()) await client.query(`INSERT INTO ${config.table}(external_id, data) VALUES ($1, $2::jsonb)`, [String(data?.id ?? data?.ID ?? index + 1), JSON.stringify(data)]);
+      if (req.params.collection === "acoes") {
+        await client.query("DELETE FROM fisc_map_locais_importados");
+        for (const [index, data] of locais.entries()) await client.query("INSERT INTO fisc_map_locais_importados(external_id, data) VALUES ($1, $2::jsonb)", [String(data?.id ?? data?.ID ?? index + 1), JSON.stringify(data)]);
+      }
+      await client.query("INSERT INTO fisc_map_auditoria(acao, entidade, depois) VALUES ('substituir', $1, $2::jsonb)", [req.params.collection, JSON.stringify({ quantidade: records.length, locais: locais.length })]);
+      await client.query("COMMIT");
+      res.json({ success: true, data: { imported: records.length, locais: locais.length } });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error(`Erro ao importar ${req.params.collection}:`, error);
+      res.status(500).json({ success: false, error: "A importação falhou; a base anterior foi preservada." });
+    } finally { client.release(); }
+  });
+
+  app.delete("/api/fiscalizacao-mapas/:collection", async (req, res, next) => {
+    const config = mapCollections[req.params.collection as keyof typeof mapCollections];
+    if (!config) return next();
+    if (req.query.confirm !== "true") return res.status(400).json({ success: false, error: "Confirmação explícita obrigatória." });
+    const client = await getDbPool().connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query(`DELETE FROM ${config.table}`);
+      if (req.params.collection === "acoes") await client.query("DELETE FROM fisc_map_locais_importados");
+      await client.query("INSERT INTO fisc_map_auditoria(acao, entidade, antes) VALUES ('limpar', $1, $2::jsonb)", [req.params.collection, JSON.stringify({ quantidade: result.rowCount })]);
+      await client.query("COMMIT");
+      res.json({ success: true, data: { deleted: result.rowCount || 0 } });
+    } catch (error) { await client.query("ROLLBACK"); res.status(500).json({ success: false, error: "A limpeza falhou; a base anterior foi preservada." }); }
+    finally { client.release(); }
+  });
+
+  app.get("/api/fiscalizacao-mapas/rvf/catalogo", async (_req, res) => {
+    try { const result = await getDbPool().query('SELECT id, titulo, ano, mes, url_original AS "urlOriginal", url_final AS "urlFinal", dominio, status, erro_verificacao AS "erroVerificacao", updated_at AS "updatedAt" FROM fisc_map_rvf_relatorios ORDER BY ano DESC NULLS LAST, mes DESC NULLS LAST, titulo'); res.json({ success: true, data: result.rows }); }
+    catch (error) { res.status(500).json({ success: false, error: "Não foi possível consultar o catálogo RF/RVF." }); }
+  });
+
+  app.get("/api/fiscalizacao-mapas/auditoria", async (req, res) => {
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+    try { const result = await getDbPool().query('SELECT * FROM fisc_map_auditoria ORDER BY created_at DESC LIMIT $1', [limit]); res.json({ success: true, data: result.rows }); }
+    catch (error) { res.status(500).json({ success: false, error: "Não foi possível consultar a auditoria." }); }
   });
 
   app.post("/api/extract-text", upload.single("file"), async (req, res) => {

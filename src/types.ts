@@ -261,6 +261,23 @@ export interface FiscalizacaoData {
   termosNotificacao: TermoNotificacao[];
   autosDeInfracao?: AutoDeInfracao[];
   datasEtapas?: Record<string, string>;
+  mapasMetadata?: FiscalizacaoMapasMetadata;
+}
+
+export interface FiscalizacaoMapasMetadata {
+  ano?: number;
+  origem?: 'GerencialSAE' | 'Importado';
+  identificacaoExterna?: string;
+  situacaoOriginal?: string;
+  conformidadeInformada?: number;
+  constataçõesAgregadas?: number;
+  naoConformidadesAgregadas?: number;
+  recomendacoes?: number;
+  determinacoes?: number;
+  termosNotificacaoAgregados?: number;
+  autosInfracaoAgregados?: number;
+  tac?: number;
+  coordenadaOrigem?: 'real' | 'referencia';
 }
 
 export interface ChecklistItem {

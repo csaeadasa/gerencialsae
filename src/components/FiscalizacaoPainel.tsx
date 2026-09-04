@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { FiscalizacaoMapasModule } from "../modules/fiscalizacao-mapas";
 import { motion } from "motion/react";
 import { 
   ResponsiveContainer, 
@@ -48,6 +49,7 @@ interface FiscalizacaoPainelProps {
 }
 
 export function FiscalizacaoPainel({ tasks, plans = [], onEditTaskClick }: FiscalizacaoPainelProps) {
+  const [activeView, setActiveView] = useState<"dashboard" | "map">("dashboard");
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedTasks, setExpandedTasks] = useState<Record<number, boolean>>({});
   const [filterOverdueOnly, setFilterOverdueOnly] = useState(false);
@@ -752,8 +754,16 @@ export function FiscalizacaoPainel({ tasks, plans = [], onEditTaskClick }: Fisca
     return `${value} - ${sum} (${percent}%)`;
   };
 
+  if (activeView === "map") return <FiscalizacaoMapasModule tasks={tasks} plans={plans} onEditTaskClick={onEditTaskClick} onShowDashboard={() => setActiveView("dashboard")} />;
+
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="flex gap-1">
+          <button className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white"><BarChart2 size={17}/> Dashboard</button>
+          <button onClick={() => setActiveView("map")} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100"><MapPin size={17}/> Mapas</button>
+        </div>
+      </div>
       
       {/* REPLICATED FILTERS CARD */}
       <div className="bg-white border border-slate-200/80 rounded-[2rem] p-6 shadow-sm space-y-4 relative text-left">
