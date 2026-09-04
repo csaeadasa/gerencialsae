@@ -894,6 +894,8 @@ export default function App() {
     INITIAL_DEMAND.id,
   );
   const [tableLayout, setTableLayout] = useState<"system" | "year">("year");
+  const [showAddYear, setShowAddYear] = useState(false);
+  const [newYearInput, setNewYearInput] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   const [editingRegionId, setEditingRegionId] = useState<string | null>(null);
@@ -2458,6 +2460,77 @@ export default function App() {
     setDemands(updatedDemands);
   };
 
+  const handleAddYearToDemand = () => {
+    if (!currentDemand) return;
+    const yearToAdd = parseInt(newYearInput);
+    if (isNaN(yearToAdd) || yearToAdd < 1900 || yearToAdd > 2100) {
+      alert("Por favor, digite um ano válido.");
+      return;
+    }
+    
+    // Check if year already exists in this demand
+    const yearExists = currentDemand.entries.some(e => e.year === yearToAdd);
+    if (yearExists) {
+      alert("Este ano já existe nas demandas.");
+      return;
+    }
+
+    const updatedDemands = demands.map(s => {
+      if (s.id === currentDemand.id) {
+        // Find existing region IDs for this demand scenario to add entries for them
+        // Use all active regions for this balance
+        const activeRegionIds = activeRegions.map(r => r.id);
+        const newEntries = [...s.entries];
+        
+        activeRegionIds.forEach(regId => {
+          // Just get default values from an existing entry if possible, or 0
+          const existingForReg = s.entries.find(e => e.regionId === regId);
+          newEntries.push({
+            regionId: regId,
+            year: yearToAdd,
+            population: existingForReg ? existingForReg.population : 0,
+            coverage: existingForReg ? existingForReg.coverage : 0,
+            perCapitaConsumption: existingForReg ? existingForReg.perCapitaConsumption : 0,
+            losses: existingForReg ? existingForReg.losses : 0,
+          });
+        });
+        return { ...s, entries: newEntries };
+      }
+      return s;
+    });
+
+    setDemands(updatedDemands);
+    setNewYearInput("");
+    setShowAddYear(false);
+  };
+
+  const handleDeleteYearFromDemand = (yearToDelete: number) => {
+    if (!currentDemand) return;
+    if (!window.confirm(`Deseja realmente excluir o ano ${yearToDelete}?`)) return;
+
+    const updatedDemands = demands.map(s => {
+      if (s.id === currentDemand.id) {
+        return {
+          ...s,
+          entries: s.entries.filter(e => e.year !== yearToDelete)
+        };
+      }
+      return s;
+    });
+    
+    // Also remove from system demands if it's Estimado
+    if (activeBalance && activeBalance.tipoBalanco === 'Estimado') {
+      const currentSystemDemands = activeBalance.systemDemands || {};
+      const newSystemDemands = { ...currentSystemDemands };
+      activeSystems.forEach(sys => {
+        delete newSystemDemands[`${sys.id}-${yearToDelete}`];
+      });
+      updateActiveBalance({ systemDemands: newSystemDemands });
+    }
+
+    setDemands(updatedDemands);
+  };
+
   const handleUpdateModifier = (
     field: keyof Demand["modifiers"],
     value: number | null,
@@ -2985,6 +3058,48 @@ export default function App() {
             Detalhes da Demanda
           </h3>
           <div className="flex items-center gap-2">
+            {showAddYear ? (
+              <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+                <input
+                  type="number"
+                  value={newYearInput}
+                  onChange={(e) => setNewYearInput(e.target.value)}
+                  placeholder="Ex: 2026"
+                  className="w-20 px-2 py-1 text-xs font-bold rounded-lg border-none focus:ring-1 focus:ring-adasa-mid"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleAddYearToDemand();
+                    if (e.key === "Escape") setShowAddYear(false);
+                  }}
+                  autoFocus
+                />
+                <button
+                  onClick={handleAddYearToDemand}
+                  className="px-2 py-1 bg-adasa-mid text-white rounded-lg text-[10px] font-black uppercase hover:bg-adasa-dark transition-colors"
+                >
+                  Salvar
+                </button>
+                <button
+                  onClick={() => setShowAddYear(false)}
+                  className="px-2 py-1 bg-white text-slate-500 rounded-lg text-[10px] font-black uppercase hover:text-slate-800 transition-colors shadow-sm"
+                >
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  const years = Array.from(new Set(results.map((r) => r.year)));
+                  const nextYear = years.length > 0 ? Math.max(...years) + 1 : 2024;
+                  setNewYearInput(nextYear.toString());
+                  setShowAddYear(true);
+                }}
+                className="flex items-center gap-1 bg-adasa-mid text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase hover:bg-adasa-dark transition-colors shadow-sm"
+              >
+                <Plus size={14} />
+                Adicionar Ano
+              </button>
+            )}
+
             <div className="flex bg-slate-100 p-1 rounded-xl">
             <button
               onClick={() => setTableLayout("system")}
@@ -3096,8 +3211,8 @@ export default function App() {
                               className="hover:bg-adasa-light/10 transition-colors group"
                             >
                               <td className="px-3 py-2">
-                                <p className="font-bold text-slate-400 tracking-tight text-[10px] uppercase pl-8 border-l-2 border-slate-200">
-                                  Ano: {year}
+                                <p className="font-bold text-slate-400 tracking-tight text-[10px] uppercase pl-8 border-l-2 border-slate-200 flex justify-between">
+                                  <span>Ano: {year}</span><button onClick={() => handleDeleteYearFromDemand(year)} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Excluir Ano"><Trash2 size={12} /></button>
                                 </p>
                               </td>
                               <td className="px-3 py-1.5 text-right">-</td>
@@ -3169,8 +3284,8 @@ export default function App() {
                                       className="hover:bg-adasa-light/10 transition-colors group"
                                     >
                                       <td className="px-3 py-2">
-                                        <p className="font-bold text-slate-400 tracking-tight text-[10px] uppercase pl-12 border-l-2 border-slate-200">
-                                          Ano: {entry.year}
+                                        <p className="font-bold text-slate-400 tracking-tight text-[10px] uppercase pl-12 border-l-2 border-slate-200 flex justify-between">
+                                          <span>Ano: {entry.year}</span><button onClick={() => handleDeleteYearFromDemand(entry.year)} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Excluir Ano"><Trash2 size={12} /></button>
                                         </p>
                                       </td>
                                       <td className="px-3 py-1.5">
@@ -3289,14 +3404,21 @@ export default function App() {
                       (sum, r) => sum + r.population,
                       0,
                     );
-                    const totalDemand = yearResults.reduce(
-                      (sum, r) => sum + r.projectedDemand,
-                      0,
-                    );
+                    let totalDemand = 0;
+                    if (isEstimado) {
+                      totalDemand = activeSystems.reduce((sum, sys) => {
+                        return sum + (activeBalance?.systemDemands?.[`${sys.id}-${year}`] || 0);
+                      }, 0);
+                    } else {
+                      totalDemand = yearResults.reduce(
+                        (sum, r) => sum + r.projectedDemand,
+                        0,
+                      );
+                    }
 
                     return (
                       <React.Fragment key={year}>
-                        <tr className="bg-slate-50/50">
+                        <tr className="bg-slate-50/50 group">
                           <td
                             colSpan={6}
                             className="px-3 py-2 text-[11px] font-black text-adasa-mid border-y border-slate-100 uppercase tracking-widest bg-adasa-light/5"
@@ -3633,8 +3755,8 @@ const renderSupplyTable = () => {
                             className="hover:bg-adasa-light/10 transition-colors group"
                           >
                             <td className="px-3 py-2">
-                              <p className="font-bold text-slate-400 tracking-tight text-[10px] uppercase pl-12 border-l-2 border-slate-200">
-                                Ano: {year}
+                              <p className="font-bold text-slate-400 tracking-tight text-[10px] uppercase pl-12 border-l-2 border-slate-200 flex justify-between">
+                                <span>Ano: {year}</span><button onClick={() => handleDeleteYearFromDemand(year)} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Excluir Ano"><Trash2 size={12} /></button>
                               </p>
                             </td>
                             <td className="px-3 py-1.5 text-right font-bold text-slate-500 text-[11px]">

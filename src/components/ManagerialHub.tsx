@@ -190,7 +190,7 @@ export function ManagerialHub({
         </div>
 
         {/* Master Row with relevant cards depending on public mode */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Painel de Atividades Card - PRIVATE */}
           {!showOnlyPublic && (
             <RequirePermission moduleId="planning_dashboard" action="view">

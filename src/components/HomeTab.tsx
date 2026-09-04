@@ -73,7 +73,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
 
         {/* Master Row with major cards */}
         <div className="flex flex-col gap-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Painel de Atividades Card */}
             <motion.div 
               whileHover={{ y: -2 }}
@@ -136,9 +136,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
                 Abrir Painel da Agenda <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
               </div>
             </motion.div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Painel de Participação Social Card */}
             <motion.div 
               whileHover={{ y: -2 }}
