@@ -2506,29 +2506,35 @@ export default function App() {
 
   const handleDeleteYearFromDemand = (yearToDelete: number) => {
     if (!currentDemand) return;
-    if (!window.confirm(`Deseja realmente excluir o ano ${yearToDelete}?`)) return;
+    setConfirmState({
+      title: "Excluir Ano",
+      message: `Deseja realmente excluir o ano ${yearToDelete}?`,
+      type: "confirm",
+      onConfirm: () => {
+        const updatedDemands = demands.map(s => {
+          if (s.id === currentDemand.id) {
+            return {
+              ...s,
+              entries: s.entries.filter(e => e.year !== yearToDelete)
+            };
+          }
+          return s;
+        });
+        
+        // Also remove from system demands if it's Estimado
+        if (activeBalance && activeBalance.tipoBalanco === 'Estimado') {
+          const currentSystemDemands = activeBalance.systemDemands || {};
+          const newSystemDemands = { ...currentSystemDemands };
+          activeSystems.forEach(sys => {
+            delete newSystemDemands[`${sys.id}-${yearToDelete}`];
+          });
+          updateActiveBalance({ systemDemands: newSystemDemands });
+        }
 
-    const updatedDemands = demands.map(s => {
-      if (s.id === currentDemand.id) {
-        return {
-          ...s,
-          entries: s.entries.filter(e => e.year !== yearToDelete)
-        };
+        setDemands(updatedDemands);
+        setConfirmState(null);
       }
-      return s;
     });
-    
-    // Also remove from system demands if it's Estimado
-    if (activeBalance && activeBalance.tipoBalanco === 'Estimado') {
-      const currentSystemDemands = activeBalance.systemDemands || {};
-      const newSystemDemands = { ...currentSystemDemands };
-      activeSystems.forEach(sys => {
-        delete newSystemDemands[`${sys.id}-${yearToDelete}`];
-      });
-      updateActiveBalance({ systemDemands: newSystemDemands });
-    }
-
-    setDemands(updatedDemands);
   };
 
   const handleUpdateModifier = (
@@ -3212,7 +3218,7 @@ export default function App() {
                             >
                               <td className="px-3 py-2">
                                 <p className="font-bold text-slate-400 tracking-tight text-[10px] uppercase pl-8 border-l-2 border-slate-200 flex justify-between">
-                                  <span>Ano: {year}</span><button onClick={() => handleDeleteYearFromDemand(year)} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Excluir Ano"><Trash2 size={12} /></button>
+                                  <span>Ano: {year}</span><button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteYearFromDemand(year); }} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Excluir Ano"><Trash2 size={12} /></button>
                                 </p>
                               </td>
                               <td className="px-3 py-1.5 text-right">-</td>
@@ -3285,7 +3291,7 @@ export default function App() {
                                     >
                                       <td className="px-3 py-2">
                                         <p className="font-bold text-slate-400 tracking-tight text-[10px] uppercase pl-12 border-l-2 border-slate-200 flex justify-between">
-                                          <span>Ano: {entry.year}</span><button onClick={() => handleDeleteYearFromDemand(entry.year)} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Excluir Ano"><Trash2 size={12} /></button>
+                                          <span>Ano: {entry.year}</span><button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteYearFromDemand(entry.year); }} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Excluir Ano"><Trash2 size={12} /></button>
                                         </p>
                                       </td>
                                       <td className="px-3 py-1.5">
@@ -3423,7 +3429,10 @@ export default function App() {
                             colSpan={6}
                             className="px-3 py-2 text-[11px] font-black text-adasa-mid border-y border-slate-100 uppercase tracking-widest bg-adasa-light/5"
                           >
-                            Ano Base: {year}
+                            <div className="flex justify-between items-center">
+                              <span>Ano Base: {year}</span>
+                              <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteYearFromDemand(year); }} className="text-slate-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Excluir Ano"><Trash2 size={14} /></button>
+                            </div>
                           </td>
                         </tr>
 
@@ -3756,7 +3765,7 @@ const renderSupplyTable = () => {
                           >
                             <td className="px-3 py-2">
                               <p className="font-bold text-slate-400 tracking-tight text-[10px] uppercase pl-12 border-l-2 border-slate-200 flex justify-between">
-                                <span>Ano: {year}</span><button onClick={() => handleDeleteYearFromDemand(year)} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Excluir Ano"><Trash2 size={12} /></button>
+                                <span>Ano: {year}</span><button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteYearFromDemand(year); }} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Excluir Ano"><Trash2 size={12} /></button>
                               </p>
                             </td>
                             <td className="px-3 py-1.5 text-right font-bold text-slate-500 text-[11px]">

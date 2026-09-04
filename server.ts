@@ -257,6 +257,11 @@ async function runStartupMigration() {
           status VARCHAR(50) NOT NULL
         );
         ALTER TABLE wb_water_balances ADD COLUMN IF NOT EXISTS category TEXT;
+        ALTER TABLE wb_water_balances ADD COLUMN IF NOT EXISTS tipo_balanco VARCHAR(50);
+        ALTER TABLE wb_water_balances ADD COLUMN IF NOT EXISTS etapa VARCHAR(100);
+        ALTER TABLE wb_water_balances ADD COLUMN IF NOT EXISTS datas_etapas JSONB;
+        ALTER TABLE wb_water_balances ADD COLUMN IF NOT EXISTS responsaveis_etapas JSONB;
+        ALTER TABLE wb_water_balances ADD COLUMN IF NOT EXISTS system_demands JSONB;
       `);
 
       await client.query(`
@@ -2029,6 +2034,11 @@ export async function startServer(isVercel = false) {
             id: Number(wb.id),
             description: wb.description,
             category: wb.category || null,
+            tipoBalanco: wb.tipo_balanco || 'Projetado',
+            etapa: wb.etapa || 'Criado',
+            datasEtapas: wb.datas_etapas || {},
+            responsaveisEtapas: wb.responsaveis_etapas || {},
+            systemDemands: wb.system_demands || {},
             responsible: wb.responsible,
             deliveryDate: wb.delivery_date,
             receivedBy: wb.received_by,
@@ -2196,25 +2206,35 @@ export async function startServer(isVercel = false) {
           const queryParts = [];
           let paramIndex = 1;
           for (const wb of waterBalances) {
-            queryParts.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4}, $${paramIndex+5}, $${paramIndex+6}, $${paramIndex+7})`);
+            queryParts.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4}, $${paramIndex+5}, $${paramIndex+6}, $${paramIndex+7}, $${paramIndex+8}, $${paramIndex+9}, $${paramIndex+10}, $${paramIndex+11}, $${paramIndex+12})`);
             values.push(
               parseSafeInt(wb.id),
               wb.description,
               wb.category || null,
+              wb.tipoBalanco || null,
+              wb.etapa || null,
+              wb.datasEtapas ? JSON.stringify(wb.datasEtapas) : null,
+              wb.responsaveisEtapas ? JSON.stringify(wb.responsaveisEtapas) : null,
+              wb.systemDemands ? JSON.stringify(wb.systemDemands) : null,
               wb.responsible || "Não atribuído",
               wb.deliveryDate ? new Date(wb.deliveryDate) : null,
               wb.receivedBy,
               wb.receiptDate ? new Date(wb.receiptDate) : null,
               wb.status || "Pendente"
             );
-            paramIndex += 8;
+            paramIndex += 13;
           }
           await client.query(
-            `INSERT INTO wb_water_balances (id, description, category, responsible, delivery_date, received_by, receipt_date, status)
+            `INSERT INTO wb_water_balances (id, description, category, tipo_balanco, etapa, datas_etapas, responsaveis_etapas, system_demands, responsible, delivery_date, received_by, receipt_date, status)
              VALUES ${queryParts.join(", ")}
              ON CONFLICT (id) DO UPDATE SET
                description = EXCLUDED.description,
                category = EXCLUDED.category,
+               tipo_balanco = EXCLUDED.tipo_balanco,
+               etapa = EXCLUDED.etapa,
+               datas_etapas = EXCLUDED.datas_etapas,
+               responsaveis_etapas = EXCLUDED.responsaveis_etapas,
+               system_demands = EXCLUDED.system_demands,
                responsible = EXCLUDED.responsible,
                delivery_date = EXCLUDED.delivery_date,
                received_by = EXCLUDED.received_by,
@@ -2473,27 +2493,37 @@ export async function startServer(isVercel = false) {
             const wbId = parseSafeInt(wb.id);
             if (wbId !== null) {
               keepIds.push(wbId);
-              wbParts.push(`($${wbParamIndex}, $${wbParamIndex+1}, $${wbParamIndex+2}, $${wbParamIndex+3}, $${wbParamIndex+4}, $${wbParamIndex+5}, $${wbParamIndex+6}, $${wbParamIndex+7})`);
+              wbParts.push(`($${wbParamIndex}, $${wbParamIndex+1}, $${wbParamIndex+2}, $${wbParamIndex+3}, $${wbParamIndex+4}, $${wbParamIndex+5}, $${wbParamIndex+6}, $${wbParamIndex+7}, $${wbParamIndex+8}, $${wbParamIndex+9}, $${wbParamIndex+10}, $${wbParamIndex+11}, $${wbParamIndex+12})`);
               wbValues.push(
                 wbId,
                 wb.description,
                 wb.category || null,
+                wb.tipoBalanco || null,
+                wb.etapa || null,
+                wb.datasEtapas ? JSON.stringify(wb.datasEtapas) : null,
+                wb.responsaveisEtapas ? JSON.stringify(wb.responsaveisEtapas) : null,
+                wb.systemDemands ? JSON.stringify(wb.systemDemands) : null,
                 wb.responsible || "Não atribuído",
                 wb.deliveryDate ? new Date(wb.deliveryDate) : null,
                 wb.receivedBy,
                 wb.receiptDate ? new Date(wb.receiptDate) : null,
                 wb.status || "Pendente"
               );
-              wbParamIndex += 8;
+              wbParamIndex += 13;
             }
           }
           if (wbParts.length > 0) {
             await client.query(`
-              INSERT INTO wb_water_balances (id, description, category, responsible, delivery_date, received_by, receipt_date, status)
+              INSERT INTO wb_water_balances (id, description, category, tipo_balanco, etapa, datas_etapas, responsaveis_etapas, system_demands, responsible, delivery_date, received_by, receipt_date, status)
               VALUES ${wbParts.join(", ")}
               ON CONFLICT (id) DO UPDATE SET
                 description = EXCLUDED.description,
                 category = EXCLUDED.category,
+                tipo_balanco = EXCLUDED.tipo_balanco,
+                etapa = EXCLUDED.etapa,
+                datas_etapas = EXCLUDED.datas_etapas,
+                responsaveis_etapas = EXCLUDED.responsaveis_etapas,
+                system_demands = EXCLUDED.system_demands,
                 responsible = EXCLUDED.responsible,
                 delivery_date = EXCLUDED.delivery_date,
                 received_by = EXCLUDED.received_by,
