@@ -1,0 +1,17 @@
+const fs = require('fs');
+// Create a small valid PDF file
+const pdfBase64 = "JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSL0ZpbHRlci9GbGF0ZURlY29kZT4+CnN0cmVhbQp4nDPQM1Qo5ypUMFAwALJMLU31jBQsTAz1LBSK0xPzSktKEvNKFIoTS0pSi4pTa4EyRhYGekYK+UWpxaUaLrn55RkKCkCxWgDDDBNfCmVuZHN0cmVhbQplbmRvYmoKCjMgMCBvYmoKMzEKZW5kb2JqCgo0IDAgb2JqCjw8L1R5cGUvUGFnZS9NZWRpYUJveFswIDAgNTk1LjI3NiA4NDEuODldL1Jlc291cmNlczw8L0ZvbnQ8PC9GMSA1IDAgUj4+Pj4vQ29udGVudHMgMiAwIFIvUGFyZW50IDYgMCBSPj4KZW5kb2JqCgo1IDAgb2JqCjw8L1R5cGUvRm9udC9TdWJ0eXBlL1R5cGUxL0Jhc2VGb250L0hlbHZldGljYT4+CmVuZG9iagoKNiAwIG9iago8PC9UeXBlL1BhZ2VzL0NvdW50IDEvS2lkc1s0IDAgUl0+PgplbmRvYmoKCjcgMCBvYmoKPDwvVHlwZS9DYXRhbG9nL1BhZ2VzIDYgMCBSPj4KZW5kb2JqCgo4IDAgb2JqCjw8L1Byb2R1Y2VyKGlUZXh0wq4gNy4yLjMgqTIwMDAtMjAyMiBpdGV4dCBHcm91cCBOViBcKGFHUEwtdmVyc2lvblwpKS9Nb2REYXRlKEQ6MjAyMzA1MjExNjU1NDYrMDInMDAnKS9DcmVhdGlvbkRhdGUoRDoyMDIzMDUyMTE2NTU0NiswMicwMCcpPj4KZW5kb2JqCgp4cmVmCjAgOQowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMTUgMDAwMDAgbiAKMDAwMDAwMDEwOSAwMDAwMCBuIAowMDAwMDAwMTI4IDAwMDAwIG4gCjAwMDAwMDAyMjUgMDAwMDAgbiAKMDAwMDAwMDMxMyAwMDAwMCBuIAowMDAwMDAwMzcwIDAwMDAwIG4gCjAwMDAwMDA0MTUgMDAwMDAgbiAKdHJhaWxlcgo8PC9TaXplIDkvUm9vdCA3IDAgUi9JbmZvIDggMCJTPj4Kc3RhcnR4cmVmCjU3MwolJUVPRgo=";
+const buffer = Buffer.from(pdfBase64, 'base64');
+
+async function test() {
+  const pdfModule = require('pdf-parse');
+  try {
+    const PDFParse = pdfModule.PDFParse;
+    const parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
+    console.log("SUCCESS TEXT:", result.text);
+  } catch(e) {
+    console.error("error: ", e);
+  }
+}
+test();

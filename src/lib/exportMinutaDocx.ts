@@ -29,6 +29,8 @@ export interface ExportMinutaDocxOptions {
   resolucoesAlteradas: string;
   vigencia: string;
   assinante: string;
+  ementaArticlesFinal?: Array<{ originalText?: string; proposedText?: string; finalText?: string; type?: string }>;
+  considerandosArticlesFinal?: Array<{ originalText?: string; proposedText?: string; finalText?: string; type?: string }>;
   
   // Model: Nova
   textArticlesWithFinalText: Array<{

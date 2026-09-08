@@ -243,7 +243,10 @@ export const RegulatoryTableEditor: React.FC<RegulatoryTableEditorProps> = ({
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span>
-              <strong>{diffResult.totalChangedCells} célula(s) alterada(s)</strong> em relação à minuta original.
+              <strong>{diffResult.totalChangedCells} célula(s) alterada(s)</strong>
+              {diffResult.addedRowsCount > 0 && <span>, <strong>{diffResult.addedRowsCount} linha(s) adicionada(s)</strong></span>}
+              {diffResult.removedRowsCount > 0 && <span>, <strong>{diffResult.removedRowsCount} linha(s) removida(s)</strong></span>}
+               em relação à minuta original.
             </span>
           </div>
           <span className="text-[11px] text-emerald-700 font-bold bg-emerald-100/80 px-2 py-0.5 rounded-full">
@@ -302,15 +305,24 @@ export const RegulatoryTableEditor: React.FC<RegulatoryTableEditorProps> = ({
 
             {/* Rows */}
             <tbody className="divide-y divide-slate-100">
-              {table.rows.map((row, rIdx) => {
+              {(diffResult?.mergedRows || table.rows.map((row, idx) => ({ type: 'unchanged', propIdx: idx, origIdx: null, cells: row }))).map((mergedRow, mapIdx) => {
+                const rIdx = mergedRow.propIdx;
+                const isRemoved = mergedRow.type === 'removed';
+                const isAddedRow = mergedRow.type === 'added';
+                const row = mergedRow.cells;
+                
                 return (
-                  <tr key={rIdx} className="hover:bg-slate-50/70 transition-colors group/row">
+                  <tr key={mapIdx} className={cn("hover:bg-slate-50/70 transition-colors group/row", isRemoved && "opacity-75 bg-rose-50/40")}>
                     <td className="w-12 px-2 py-1.5 text-center text-xs font-bold text-slate-400 border-r border-slate-200 bg-slate-50/50 select-none">
-                      {rIdx + 1}
+                      {isRemoved ? (
+                        <span className="text-rose-500 line-through" title="Linha excluída">{mergedRow.origIdx !== null ? mergedRow.origIdx + 1 : ""}</span>
+                      ) : (
+                        <span className={cn(isAddedRow && "text-emerald-600")}>{mergedRow.origIdx !== null ? mergedRow.origIdx + 1 : "+"}</span>
+                      )}
                     </td>
                     {table.headers.map((_, cIdx) => {
                       const cellValue = row[cIdx] !== undefined && row[cIdx] !== null ? String(row[cIdx]) : "";
-                      const diffKey = `${rIdx}_${cIdx}`;
+                      const diffKey = isRemoved ? `removed_${mergedRow.origIdx}_${cIdx}` : `${rIdx}_${cIdx}`;
                       const isModified = diffResult && diffResult.cellDiffs[diffKey]?.type === "modified";
                       const isAdded = diffResult && diffResult.cellDiffs[diffKey]?.type === "added";
                       const oldVal = diffResult?.cellDiffs[diffKey]?.oldValue;
@@ -320,22 +332,29 @@ export const RegulatoryTableEditor: React.FC<RegulatoryTableEditorProps> = ({
                           key={cIdx}
                           className={cn(
                             "px-2 py-1 border-r border-slate-100 relative",
-                            (isModified || isAdded) && "bg-emerald-50/80"
+                            (isModified || isAdded) && "bg-emerald-50/80",
+                            isRemoved && "bg-rose-50/50"
                           )}
                         >
-                          <input
-                            type="text"
-                            value={cellValue}
-                            onChange={(e) => handleCellChange(rIdx, cIdx, e.target.value)}
-                            placeholder="-"
-                            className={cn(
-                              "w-full px-2 py-1 bg-transparent border rounded text-xs text-slate-800 outline-none transition-all",
-                              isModified || isAdded
-                                ? "border-emerald-400 font-bold bg-white/90 shadow-2xs focus:ring-2 focus:ring-emerald-500"
-                                : "border-transparent hover:border-slate-200 focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500"
-                            )}
-                          />
-                          {isModified && oldVal !== undefined && (
+                          {isRemoved ? (
+                             <div className="w-full px-2 py-1 text-xs text-rose-700 font-medium line-through">
+                               {cellValue || "-"}
+                             </div>
+                          ) : (
+                            <input
+                              type="text"
+                              value={cellValue}
+                              onChange={(e) => handleCellChange(rIdx!, cIdx, e.target.value)}
+                              placeholder="-"
+                              className={cn(
+                                "w-full px-2 py-1 bg-transparent border rounded text-xs text-slate-800 outline-none transition-all",
+                                isModified || isAdded
+                                  ? "border-emerald-400 font-bold bg-white/90 shadow-2xs focus:ring-2 focus:ring-emerald-500"
+                                  : "border-transparent hover:border-slate-200 focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500"
+                              )}
+                            />
+                          )}
+                          {isModified && oldVal !== undefined && !isRemoved && (
                             <div className="text-[9px] text-rose-600 font-medium px-1 truncate" title={`Antes: ${oldVal}`}>
                               Antes: <span className="line-through">{oldVal}</span>
                             </div>
@@ -345,22 +364,36 @@ export const RegulatoryTableEditor: React.FC<RegulatoryTableEditorProps> = ({
                     })}
                     <td className="w-16 px-2 py-1 text-center bg-slate-50/30">
                       <div className="flex items-center justify-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity">
-                        <button
-                          type="button"
-                          onClick={() => addRow(rIdx)}
-                          className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
-                          title="Inserir linha abaixo"
-                        >
-                          <Plus size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeRow(rIdx)}
-                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded"
-                          title="Excluir linha"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        {!isRemoved && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => addRow(rIdx!)}
+                              className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
+                              title="Inserir linha abaixo"
+                            >
+                              <Plus size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeRow(rIdx!)}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded"
+                              title="Excluir linha"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </>
+                        )}
+                        {isRemoved && (
+                          <button
+                            type="button"
+                            className="p-1 text-rose-400 hover:text-rose-600 rounded cursor-not-allowed"
+                            title="Linha removida"
+                            disabled
+                          >
+                             <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

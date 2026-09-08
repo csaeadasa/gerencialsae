@@ -1,3 +1,4 @@
+import * as diff from "diff";
 /**
  * Utilitários para suporte a dispositivos em formato de Tabela / Matriz de Dados
  * no módulo de Participação Social e Tomada de Subsídios.
@@ -17,6 +18,14 @@ export interface CellDiff {
   type: 'added' | 'removed' | 'modified' | 'unchanged';
 }
 
+export interface MergedRow {
+  type: 'added' | 'removed' | 'modified' | 'unchanged';
+  origIdx: number | null;
+  propIdx: number | null;
+  cells: string[];
+  originalCells?: string[];
+}
+
 export interface TableDiffResult {
   hasChanges: boolean;
   totalChangedCells: number;
@@ -24,6 +33,7 @@ export interface TableDiffResult {
   removedRowsCount: number;
   cellDiffs: Record<string, CellDiff>; // key: `${rowIndex}_${colIndex}`
   headerDiffs: Record<number, { oldValue: string; newValue: string; modified: boolean }>;
+  mergedRows: MergedRow[];
 }
 
 export const DEFAULT_TABLE_TEMPLATES: { name: string; description: string; data: RegulatoryTable }[] = [
@@ -256,7 +266,8 @@ export const compareTables = (
     addedRowsCount: 0,
     removedRowsCount: 0,
     cellDiffs: {},
-    headerDiffs: {}
+    headerDiffs: {},
+    mergedRows: []
   };
 
   const maxHeaders = Math.max(origTable.headers.length, proposedTable.headers.length);
@@ -273,60 +284,116 @@ export const compareTables = (
     }
   }
 
-  const origRowCount = origTable.rows.length;
-  const propRowCount = proposedTable.rows.length;
-  const maxRows = Math.max(origRowCount, propRowCount);
+  const changes = diff.diffArrays(origTable.rows, proposedTable.rows, {
+    comparator: (a: string[], b: string[]) => {
+      if (JSON.stringify(a) === JSON.stringify(b)) return true;
+      const maxCols = Math.max(a.length, b.length);
+      if (maxCols === 0) return true;
+      
+      const a0 = (a[0] || "").trim();
+      const b0 = (b[0] || "").trim();
+      if (a0 !== "" && a0 === b0) return true;
 
-  if (propRowCount > origRowCount) {
-    result.addedRowsCount = propRowCount - origRowCount;
-    result.hasChanges = true;
-  } else if (propRowCount < origRowCount) {
-    result.removedRowsCount = origRowCount - propRowCount;
-    result.hasChanges = true;
-  }
+      let same = 0;
+      for (let i = 0; i < maxCols; i++) {
+        if ((a[i] || "").trim() === (b[i] || "").trim()) same++;
+      }
+      return same >= Math.ceil(maxCols * 0.66);
+    }
+  });
 
-  for (let r = 0; r < maxRows; r++) {
-    const origRow = origTable.rows[r] || [];
-    const propRow = proposedTable.rows[r] || [];
-    const isRowAdded = r >= origRowCount;
-    const isRowRemoved = r >= propRowCount;
+  let oIdx = 0;
+  let pIdx = 0;
 
-    const maxCols = Math.max(origRow.length, propRow.length, maxHeaders);
+  for (const change of changes) {
+    if (change.removed) {
+      result.removedRowsCount += change.count || 1;
+      result.hasChanges = true;
+      for (let i = 0; i < (change.count || 1); i++) {
+        const origRow = origTable.rows[oIdx];
+        if (origRow) {
+          result.mergedRows.push({
+            type: 'removed',
+            origIdx: oIdx,
+            propIdx: null,
+            cells: origRow,
+            originalCells: origRow
+          });
+          const maxCols = Math.max(origRow.length, maxHeaders);
+          for (let c = 0; c < maxCols; c++) {
+            result.cellDiffs[`removed_${oIdx}_${c}`] = {
+              rowIndex: oIdx,
+              colIndex: c,
+              oldValue: (origRow[c] || "").trim(),
+              newValue: "",
+              type: "removed"
+            };
+          }
+        }
+        oIdx++;
+      }
+    } else if (change.added) {
+      result.addedRowsCount += change.count || 1;
+      result.hasChanges = true;
+      for (let i = 0; i < (change.count || 1); i++) {
+        const propRow = proposedTable.rows[pIdx];
+        if (propRow) {
+          result.mergedRows.push({
+            type: 'added',
+            origIdx: null,
+            propIdx: pIdx,
+            cells: propRow
+          });
+          const maxCols = Math.max(propRow.length, maxHeaders);
+          for (let c = 0; c < maxCols; c++) {
+            result.cellDiffs[`${pIdx}_${c}`] = {
+              rowIndex: pIdx,
+              colIndex: c,
+              oldValue: "",
+              newValue: (propRow[c] || "").trim(),
+              type: "added"
+            };
+            result.totalChangedCells++;
+          }
+        }
+        pIdx++;
+      }
+    } else {
+      for (let i = 0; i < (change.count || 1); i++) {
+        const origRow = origTable.rows[oIdx] || [];
+        const propRow = proposedTable.rows[pIdx] || [];
+        const maxCols = Math.max(origRow.length, propRow.length, maxHeaders);
+        
+        let rowType: 'modified' | 'unchanged' = 'unchanged';
 
-    for (let c = 0; c < maxCols; c++) {
-      const oldVal = (origRow[c] !== undefined && origRow[c] !== null ? String(origRow[c]) : "").trim();
-      const newVal = (propRow[c] !== undefined && propRow[c] !== null ? String(propRow[c]) : "").trim();
+        for (let c = 0; c < maxCols; c++) {
+          const oldVal = (origRow[c] !== undefined && origRow[c] !== null ? String(origRow[c]) : "").trim();
+          const newVal = (propRow[c] !== undefined && propRow[c] !== null ? String(propRow[c]) : "").trim();
+          
+          if (oldVal !== newVal) {
+            rowType = 'modified';
+            result.hasChanges = true;
+            result.totalChangedCells++;
+            result.cellDiffs[`${pIdx}_${c}`] = {
+              rowIndex: pIdx,
+              colIndex: c,
+              oldValue: oldVal,
+              newValue: newVal,
+              type: "modified"
+            };
+          }
+        }
+        
+        result.mergedRows.push({
+          type: rowType,
+          origIdx: oIdx,
+          propIdx: pIdx,
+          cells: propRow,
+          originalCells: origRow
+        });
 
-      if (isRowAdded) {
-        result.hasChanges = true;
-        result.totalChangedCells++;
-        result.cellDiffs[`${r}_${c}`] = {
-          rowIndex: r,
-          colIndex: c,
-          oldValue: "",
-          newValue: newVal,
-          type: "added"
-        };
-      } else if (isRowRemoved) {
-        result.hasChanges = true;
-        result.totalChangedCells++;
-        result.cellDiffs[`${r}_${c}`] = {
-          rowIndex: r,
-          colIndex: c,
-          oldValue: oldVal,
-          newValue: "",
-          type: "removed"
-        };
-      } else if (oldVal !== newVal) {
-        result.hasChanges = true;
-        result.totalChangedCells++;
-        result.cellDiffs[`${r}_${c}`] = {
-          rowIndex: r,
-          colIndex: c,
-          oldValue: oldVal,
-          newValue: newVal,
-          type: "modified"
-        };
+        oIdx++;
+        pIdx++;
       }
     }
   }

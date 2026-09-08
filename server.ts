@@ -1858,9 +1858,14 @@ export async function startServer(isVercel = false) {
 
       if (ext === '.pdf') {
         const pdfParseModule = await import("pdf-parse");
-        const pdf = pdfParseModule.default || pdfParseModule;
-        const data = await (pdf as any)(file.buffer);
-        extractedText = data.text;
+        const PDFParse = pdfParseModule.PDFParse;
+        const parser = new PDFParse({ data: file.buffer });
+        try {
+          const result = await parser.getText();
+          extractedText = result.text;
+        } finally {
+          if (parser.destroy) await parser.destroy();
+        }
       } else if (ext === '.docx') {
         const mammothModule = await import('mammoth');
         const mammoth = mammothModule.default || mammothModule;
