@@ -46,7 +46,7 @@ export interface SubjectPickerModalProps {
   onClose: () => void;
   articleIndex?: number;
   articleText?: string;
-  contentType?: 'text' | 'table';
+  contentType?: 'text' | 'table' | 'ementa' | 'considerandos';
 }
 
 const TYPE_CONFIG: Record<SubjectType, { label: string; bg: string; text: string; border: string; icon: any }> = {

@@ -427,7 +427,7 @@ export interface Article {
   id: string | number;
   tomadaId: string | number;
   order: number;
-  contentType?: 'text' | 'table';
+  contentType?: 'text' | 'table' | 'ementa' | 'considerandos';
   originalText: string;
   proposedText?: string;
   finalText?: string;

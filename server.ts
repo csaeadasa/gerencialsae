@@ -6481,6 +6481,10 @@ app.delete("/api/reg/contributions/:id", deleteContributionHandler);
 
 app.post("/api/reg/ai/analyze-contribution", async (req, res) => {
   try {
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: "A funcionalidade de IA não está configurada neste ambiente. Para usar na Vercel, adicione a variável GEMINI_API_KEY no painel do seu projeto." });
+    }
+
     const { originalText, proposedText, userJustification } = req.body;
     
     if (!originalText || !proposedText || !userJustification) {
@@ -6549,6 +6553,10 @@ Forneça a resposta em formato JSON estrito com os seguintes campos:
 
 app.post("/api/reg/ai/analyze-article", async (req, res) => {
   try {
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: "A funcionalidade de IA não está configurada neste ambiente. Para usar na Vercel, adicione a variável GEMINI_API_KEY no painel do seu projeto." });
+    }
+
     const { originalText, contributions } = req.body;
     
     if (!originalText || !contributions || !Array.isArray(contributions)) {
