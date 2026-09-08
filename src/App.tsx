@@ -343,7 +343,7 @@ const isSameWb = (itemWbId: number | string | null | undefined, filterWbId: numb
 };
 
 export default function App() {
-  const { currentUser, roles, logout, checkPermission } = useAuth();
+  const { currentUser, isSessionVerified, roles, logout, checkPermission } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsMenuOpen, setNotificationsMenuOpen] = useState(false);
   const [notificationFilter, setNotificationFilter] = useState("all");
@@ -925,7 +925,7 @@ export default function App() {
         return null;
       }
     },
-    enabled: !!currentUser,
+    enabled: !!currentUser && isSessionVerified,
     staleTime: 5 * 60 * 1000, 
   });
 

@@ -118,12 +118,10 @@ function readCookie(req: express.Request, name: string): string | null {
 }
 
 function setSessionCookie(req: express.Request, res: express.Response, token: string, maxAge: number) {
-  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
-  const secure = Boolean(process.env.VERCEL || process.env.NODE_ENV === "production" || forwardedProto === "https");
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure,
-    sameSite: "strict",
+    secure: true,
+    sameSite: "none",
     path: "/",
     maxAge,
   });
@@ -1603,7 +1601,7 @@ async function runStartupMigration() {
 export async function startServer(isVercel = false) {
   await runStartupMigration();
 
-  const PORT = Number(process.env.PORT) || 3000;
+  const PORT = 3000;
 
   app.disable("x-powered-by");
   if (process.env.VERCEL || process.env.NODE_ENV === "production") app.set("trust proxy", 1);
@@ -1859,14 +1857,10 @@ export async function startServer(isVercel = false) {
       let extractedText = "";
 
       if (ext === '.pdf') {
-        const { PDFParse } = await import("pdf-parse");
-        const parser = new PDFParse({ data: file.buffer });
-        try {
-          const result = await parser.getText();
-          extractedText = result.text;
-        } finally {
-          await parser.destroy();
-        }
+        const pdfParseModule = await import("pdf-parse");
+        const pdf = pdfParseModule.default || pdfParseModule;
+        const data = await (pdf as any)(file.buffer);
+        extractedText = data.text;
       } else if (ext === '.docx') {
         const mammothModule = await import('mammoth');
         const mammoth = mammothModule.default || mammothModule;

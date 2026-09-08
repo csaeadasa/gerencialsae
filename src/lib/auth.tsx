@@ -111,6 +111,7 @@ export const DEFAULT_USERS: AppUser[] = [];
 
 interface AuthContextType {
   currentUser: AppUser | null;
+  isSessionVerified: boolean;
   users: AppUser[];
   roles: UserRole[];
   departments: Department[];
@@ -143,6 +144,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return null;
     }
   });
+  const [isSessionVerified, setIsSessionVerified] = useState<boolean>(() => !localStorage.getItem("adasa-sgi-user"));
   const [users, setUsers] = useState<AppUser[]>(DEFAULT_USERS);
   const [roles, setRoles] = useState<UserRole[]>(DEFAULT_ROLES);
   const [departments, setDepartments] = useState<Department[]>(DEFAULT_DEPARTMENTS);
@@ -203,15 +205,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!response.ok || !data?.success || !data.user) {
           setCurrentUser(null);
           localStorage.removeItem("adasa-sgi-user");
+          setIsSessionVerified(true);
           return;
         }
         setCurrentUser(data.user);
         localStorage.setItem("adasa-sgi-user", JSON.stringify(data.user));
+        setIsSessionVerified(true);
         await Promise.all([fetchRoles(), fetchDepartments(), fetchUsers()]);
       } catch {
         if (active) {
           setCurrentUser(null);
           localStorage.removeItem("adasa-sgi-user");
+          setIsSessionVerified(true);
         }
       }
     };
@@ -233,6 +238,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (data.success && data.user) {
           setCurrentUser(data.user);
           localStorage.setItem("adasa-sgi-user", JSON.stringify(data.user));
+          setIsSessionVerified(true);
           await Promise.all([fetchRoles(), fetchDepartments(), fetchUsers()]);
           return { success: true };
         } else {
@@ -502,7 +508,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AuthContext.Provider value={{ 
-        currentUser, users, roles, departments,
+        currentUser, isSessionVerified, users, roles, departments,
         loginWithCredentials, logout, checkPermission, hasRole,
         addUser, updateUser, deleteUser,
         fetchRoles, addRole, updateRole, deleteRole,
