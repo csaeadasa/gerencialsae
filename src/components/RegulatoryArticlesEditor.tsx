@@ -119,7 +119,7 @@ export const RegulatoryArticlesEditor: React.FC<RegulatoryArticlesEditorProps> =
       </div>
       {articles.map((art, i) => {
         const isMissingOriginal = isAlteracao && (!art.originalText || !art.originalText.trim());
-        const dInfo = getDispositivoInfo(art.proposedText || art.originalText || "", i + 1);
+        const dInfo = getDispositivoInfo((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "", i + 1);
         const isSelected = selectedArticlesToMove.includes(art.id as string | number);
         
         return (
@@ -258,8 +258,8 @@ export const RegulatoryArticlesEditor: React.FC<RegulatoryArticlesEditorProps> =
                     onClick={() => {
                       const newArts = [...articles];
                       newArts[i].contentType = 'table';
-                      if (!isTableJson(art.proposedText || art.originalText)) {
-                        const parsedT = parseTableData(art.proposedText || art.originalText || "Item\tDescrição\tValor\n1\tTarifa Base\t100,00");
+                      if (!isTableJson((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText))) {
+                        const parsedT = parseTableData((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "Item\tDescrição\tValor\n1\tTarifa Base\t100,00");
                         newArts[i].proposedText = serializeTableData(parsedT);
                       }
                       setArticles(newArts);
@@ -314,7 +314,7 @@ export const RegulatoryArticlesEditor: React.FC<RegulatoryArticlesEditorProps> =
                     )}
                   </div>
                   <RegulatoryTableEditor
-                    initialData={parseTableData(art.proposedText || art.originalText || "")}
+                    initialData={parseTableData((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "")}
                     originalData={isAlteracao && art.originalText ? parseTableData(art.originalText) : undefined}
                     onChange={(table) => {
                       const newArts = [...articles];
@@ -359,7 +359,7 @@ export const RegulatoryArticlesEditor: React.FC<RegulatoryArticlesEditorProps> =
                         newArts[i].originalText = e.target.value;
                         setArticles(newArts);
                       }}
-                      rows={Math.max(12, (art.proposedText || art.originalText || "").split("\n").length)}
+                      rows={Math.max(12, ((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "").split("\n").length)}
                       placeholder="Insira o texto atual vigente deste dispositivo (obrigatório)..."
                     />
                     {isMissingOriginal && (
@@ -389,14 +389,37 @@ export const RegulatoryArticlesEditor: React.FC<RegulatoryArticlesEditorProps> =
                   </div>
                   <textarea 
                     className="w-full bg-white border border-indigo-200 rounded-lg p-3 resize-y focus:ring-2 focus:ring-indigo-600 text-sm font-medium text-slate-800 whitespace-pre-wrap outline-none"
-                    value={art.proposedText !== undefined ? art.proposedText : art.originalText}
+                    value={art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : (art.originalText || "")}
                     onChange={e => {
                       const newArts = [...articles];
                       newArts[i].proposedText = e.target.value;
                       setArticles(newArts);
                     }}
-                    rows={Math.max(12, (art.proposedText || art.originalText || "").split("\n").length)}
+                    rows={Math.max(12, ((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "").split("\n").length)}
+                    disabled={art.proposedText === ""}
                   />
+                  {isAlteracao && (
+                    <div className="flex items-center gap-2 mt-2 bg-rose-50/50 p-2 rounded-lg border border-rose-100">
+                      <input
+                        type="checkbox"
+                        id={`revoke-${i}`}
+                        checked={art.proposedText === ""}
+                        onChange={(e) => {
+                          const newArts = [...articles];
+                          if (e.target.checked) {
+                            newArts[i].proposedText = "";
+                          } else {
+                            newArts[i].proposedText = art.originalText || "";
+                          }
+                          setArticles(newArts);
+                        }}
+                        className="w-3.5 h-3.5 text-rose-600 rounded border-rose-300 focus:ring-rose-500 cursor-pointer"
+                      />
+                      <label htmlFor={`revoke-${i}`} className="text-[10px] font-bold text-rose-700 uppercase tracking-wider cursor-pointer select-none">
+                        Propor revogação / exclusão deste dispositivo
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

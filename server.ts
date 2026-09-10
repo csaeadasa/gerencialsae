@@ -5800,7 +5800,7 @@ const createParticipationHandler = async (req: express.Request, res: express.Res
         await client.query(
           `INSERT INTO re_participation_articles (participation_id, order_index, content_type, original_text, proposed_text, subject_ids)
            VALUES ($1, $2, $3, $4, $5, $6)`,
-          [participationId, art.order || 0, art.contentType || 'text', art.originalText, art.proposedText || null, JSON.stringify(art.subjectIds || [])]
+          [participationId, art.order || 0, art.contentType || 'text', art.originalText, art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : null, JSON.stringify(art.subjectIds || [])]
         );
       }
     }
@@ -6306,13 +6306,28 @@ const updateParticipationArticlesBatchHandler = async (req: express.Request, res
             `UPDATE re_participation_articles 
              SET original_text = $1, proposed_text = $2, order_index = $3, content_type = $4, subject_ids = $7
              WHERE id = $5 AND participation_id = $6`,
-            [art.originalText || null, art.proposedText || null, art.order || 0, art.contentType || 'text', Number(art.id), Number(id), JSON.stringify(art.subjectIds || [])]
+            [
+              art.originalText !== undefined && art.originalText !== null ? art.originalText : null, 
+              art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : null, 
+              art.order || 0, 
+              art.contentType || 'text', 
+              Number(art.id), 
+              Number(id), 
+              JSON.stringify(art.subjectIds || [])
+            ]
           );
         } else {
           await dbPool.query(
             `INSERT INTO re_participation_articles (participation_id, order_index, content_type, original_text, proposed_text, subject_ids)
              VALUES ($1, $2, $3, $4, $5, $6)`,
-            [Number(id), art.order || 0, art.contentType || 'text', art.originalText || null, art.proposedText || null, JSON.stringify(art.subjectIds || [])]
+            [
+              Number(id), 
+              art.order || 0, 
+              art.contentType || 'text', 
+              art.originalText !== undefined && art.originalText !== null ? art.originalText : null, 
+              art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : null, 
+              JSON.stringify(art.subjectIds || [])
+            ]
           );
         }
       }

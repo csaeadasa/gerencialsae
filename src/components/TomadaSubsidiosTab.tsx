@@ -303,13 +303,11 @@ export const renderDiffInline = (originalText?: string, proposedText?: string, a
   }
 
   if (!orig && !prop) return <span className="text-slate-400 italic">Sem texto cadastrado</span>;
-  if (!orig) return <span className="whitespace-pre-wrap">{prop}</span>;
-  if (!prop) return <span className="whitespace-pre-wrap">{orig}</span>;
-  if (orig === prop) return <span className="whitespace-pre-wrap">{prop}</span>;
+  if (orig === prop) return <span className="whitespace-pre-line">{prop}</span>;
 
   const diffParts = getSmartDiff(originalText || "", (proposedText !== undefined && proposedText !== null ? proposedText : originalText || ""));
   return (
-    <span className="whitespace-pre-wrap leading-relaxed">
+    <span className="whitespace-pre-line leading-relaxed">
       {diffParts.map((part, pIdx) => {
         if (!part.value.trim()) {
           return <span key={pIdx}>{part.value}</span>;
@@ -318,7 +316,7 @@ export const renderDiffInline = (originalText?: string, proposedText?: string, a
           return (
             <span
               key={pIdx}
-              className="bg-emerald-100 text-emerald-950 font-bold px-1 py-0.5 rounded mx-0.5 border border-emerald-300 inline-block shadow-2xs"
+              className="text-emerald-700 font-semibold underline decoration-2 decoration-emerald-500/50 underline-offset-2 break-words"
               title="Texto inserido na minuta proposta"
             >
               {part.value}
@@ -329,7 +327,7 @@ export const renderDiffInline = (originalText?: string, proposedText?: string, a
           return (
             <span
               key={pIdx}
-              className="bg-rose-100 text-rose-950 px-1 py-0.5 rounded mx-0.5 line-through decoration-rose-500 border border-rose-300 inline-block font-medium opacity-90"
+              className="text-rose-500/80 line-through decoration-rose-500/80 font-medium break-words"
               title="Texto excluído da redação vigente"
             >
               {part.value}
@@ -368,7 +366,7 @@ interface ContributionAnalysisItemProps {
 }
 
 const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, article, handleUpdateAnalysis, showToast }) => {
-  const originalText = article.proposedText || article.originalText || "";
+  const originalText = (article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText) || "";
   const isTable = article.contentType === 'table' || isTableJson(c.proposedText) || isTableJson(originalText);
   const diffParts = !isTable ? getSmartDiff(originalText, c.proposedText || "") : [];
   
@@ -588,18 +586,18 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
               </div>
             ) : (
               <RegulatoryTableView 
-                data={c.proposedText || originalText} 
+                data={(c.proposedText !== undefined && c.proposedText !== null ? c.proposedText : originalText)} 
                 originalData={originalText && originalText !== c.proposedText ? originalText : undefined} 
               />
             )
           ) : (
-            <div className="text-xs text-slate-800 font-medium whitespace-pre-wrap leading-relaxed">
+            <div className="text-xs text-slate-800 font-medium whitespace-pre-line leading-relaxed">
               {diffParts.map((part, pIdx) => {
                 if (part.added) {
-                  return <span key={pIdx} className="bg-emerald-100 text-emerald-950 font-bold px-1 rounded mx-0.5 border border-emerald-300">{part.value}</span>;
+                  return <span key={pIdx} className="text-emerald-700 font-semibold underline decoration-2 decoration-emerald-500/50 underline-offset-2 break-words">{part.value}</span>;
                 }
                 if (part.removed) {
-                  return <span key={pIdx} className="bg-rose-100 text-rose-950 px-1 rounded mx-0.5 line-through decoration-rose-500 border border-rose-300">{part.value}</span>;
+                  return <span key={pIdx} className="text-rose-500/80 line-through decoration-rose-500/80 font-medium break-words">{part.value}</span>;
                 }
                 return <span key={pIdx}>{part.value}</span>;
               })}
@@ -609,7 +607,7 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
         <div className="p-4 bg-slate-50 flex flex-col gap-4">
           <div>
             <span className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-3">Justificativa do Participante</span>
-            <div className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+            <div className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">
               {c.justification}
             </div>
           </div>
@@ -626,7 +624,7 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
                   placeholder="Insira a justificativa técnica para esta contribuição..."
                 />
               ) : (
-                <div className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
+                <div className="text-xs text-slate-700 whitespace-pre-line leading-relaxed bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
                   {c.technicalJustification}
                 </div>
               )}
@@ -719,7 +717,7 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
   const [repeatProposed, setRepeatProposed] = useState(false);
 
   const displayIndex = articleIndex !== undefined ? articleIndex : (article.order !== undefined ? article.order + 1 : 1);
-  const dispInfo = getDispositivoInfo(article.proposedText || article.originalText || "", displayIndex);
+  const dispInfo = getDispositivoInfo((article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText) || "", displayIndex);
 
   const displayedContributions = React.useMemo(() => {
     return contributions.filter(c => {
@@ -758,7 +756,7 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
         newFinalText = acatadas.map(c => c.proposedText).filter(Boolean).join("\n\n");
         shouldUpdate = true;
       } else if (todasNaoAcatadas) {
-        newFinalText = article.proposedText || article.originalText || "";
+        newFinalText = (article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText) || "";
         shouldUpdate = true;
       } else {
         newFinalText = "";
@@ -787,7 +785,7 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          originalText: article.proposedText || article.originalText || "",
+          originalText: (article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText) || "",
           contributions
         })
       });
@@ -886,7 +884,7 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
               {article.contentType === 'table' || isTableJson(article.originalText) ? (
                 <RegulatoryTableView data={article.originalText} />
               ) : (
-                <div className="text-xs text-slate-500 font-medium whitespace-pre-wrap leading-relaxed bg-slate-100 p-3 rounded-xl border border-slate-200">
+                <div className="text-xs text-slate-500 font-medium whitespace-pre-line leading-relaxed bg-slate-100 p-3 rounded-xl border border-slate-200">
                   {article.originalText}
                 </div>
               )}
@@ -895,21 +893,36 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
           <div>
             <div className="flex items-center gap-2 mb-3">
               <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
-                {article.contentType === 'table' || isTableJson(article.proposedText || article.originalText) ? "Tabela Proposta em Consulta (Minuta)" : "Texto Proposto em Consulta (Minuta)"}
+                {article.contentType === 'table' || isTableJson((article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText)) ? "Tabela Proposta em Consulta (Minuta)" : "Texto Proposto em Consulta (Minuta)"}
               </span>
+              {tipoResolucao === "alteracao" && article.originalText && (article.proposedText === undefined || article.proposedText === null || article.originalText === article.proposedText) && (
+                <span className="inline-flex items-center gap-1.5 bg-yellow-100 text-yellow-800 border border-yellow-300 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded">
+                  <AlertTriangle size={12} className="shrink-0" /> Texto proposto é igual ao texto atual
+                </span>
+              )}
+              {tipoResolucao === "alteracao" && !article.originalText && (
+                <span className="inline-flex items-center gap-1.5 bg-indigo-100 text-indigo-800 border border-indigo-300 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded">
+                  <Plus size={12} className="shrink-0" /> Novo Dispositivo
+                </span>
+              )}
+              {tipoResolucao === "alteracao" && article.originalText && article.proposedText === "" && (
+                <span className="inline-flex items-center gap-1.5 bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded">
+                  Revogação do Dispositivo Proposta
+                </span>
+              )}
               {isFullyAnalyzed && (
                 <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-xs font-black uppercase tracking-wider px-3 py-1.5 rounded-full">
                   <CheckCircle2 size={12} /> Totalmente Analisado
                 </span>
               )}
             </div>
-            {article.contentType === 'table' || isTableJson(article.proposedText || article.originalText) ? (
+            {article.contentType === 'table' || isTableJson((article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText)) ? (
               <RegulatoryTableView
                 data={article.proposedText !== undefined ? article.proposedText : article.originalText}
                 originalData={tipoResolucao === "alteracao" && article.originalText ? article.originalText : undefined}
               />
             ) : (
-              <div className="text-xs text-slate-700 font-medium whitespace-pre-wrap leading-relaxed bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="text-xs text-slate-700 font-medium whitespace-pre-line leading-relaxed bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
                 {tipoResolucao === "alteracao" && article.originalText
                   ? renderDiffInline(article.originalText, article.proposedText, article.contentType)
                   : (article.proposedText !== undefined ? article.proposedText : article.originalText)}
@@ -986,7 +999,7 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
                   if (checked) {
                     setFinalText(article.proposedText !== undefined ? article.proposedText : (article.originalText || ""));
                     setFinalJustification(
-                      article.contentType === 'table' || isTableJson(article.proposedText || article.originalText)
+                      article.contentType === 'table' || isTableJson((article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText))
                         ? "Tabela Final do Dispositivo mantida conforme Proposta em Consulta. Sem alterações acatadas."
                         : "Texto Final do Dispositivo igual ao Texto Proposto em Consulta. Sem contribuições recebidas"
                     )
@@ -998,7 +1011,7 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
                 className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-600 cursor-pointer"
               />
               <label htmlFor={`repeat-${article.id}`} className="text-[11px] font-bold text-slate-700 cursor-pointer select-none">
-                {article.contentType === 'table' || isTableJson(article.proposedText || article.originalText)
+                {article.contentType === 'table' || isTableJson((article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText))
                   ? "Repetir Tabela Proposta como Tabela Final?"
                   : "Repetir Texto Proposto como Texto Final?"}
               </label>
@@ -1006,14 +1019,14 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
             <div>
               <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
                 <label className="block text-xs font-black text-slate-800 uppercase tracking-widest">
-                  {article.contentType === 'table' || isTableJson(finalText || article.proposedText || article.originalText)
+                  {article.contentType === 'table' || isTableJson(finalText || (article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText))
                     ? "Tabela Final do Dispositivo"
                     : "Texto Final do Dispositivo"}
                 </label>
                 <button
                   type="button"
                   onClick={() => {
-                    const base = article.proposedText || article.originalText || "";
+                    const base = (article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText) || "";
                     const suppressedText = formatSuppressedDevice(base, displayIndex);
                     setFinalText(suppressedText);
                     setFinalJustification("Dispositivo suprimido/revogado conforme análise técnica das contribuições recebidas. Mantida a numeração original com indicação expressa de supressão (Opção 2 - Preservação da Sequência).");
@@ -1024,11 +1037,11 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
                   <Ban size={12} className="text-rose-600" /> Marcar como (Suprimido) / (Revogado)
                 </button>
               </div>
-              {article.contentType === 'table' || isTableJson(finalText || article.proposedText || article.originalText) ? (
+              {article.contentType === 'table' || isTableJson(finalText || (article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText)) ? (
                 <div className="border border-indigo-100 rounded-xl p-3 bg-indigo-50/20">
                   <RegulatoryTableEditor 
-                    initialData={parseTableData(finalText || article.proposedText || article.originalText || "")}
-                    originalData={parseTableData(article.proposedText || article.originalText || "")}
+                    initialData={parseTableData(finalText || (article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText) || "")}
+                    originalData={parseTableData((article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText) || "")}
                     onChange={(table) => {
                       setFinalText(serializeTableData(table));
                     }}
@@ -1073,11 +1086,11 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
                 article.contentType === 'table' || isTableJson(article.finalText) ? (
                   <RegulatoryTableView 
                     data={article.finalText}
-                    originalData={article.proposedText || article.originalText}
+                    originalData={(article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText)}
                   />
                 ) : (
                   <div className={cn(
-                    "p-3 rounded-xl border text-xs font-medium whitespace-pre-wrap shadow-2xs",
+                    "p-3 rounded-xl border text-xs font-medium whitespace-pre-line shadow-2xs",
                     /\((?:suprimido|revogado)\)/i.test(article.finalText) 
                       ? "bg-rose-50/70 border-rose-200 text-rose-900 font-bold" 
                       : "bg-white border-indigo-100 text-indigo-950"
@@ -1097,7 +1110,7 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
             <div>
               <span className="block text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">Justificativa Técnica Final</span>
               {article.finalJustification ? (
-                <div className="bg-white p-3 rounded-xl border border-indigo-100 text-xs text-slate-700 whitespace-pre-wrap shadow-2xs">
+                <div className="bg-white p-3 rounded-xl border border-indigo-100 text-xs text-slate-700 whitespace-pre-line shadow-2xs">
                   {article.finalJustification}
                 </div>
               ) : (
@@ -1425,10 +1438,9 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     let maxNumber = 0;
     
     list.forEach(t => {
-      const tMeio = t.meioParticipacao || "Consulta Pública";
       const isTargetType = isTS 
-        ? (tMeio === "Tomada de Subsídios" || (t.numero && t.numero.trim().toUpperCase().startsWith("TS")))
-        : (tMeio === "Consulta Pública" || (t.numero && t.numero.trim().toUpperCase().startsWith("CP")));
+        ? (t.numero && t.numero.trim().toUpperCase().startsWith("TS"))
+        : (t.numero && t.numero.trim().toUpperCase().startsWith("CP"));
       
       if (isTargetType && t.numero) {
         const match = t.numero.match(/(?:CP|TS)?\s*(\d+)\s*\/\s*(\d{4})/i);
@@ -1747,7 +1759,9 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [duplicateModalTomada, setDuplicateModalTomada] = useState<TomadaSubsidio | null>(null);
   const [duplicateArticles, setDuplicateArticles] = useState<Article[]>([]);
   const [duplicateSelectedArticles, setDuplicateSelectedArticles] = useState<string[]>([]);
-  const [duplicateMode, setDuplicateMode] = useState<"proposed" | "final">("proposed");
+    const [duplicateMode, setDuplicateMode] = useState<"proposed" | "final" | "none">("proposed");
+  const [duplicateCopyAnexos, setDuplicateCopyAnexos] = useState<boolean>(true);
+  const [duplicateCopySubjects, setDuplicateCopySubjects] = useState<boolean>(true);
   
   // Delete Confirmation Modal State (Safe for Sandboxed iFrames)
   const [deletingTomada, setDeletingTomada] = useState<TomadaSubsidio | null>(null);
@@ -2353,23 +2367,37 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     }
   };
 
-  const handleConfirmDuplicate = async () => {
+    const handleConfirmDuplicate = async () => {
     if (!duplicateModalTomada) return;
     setIsDuplicating(true);
     
     const autoNumero = getNextSequentialNumber(duplicateModalTomada.meioParticipacao || "Consulta Pública", tomadas);
     
-    const duplicateArticlesData = duplicateArticles
-      .filter(a => duplicateSelectedArticles.includes(String(a.id)))
-      .map(a => {
-        return {
-          ...a,
-          id: crypto.randomUUID(),
-          tomadaId: "",
-          proposedText: duplicateMode === "final" && a.finalText ? a.finalText : a.proposedText,
-          finalText: "", 
-        };
-      });
+    let duplicateArticlesData = [];
+    if (duplicateMode !== "none") {
+      duplicateArticlesData = duplicateArticles
+        .filter(a => duplicateSelectedArticles.includes(String(a.id)))
+        .map(a => {
+          let newProposedText = a.proposedText;
+          
+          if (duplicateMode === "proposed") {
+             // "Minuta com Propostas Finais": o texto final vira o novo texto proposto
+             newProposedText = a.finalText ? a.finalText : a.proposedText;
+          } else if (duplicateMode === "final") {
+             // "Minuta Original (Base)": mantém o texto proposto que já existia (foca na base)
+             newProposedText = a.proposedText;
+          }
+
+          return {
+            ...a,
+            id: crypto.randomUUID(),
+            tomadaId: "",
+            proposedText: newProposedText,
+            finalText: "", 
+            contributions: [], 
+          };
+        });
+    }
 
     const newTomada = {
       id: crypto.randomUUID(),
@@ -2381,13 +2409,12 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       dataInicio: new Date().toISOString().split('T')[0],
       dataFim: new Date().toISOString().split('T')[0],
       createdAt: new Date().toISOString(),
-      subjects: formData.subjects || [],
-      anexos: duplicateModalTomada.anexos ? [...duplicateModalTomada.anexos] : [],
+      subjects: duplicateCopySubjects ? (duplicateModalTomada.subjects || []) : [],
+      anexos: (duplicateCopyAnexos && duplicateModalTomada.anexos) ? [...duplicateModalTomada.anexos] : [],
       articles: duplicateArticlesData
     };
 
     newTomada.articles = newTomada.articles.map((a: any) => ({ ...a, tomadaId: newTomada.id }));
-
     try {
       const res = await fetch('/api/reg/tomadas', {
         method: 'POST',
@@ -2801,14 +2828,12 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               Comparativo: Texto Proposto em Consulta (Minuta) × Texto da Contribuição Sugerida
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold">
-            <span className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-950 border border-emerald-300 px-2 py-0.5 rounded shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0"></span>
-              [+ Inserido pelo Cidadão]
+          <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-600">
+            <span className="text-emerald-700 underline decoration-2 decoration-emerald-500/50 underline-offset-2">
+              [+ Texto Inserido]
             </span>
-            <span className="inline-flex items-center gap-1.5 bg-rose-100 text-rose-950 border border-rose-300 px-2 py-0.5 rounded line-through decoration-rose-600 shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-rose-600 shrink-0"></span>
-              [- Excluído da Minuta]
+            <span className="text-rose-500/80 line-through decoration-rose-500/80">
+              [- Texto Excluído]
             </span>
           </div>
         </div>
@@ -2823,7 +2848,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               </span>
             </div>
             <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs h-full">
-              <div className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">
+              <div className="text-sm text-slate-700 font-medium leading-relaxed break-words">
                 {baseText || <span className="text-slate-400 italic">Nenhum texto base definido.</span>}
               </div>
             </div>
@@ -2842,13 +2867,13 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                   Redação idêntica ao texto proposto da minuta (nenhuma alteração textual detectada).
                 </div>
               ) : (
-                <div className="text-sm text-slate-800 font-medium leading-relaxed whitespace-pre-wrap">
+                <div className="text-sm text-slate-800 font-medium leading-relaxed break-words">
                   {diffParts.map((part, pIdx) => {
                     if (part.added) {
                       return (
                         <span
                           key={pIdx}
-                          className="bg-emerald-100 text-emerald-950 font-bold px-1.5 py-0.5 rounded mx-0.5 border border-emerald-300 shadow-2xs inline-block my-0.5"
+                          className="text-emerald-700 font-semibold underline decoration-2 decoration-emerald-500/50 underline-offset-2"
                           title="Texto inserido na sua proposta"
                         >
                           {part.value}
@@ -2859,7 +2884,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       return (
                         <span
                           key={pIdx}
-                          className="bg-rose-100 text-rose-900 line-through decoration-rose-600 font-semibold px-1.5 py-0.5 rounded mx-0.5 border border-rose-300 shadow-2xs inline-block my-0.5"
+                          className="text-rose-500/80 line-through decoration-rose-500/80 font-medium"
                           title="Texto excluído na sua proposta"
                         >
                           {part.value}
@@ -2892,11 +2917,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       <div className="text-sm mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
           <strong className="text-slate-500 block mb-2 text-[10px] uppercase tracking-wider">Texto Atual (Vigente)</strong>
-          <div className="text-slate-500 whitespace-pre-wrap">{original}</div>
+          <div className="text-slate-500 whitespace-pre-line">{original}</div>
         </div>
         <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-4">
           <strong className="text-indigo-600 block mb-2 text-[10px] uppercase tracking-wider">Proposta da Área Técnica</strong>
-          <div className="text-slate-800 font-medium whitespace-pre-wrap">
+          <div className="text-slate-800 font-medium whitespace-pre-line">
             {diffResult.map((part, index) => {
               if (part.removed) {
                 return (
@@ -2907,7 +2932,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               }
               if (part.added) {
                 return (
-                  <span key={index} className="text-emerald-700 font-bold bg-emerald-100/50">
+                  <span key={index} className="text-emerald-700 font-semibold underline decoration-2 decoration-emerald-500/50 underline-offset-2 break-words">
                     {part.value}
                   </span>
                 );
@@ -2935,11 +2960,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       <div className="text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 mt-2 grid grid-cols-2 gap-4">
         <div>
           <strong className="text-rose-600 block mb-1 text-xs">Texto Original:</strong>
-          <div className="text-slate-500 whitespace-pre-wrap">{original}</div>
+          <div className="text-slate-500 whitespace-pre-line">{original}</div>
         </div>
         <div>
           <strong className="text-emerald-600 block mb-1 text-xs">Texto da Contribuição:</strong>
-          <div className="text-slate-800 font-medium whitespace-pre-wrap">
+          <div className="text-slate-800 font-medium whitespace-pre-line">
             {diffResult.map((part, index) => {
               if (part.removed) {
                 return (
@@ -2950,7 +2975,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               }
               if (part.added) {
                 return (
-                  <span key={index} className="text-emerald-600 font-bold">
+                  <span key={index} className="text-emerald-700 font-semibold underline decoration-2 decoration-emerald-500/50 underline-offset-2 break-words">
                     {part.value}
                   </span>
                 );
@@ -3259,7 +3284,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                   <p className="text-xs text-slate-400 mb-2">Cole o texto do SEI ou do Word, ou carregue do arquivo acima. O sistema identificará os artigos automaticamente.</p>
                   <textarea 
                     rows={15}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-700 transition-all whitespace-pre-wrap"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-700 transition-all whitespace-pre-line"
                     placeholder="Art. 1º Esta Norma de Referência estabelece..."
                     value={formData.rawText}
                     onChange={e => setFormData({ ...formData, rawText: e.target.value })}
@@ -3341,7 +3366,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               </div>
               {(previewArticles || []).map((art, i) => {
                 const isMissingOriginal = isAlteracao && (!art.originalText || !art.originalText.trim());
-                const dInfo = getDispositivoInfo(art.proposedText || art.originalText || "", i + 1);
+                const dInfo = getDispositivoInfo((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "", i + 1);
 
                 return (
                   <div 
@@ -3432,8 +3457,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             onClick={() => {
                               const newArts = [...(previewArticles || [])];
                               newArts[i].contentType = 'table';
-                              if (!isTableJson(art.proposedText || art.originalText)) {
-                                const parsedT = parseTableData(art.proposedText || art.originalText || "Item\tDescrição\tValor\n1\tTarifa Base\t100,00");
+                              if (!isTableJson((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText))) {
+                                const parsedT = parseTableData((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "Item\tDescrição\tValor\n1\tTarifa Base\t100,00");
                                 newArts[i].proposedText = serializeTableData(parsedT);
                               }
                               setPreviewArticles(newArts);
@@ -3489,7 +3514,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             )}
                           </div>
                           <RegulatoryTableEditor
-                            initialData={parseTableData(art.proposedText || art.originalText || "")}
+                            initialData={parseTableData((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "")}
                             originalData={isAlteracao && art.originalText ? parseTableData(art.originalText) : undefined}
                             onChange={(table) => {
                               const newArts = [...(previewArticles || [])];
@@ -3525,7 +3550,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             </div>
                             <textarea 
                               className={cn(
-                                "w-full bg-white border rounded-lg p-3 resize-y text-sm font-medium whitespace-pre-wrap transition-all outline-none",
+                                "w-full bg-white border rounded-lg p-3 resize-y text-sm font-medium whitespace-pre-line transition-all outline-none",
                                 isMissingOriginal 
                                   ? "border-amber-400 focus:ring-2 focus:ring-amber-300 text-slate-700 bg-amber-50/20" 
                                   : "border-slate-200 focus:ring-2 focus:ring-slate-400 text-slate-600"
@@ -3536,7 +3561,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                 newArts[i].originalText = e.target.value;
                                 setPreviewArticles(newArts);
                               }}
-                              rows={Math.max(12, (art.proposedText || art.originalText || "").split('\n').length)}
+                              rows={Math.max(12, ((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "").split('\n').length)}
                               placeholder="Insira o texto atual vigente deste dispositivo (obrigatório)..."
                             />
                             {isMissingOriginal && (
@@ -3549,14 +3574,14 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         <div>
                           <label className="block text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-1">Texto Proposto (Área Técnica)</label>
                           <textarea 
-                            className="w-full bg-white border border-indigo-200 rounded-lg p-3 resize-y focus:ring-2 focus:ring-indigo-600 text-sm font-medium text-slate-800 whitespace-pre-wrap outline-none"
-                            value={art.proposedText !== undefined ? art.proposedText : art.originalText}
+                            className="w-full bg-white border border-indigo-200 rounded-lg p-3 resize-y focus:ring-2 focus:ring-indigo-600 text-sm font-medium text-slate-800 whitespace-pre-line outline-none"
+                            value={art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : (art.originalText || "")}
                             onChange={e => {
                               const newArts = [...(previewArticles || [])];
                               newArts[i].proposedText = e.target.value;
                               setPreviewArticles(newArts);
                             }}
-                            rows={Math.max(12, (art.proposedText || art.originalText || "").split('\n').length)}
+                            rows={Math.max(12, ((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "").split('\n').length)}
                           />
                         </div>
                       </div>
@@ -3605,13 +3630,13 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
         // Sheet 1: Quadro Consolidado
         const consolidadoRows = currentArticles.map((art, idx) => {
           const isOriginalTable = art.contentType === 'table' || isTableJson(art.originalText);
-          const isPropostaTable = art.contentType === 'table' || isTableJson(art.proposedText || art.originalText);
+          const isPropostaTable = art.contentType === 'table' || isTableJson((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText));
           const isTableFinal = art.contentType === 'table' || isTableJson(art.finalText);
           const cArt = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
           const a = cArt.filter(c => c.decision === "Acatada" || c.decision === "Acatada Parcialmente").length;
           const na = cArt.filter(c => c.decision === "Não Acatada" || c.decision === "Prejudicada" || c.decision === "Retida para Estudos Adicionais").length;
           const pend = cArt.filter(c => !c.decision).length;
-          const origText = art.proposedText || art.originalText || "";
+          const origText = (art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "";
           const fText = art.finalText || origText;
           const isAlterada = fText.trim() !== origText.trim();
 
@@ -3637,8 +3662,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
         const contribuicoesRows: any[] = [];
         currentArticles.forEach((art, idx) => {
           const isOriginalTable = art.contentType === 'table' || isTableJson(art.originalText);
-          const isPropostaTable = art.contentType === 'table' || isTableJson(art.proposedText || art.originalText);
-          const origText = art.proposedText || art.originalText || "";
+          const isPropostaTable = art.contentType === 'table' || isTableJson((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText));
+          const origText = (art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "";
           const cArt = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
           cArt.forEach(c => {
             const isTableContrib = art.contentType === 'table' || isTableJson(c.proposedText) || isTableJson(origText);
@@ -3649,7 +3674,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
             if (selectedTomada.tipoResolucao === "alteracao") {
               row["Texto Atual (Vigente)"] = formatContentForExport(art.originalText, false, isOriginalTable) || "Sem texto original cadastrado";
             }
-            row["Texto Proposto em Consulta (Minuta)"] = formatContentForExport(art.proposedText || art.originalText || "", false, isPropostaTable);
+            row["Texto Proposto em Consulta (Minuta)"] = formatContentForExport((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "", false, isPropostaTable);
             row["Participante"] = c.authorName;
             row["E-mail do Participante"] = c.authorEmail || "";
             row["Data da Contribuição"] = formatDateBr(c.createdAt);
@@ -3706,7 +3731,25 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
       }
     };
 
-    const handleExportConsolidadoPDF = () => {
+    
+  const renderDiffForPdf = (oldText: string, newText: string, isTableContext: boolean) => {
+    if (isTableContext || isTableJson(oldText) || isTableJson(newText)) {
+      return formatContentForPdf(newText, false, true, oldText);
+    }
+    const diffParts = getSmartDiff(oldText || "", newText || "");
+    const escapeHtml = (unsafe: string) => {
+      return (unsafe || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    };
+    return `<div style="white-space: pre-wrap; font-family: inherit; font-size: 11px; line-height: 1.4;">` +
+      diffParts.map(part => {
+        if (part.added) return `<span style="color: #047857; font-weight: 600; text-decoration: underline; text-decoration-color: rgba(16, 185, 129, 0.5); text-decoration-thickness: 2px;">${escapeHtml(part.value)}</span>`;
+        if (part.removed) return `<span style="color: rgba(244, 63, 94, 0.8); font-weight: 500; text-decoration: line-through; text-decoration-color: rgba(244, 63, 94, 0.8);">${escapeHtml(part.value)}</span>`;
+        return escapeHtml(part.value);
+      }).join('') +
+    `</div>`;
+  };
+
+  const handleExportConsolidadoPDF = () => {
       try {
         const printWindow = window.open('', '_blank');
         if (!printWindow) {
@@ -3760,9 +3803,9 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
         currentArticles.forEach((art, idx) => {
           const isOriginalTable = art.contentType === 'table' || isTableJson(art.originalText);
-          const isPropostaTable = art.contentType === 'table' || isTableJson(art.proposedText || art.originalText);
+          const isPropostaTable = art.contentType === 'table' || isTableJson((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText));
           const isTableFinal = art.contentType === 'table' || isTableJson(art.finalText);
-          const origText = art.proposedText || art.originalText || "";
+          const origText = (art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "";
           const fText = art.finalText || origText;
 
           const cArt = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
@@ -3770,9 +3813,9 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           const na = cArt.filter(c => c.decision === "Não Acatada" || c.decision === "Prejudicada" || c.decision === "Retida para Estudos Adicionais").length;
           const pend = cArt.filter(c => !c.decision).length;
           
-          const origTextHtml = formatContentForPdf(origText, false, isPropostaTable);
+          const origTextHtml = selectedTomada.tipoResolucao === "alteracao" ? renderDiffForPdf(art.originalText || "", origText, isPropostaTable) : formatContentForPdf(origText, false, isPropostaTable);
           const origTextVigenteHtml = formatContentForPdf(art.originalText || "Sem texto original cadastrado", false, isOriginalTable);
-          const fTextHtml = formatContentForPdf(fText, false, isTableFinal, origText);
+          const fTextHtml = renderDiffForPdf(origText, fText, isTableFinal);
           const fJust = escapeHtml(art.finalJustification || "-");
           
           html += `
@@ -3854,7 +3897,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           
           <div>
             <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Objeto</span>
-            <p className="text-sm font-medium text-slate-700 whitespace-pre-wrap">{selectedTomada.objeto}</p>
+            <p className="text-sm font-medium text-slate-700 whitespace-pre-line">{selectedTomada.objeto}</p>
           </div>
 
           {selectedTomada.anexos && selectedTomada.anexos.length > 0 && (
@@ -4032,7 +4075,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               const isExpanded = !!expandedUserContribs[String(art.id)];
               const actualArtIdx = currentArticles.findIndex(a => String(a.id) === String(art.id));
               const displayIdx = actualArtIdx >= 0 ? actualArtIdx + 1 : artIdx + 1;
-              const dispInfo = getDispositivoInfo(art.proposedText || art.originalText || "", displayIdx);
+              const dispInfo = getDispositivoInfo((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "", displayIdx);
 
               return (
                 <div 
@@ -4121,7 +4164,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           <RegulatoryTableView data={art.originalText} />
                         ) : (
                           <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 shadow-2xs">
-                            <div className="text-sm font-medium text-slate-600 whitespace-pre-wrap leading-relaxed">
+                            <div className="text-sm font-medium text-slate-600 whitespace-pre-line leading-relaxed">
                               {art.originalText}
                             </div>
                           </div>
@@ -4132,17 +4175,32 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                     <div className="mb-4 mt-4">
                       <div className="flex items-center gap-2 mb-3">
                         <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
-                          {art.contentType === 'table' || isTableJson(art.proposedText || art.originalText) ? "Tabela Proposta em Consulta (Minuta)" : "Texto Proposto em Consulta (Minuta)"}
+                          {art.contentType === 'table' || isTableJson((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText)) ? "Tabela Proposta em Consulta (Minuta)" : "Texto Proposto em Consulta (Minuta)"}
                         </span>
+                        {selectedTomada.tipoResolucao === "alteracao" && art.originalText && (art.proposedText === undefined || art.proposedText === null || art.originalText === art.proposedText) && (
+                          <span className="inline-flex items-center gap-1.5 bg-yellow-100 text-yellow-800 border border-yellow-300 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded">
+                            <AlertTriangle size={12} className="shrink-0" /> Texto proposto é igual ao texto atual
+                          </span>
+                        )}
+                        {selectedTomada.tipoResolucao === "alteracao" && !art.originalText && (
+                          <span className="inline-flex items-center gap-1.5 bg-indigo-100 text-indigo-800 border border-indigo-300 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded">
+                            <Plus size={12} className="shrink-0" /> Novo Dispositivo
+                          </span>
+                        )}
+                        {selectedTomada.tipoResolucao === "alteracao" && art.originalText && art.proposedText === "" && (
+                          <span className="inline-flex items-center gap-1.5 bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded">
+                            Revogação do Dispositivo Proposta
+                          </span>
+                        )}
                       </div>
-                      {art.contentType === 'table' || isTableJson(art.proposedText || art.originalText) ? (
+                      {art.contentType === 'table' || isTableJson((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText)) ? (
                         <RegulatoryTableView 
-                          data={art.proposedText || art.originalText}
+                          data={(art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText)}
                           originalData={selectedTomada.tipoResolucao === "alteracao" && art.originalText ? art.originalText : undefined}
                         />
                       ) : (
                         <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-4 shadow-2xs">
-                          <div className="text-sm font-medium text-slate-800 whitespace-pre-wrap leading-relaxed">
+                          <div className="text-sm font-medium text-slate-800 whitespace-pre-line leading-relaxed">
                             {selectedTomada.tipoResolucao === "alteracao" && art.originalText
                               ? renderDiffInline(art.originalText, art.proposedText, art.contentType)
                               : (art.proposedText !== undefined ? art.proposedText : art.originalText)}
@@ -4209,7 +4267,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                   Justificativa Técnica / Motivação
                                 </span>
                                 <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs">
-                                  <p className="text-xs text-slate-700 italic whitespace-pre-wrap leading-relaxed">
+                                  <p className="text-xs text-slate-700 italic whitespace-pre-line leading-relaxed">
                                     "{uContrib.justification}"
                                   </p>
                                 </div>
@@ -4496,7 +4554,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           <div className="flex items-center justify-between gap-4 flex-wrap mb-3">
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
-                                {art.contentType === 'table' || isTableJson(art.proposedText || art.originalText) ? "Matriz da Contribuição Sugerida" : "Texto da Contribuição Sugerida"}
+                                {art.contentType === 'table' || isTableJson((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText)) ? "Matriz da Contribuição Sugerida" : "Texto da Contribuição Sugerida"}
                               </span>
                             </div>
                             <div className="flex items-center gap-2 bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-200 shadow-sm">
@@ -4516,15 +4574,15 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             </div>
                           </div>
 
-                          {art.contentType === 'table' || isTableJson(art.proposedText || art.originalText) ? (
+                          {art.contentType === 'table' || isTableJson((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText)) ? (
                             isSuppressing ? (
                               <div className="p-4 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-400 italic">
                                 Tabela suprimida integralmente na proposta.
                               </div>
                             ) : (
                               <RegulatoryTableEditor
-                                initialData={parseTableData(proposedText || art.proposedText || art.originalText || "")}
-                                originalData={parseTableData(art.proposedText || art.originalText || "")}
+                                initialData={parseTableData(proposedText || (art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "")}
+                                originalData={parseTableData((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "")}
                                 isContributionMode={true}
                                 onChange={(table) => {
                                   setProposedText(serializeTableData(table));
@@ -4772,7 +4830,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           row["Técnico Cadastrador"] = c.registeredByName || "-";
                           row["Parecer"] = c.decision || "Aguardando Análise";
                           row["Justificativa Técnica"] = c.technicalJustification || originalArticle?.finalJustification || "";
-                          row["Texto Final do Dispositivo"] = formatContentForExport(originalArticle?.finalText || originalArticle?.proposedText || originalArticle?.originalText || "", false, isTableFinal);
+                          row["Texto Final do Dispositivo"] = formatContentForExport(originalArticle?.finalText || (originalArticle?.proposedText !== undefined && originalArticle?.proposedText !== null ? originalArticle.proposedText : originalArticle?.originalText) || "", false, isTableFinal);
                           return row;
                       });
 
@@ -4866,11 +4924,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           
                           const dataStr = escapeHtml(formatDateBr(c.createdAt));
                           const vigStr = formatContentForPdf(originalArticle?.originalText || "Sem texto original cadastrado", false, isOriginalTable);
-                          const minStr = formatContentForPdf(originalArticle?.proposedText !== undefined ? originalArticle.proposedText : (originalArticle?.originalText || ""), false, isPropostaTable);
+                          const minStr = selectedTomada?.tipoResolucao === "alteracao" ? renderDiffForPdf(originalArticle?.originalText || "", originalArticle?.proposedText !== undefined ? originalArticle.proposedText : (originalArticle?.originalText || ""), isPropostaTable) : formatContentForPdf(originalArticle?.proposedText !== undefined ? originalArticle.proposedText : (originalArticle?.originalText || ""), false, isPropostaTable);
                           
                           let sugStr = "";
                           if (isTableContrib) {
-                            sugStr = formatContentForPdf(c.proposedText || originalText, isSuppressingContrib, true, originalText);
+                            sugStr = formatContentForPdf((c.proposedText !== undefined && c.proposedText !== null ? c.proposedText : originalText), isSuppressingContrib, true, originalText);
                           } else if (isSuppressingContrib) {
                             sugStr = formatContentForPdf("", true, false, originalText);
                           } else {
@@ -4878,7 +4936,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             sugStr = `<div style="white-space: pre-wrap; font-family: inherit; font-size: 11px; line-height: 1.4;">` +
                               diffParts.map(part => {
                                 if (part.added) {
-                                  return `<span style="background-color: #d1fae5; color: #064e3b; font-weight: bold; padding: 1px 4px; border-radius: 3px; border: 1px solid #6ee7b7; margin: 0 1px;">${escapeHtml(part.value)}</span>`;
+                                  return `<span style="color: #047857; font-weight: 600; text-decoration: underline; text-decoration-color: rgba(16, 185, 129, 0.5); text-decoration-thickness: 2px;">${escapeHtml(part.value)}</span>`;
                                 }
                                 if (part.removed) {
                                   return `<span style="background-color: #ffe4e6; color: #881337; text-decoration: line-through; padding: 1px 4px; border-radius: 3px; border: 1px solid #fda4af; margin: 0 1px;">${escapeHtml(part.value)}</span>`;
@@ -4892,7 +4950,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           const partStr = escapeHtml(c.authorName || "");
                           const parStr = escapeHtml(c.decision || "Aguardando Análise");
                           const jTechStr = escapeHtml(c.technicalJustification || originalArticle?.finalJustification || "");
-                          const finStr = formatContentForPdf(originalArticle?.finalText || originalArticle?.proposedText || originalArticle?.originalText || "", false, isTableFinal, originalText);
+                          const finStr = renderDiffForPdf(originalArticle?.proposedText !== undefined ? originalArticle.proposedText : (originalArticle?.originalText || ""), originalArticle?.finalText || (originalArticle?.proposedText !== undefined && originalArticle?.proposedText !== null ? originalArticle.proposedText : originalArticle?.originalText) || "", isTableFinal);
 
                           html += `
                           <tr>
@@ -5439,7 +5497,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                       buttonText="Ver Tabela Atual"
                                     />
                                   ) : (
-                                    <div className="whitespace-pre-wrap">
+                                    <div className="whitespace-pre-line">
                                       {originalArticle?.originalText || <span className="text-slate-400 italic">Sem texto original cadastrado</span>}
                                     </div>
                                   )}
@@ -5462,7 +5520,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                       buttonText="Ver Tabela da Minuta"
                                     />
                                   ) : (
-                                    <div className="text-slate-700 whitespace-pre-wrap leading-relaxed font-normal">
+                                    <div className="text-slate-700 whitespace-pre-line leading-relaxed font-normal">
                                       {selectedTomada?.tipoResolucao === "alteracao" && originalArticle?.originalText
                                         ? renderDiffInline(originalArticle.originalText, originalArticle.proposedText, originalArticle?.contentType)
                                         : originalText}
@@ -5480,27 +5538,27 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                       </div>
                                     ) : (
                                       <TableModalPreview 
-                                        data={c.proposedText || originalText}
+                                        data={(c.proposedText !== undefined && c.proposedText !== null ? c.proposedText : originalText)}
                                         originalData={originalText && originalText !== c.proposedText ? originalText : undefined}
                                         variant="contribuicao"
                                         badgeLabel="Sugestão"
-                                        title={parseTableData(c.proposedText || originalText).title || `Sugestão de Tabela - Disp. #${artIndex !== -1 ? artIndex + 1 : "?"}`}
+                                        title={parseTableData((c.proposedText !== undefined && c.proposedText !== null ? c.proposedText : originalText)).title || `Sugestão de Tabela - Disp. #${artIndex !== -1 ? artIndex + 1 : "?"}`}
                                         buttonText="Ver Sugestão & Destaques"
                                       />
                                     )
                                   ) : (
-                                    <div className="text-slate-800 font-medium whitespace-pre-wrap leading-relaxed">
+                                    <div className="text-slate-800 font-medium whitespace-pre-line leading-relaxed">
                                       {diffResult.map((part, index) => {
                                         if (part.added) {
                                           return (
-                                            <span key={index} className="text-emerald-950 font-bold bg-emerald-100 border border-emerald-300 px-1 py-0.5 rounded mx-0.5 inline-block">
+                                            <span key={index} className="text-emerald-700 font-semibold underline decoration-2 decoration-emerald-500/50 underline-offset-2 break-words">
                                               {part.value}
                                             </span>
                                           )
                                         }
                                         if (part.removed) {
                                           return (
-                                            <span key={index} className="text-rose-950 bg-rose-100 border border-rose-300 px-1 py-0.5 rounded line-through decoration-rose-600 mx-0.5 inline-block font-medium">
+                                            <span key={index} className="text-rose-950 bg-rose-100 border border-rose-300 px-1 py-0.5 rounded line-through decoration-rose-600  inline-block font-medium">
                                               {part.value}
                                             </span>
                                           )
@@ -5512,7 +5570,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                 </td>
                               )}
                               {!contributionsHiddenCols.justificativa && (
-                                <td className="px-4 py-4 text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                <td className="px-4 py-4 text-xs text-slate-700 whitespace-pre-line leading-relaxed">
                                   {c.justification}
                                 </td>
                               )}
@@ -5592,7 +5650,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                               {!contributionsHiddenCols.justificativa_tecnica && (
                                 <td className="px-4 py-4 text-xs">
                                   {(c.technicalJustification || originalArticle?.finalJustification) ? (
-                                    <div className="text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                    <div className="text-slate-700 whitespace-pre-line leading-relaxed">
                                       {c.technicalJustification || originalArticle?.finalJustification}
                                     </div>
                                   ) : (
@@ -5613,13 +5671,13 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                         buttonText="Ver Tabela Final"
                                       />
                                     ) : (
-                                      <div className="text-slate-800 font-medium whitespace-pre-wrap leading-relaxed bg-indigo-50/30 p-2.5 rounded-lg border border-indigo-100/60">
+                                      <div className="text-slate-800 font-medium whitespace-pre-line leading-relaxed bg-indigo-50/30 p-2.5 rounded-lg border border-indigo-100/60">
                                         {finalDiffParts.map((part, pIdx) => {
                                           if (part.added) {
-                                            return <span key={pIdx} className="bg-emerald-100 text-emerald-950 font-bold px-1 rounded mx-0.5 border border-emerald-300">{part.value}</span>;
+                                            return <span key={pIdx} className="text-emerald-700 font-semibold underline decoration-2 decoration-emerald-500/50 underline-offset-2 break-words">{part.value}</span>;
                                           }
                                           if (part.removed) {
-                                            return <span key={pIdx} className="bg-rose-100 text-rose-950 px-1 rounded mx-0.5 line-through decoration-rose-500 border border-rose-300">{part.value}</span>;
+                                            return <span key={pIdx} className="text-rose-500/80 line-through decoration-rose-500/80 font-medium break-words">{part.value}</span>;
                                           }
                                           return <span key={pIdx}>{part.value}</span>;
                                         })}
@@ -6790,8 +6848,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             const a = cArt.filter(c => c.decision === "Acatada" || c.decision === "Acatada Parcialmente").length;
                             const na = cArt.filter(c => c.decision === "Não Acatada" || c.decision === "Prejudicada" || c.decision === "Retida para Estudos Adicionais").length;
                             
-                            const origText = art.proposedText || art.originalText || "";
-                            const isTableArt = art.contentType === 'table' || isTableJson(art.proposedText || art.originalText);
+                            const origText = (art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "";
+                            const isTableArt = art.contentType === 'table' || isTableJson((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText));
                             const isTableFinal = art.contentType === 'table' || isTableJson(art.finalText);
                             const fText = art.finalText || origText;
                             const diffParts = !isTableFinal ? getSmartDiff(origText, fText) : [];
@@ -6826,7 +6884,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                           buttonText="Ver Tabela Atual"
                                         />
                                       ) : (
-                                        <div className="whitespace-pre-wrap">
+                                        <div className="whitespace-pre-line">
                                           {art.originalText || <span className="text-slate-400 italic">Sem texto original cadastrado</span>}
                                         </div>
                                       )}
@@ -6844,7 +6902,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                           buttonText="Ver Tabela da Minuta"
                                         />
                                       ) : (
-                                        <div className="whitespace-pre-wrap">
+                                        <div className="whitespace-pre-line">
                                           {selectedTomada?.tipoResolucao === "alteracao" && art.originalText
                                             ? renderDiffInline(art.originalText, art.proposedText, art.contentType)
                                             : origText}
@@ -6865,13 +6923,13 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                             buttonText="Ver Tabela Final"
                                           />
                                         ) : (
-                                          <div className="whitespace-pre-wrap">
+                                          <div className="whitespace-pre-line">
                                             {diffParts.map((part, pIdx) => {
                                               if (part.added) {
-                                                return <span key={pIdx} className="bg-emerald-100 text-emerald-950 font-bold px-1 rounded mx-0.5 border border-emerald-300">{part.value}</span>;
+                                                return <span key={pIdx} className="text-emerald-700 font-semibold underline decoration-2 decoration-emerald-500/50 underline-offset-2 break-words">{part.value}</span>;
                                               }
                                               if (part.removed) {
-                                                return <span key={pIdx} className="bg-rose-100 text-rose-950 px-1 rounded mx-0.5 line-through decoration-rose-500 border border-rose-300">{part.value}</span>;
+                                                return <span key={pIdx} className="text-rose-500/80 line-through decoration-rose-500/80 font-medium break-words">{part.value}</span>;
                                               }
                                               return <span key={pIdx}>{part.value}</span>;
                                             })}
@@ -6883,7 +6941,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                     </td>
                                   )}
                                   {!consolidadoHiddenCols.justificativa && (
-                                    <td className="px-4 py-4 text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">
+                                    <td className="px-4 py-4 text-xs text-slate-600 whitespace-pre-line leading-relaxed">
                                       {art.finalJustification ? (
                                         art.finalJustification
                                       ) : (
@@ -6933,7 +6991,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                                 <div className="flex items-center justify-between px-4 py-3 bg-slate-50/50 border-b border-slate-200">
                                                   <div className="flex items-center gap-2">
                                                     <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">
-                                                      {c.authorName.charAt(0).toUpperCase()}
+                                                      {(c.authorName || "P").charAt(0).toUpperCase()}
                                                     </div>
                                                     <span className="text-sm font-bold text-slate-700">{c.authorName}</span>
                                                   </div>
@@ -6971,13 +7029,13 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                                         />
                                                       )
                                                     ) : (
-                                                      <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                                      <div className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
                                                         {(() => {
-                                                          const cOrigText = art.proposedText || art.originalText || "";
+                                                          const cOrigText = (art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "";
                                                           const cDiffParts = getSmartDiff(cOrigText, c.proposedText || "");
                                                           return cDiffParts.map((part, i) => (
-                                                            part.added ? <span key={i} className="bg-emerald-100 text-emerald-950 font-bold px-1 rounded mx-0.5 border border-emerald-300">{part.value}</span> :
-                                                            part.removed ? <span key={i} className="bg-rose-100 text-rose-950 px-1 rounded mx-0.5 line-through decoration-rose-500 border border-rose-300">{part.value}</span> :
+                                                            part.added ? <span key={i} className="text-emerald-700 font-semibold underline decoration-2 decoration-emerald-500/50 underline-offset-2 break-words">{part.value}</span> :
+                                                            part.removed ? <span key={i} className="text-rose-500/80 line-through decoration-rose-500/80 font-medium break-words">{part.value}</span> :
                                                             <span key={i}>{part.value}</span>
                                                           ));
                                                         })()}
@@ -6987,11 +7045,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                                   <div className="p-4 bg-slate-50/50 flex flex-col gap-4">
                                                     <div>
                                                       <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Justificativa do Participante</span>
-                                                      <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">{c.justification}</p>
+                                                      <p className="text-sm text-slate-600 whitespace-pre-line leading-relaxed">{c.justification}</p>
                                                     </div>
                                                     <div className="pt-4 border-t border-slate-200">
                                                       <span className="block text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1.5">Justificativa Técnica (Resposta)</span>
-                                                      <div className="bg-white p-3 rounded-xl border border-slate-200 text-sm text-slate-700 min-h-[60px] whitespace-pre-wrap leading-relaxed">
+                                                      <div className="bg-white p-3 rounded-xl border border-slate-200 text-sm text-slate-700 min-h-[60px] whitespace-pre-line leading-relaxed">
                                                         {c.technicalJustification || <span className="text-slate-400 italic">Nenhuma justificativa técnica inserida.</span>}
                                                       </div>
                                                     </div>
@@ -7406,13 +7464,13 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
               // 7.1 Separate text articles from table articles
               const textArticlesWithFinalText = articlesWithFinalText.filter(art => 
-                art.contentType !== 'table' && art.contentType !== 'ementa' && art.contentType !== 'considerandos' && !isTableJson(art.finalText || art.proposedText || art.originalText)
+                art.contentType !== 'table' && art.contentType !== 'ementa' && art.contentType !== 'considerandos' && !isTableJson(art.finalText || (art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText))
               );
               
               const ementaArticlesFinal = articlesWithFinalText.filter(art => art.contentType === 'ementa');
               const considerandosArticlesFinal = articlesWithFinalText.filter(art => art.contentType === 'considerandos');
               const tableArticlesWithFinalText = articlesWithFinalText.filter(art => 
-                art.contentType === 'table' || isTableJson(art.finalText || art.proposedText || art.originalText)
+                art.contentType === 'table' || isTableJson(art.finalText || (art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText))
               );
               const tableInfos = tableArticlesWithFinalText.map((art, idx) => getTableArticleInfo(art, idx));
 
@@ -9054,7 +9112,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       <select
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-700 transition-all font-medium text-slate-700 cursor-pointer"
                         value={editFormData.meioParticipacao}
-                        onChange={(e) => setEditFormData({ ...editFormData, meioParticipacao: e.target.value })}
+                        onChange={(e) => {
+                          const newMeio = e.target.value;
+                          const newNumero = getNextSequentialNumber(newMeio, tomadas);
+                          setEditFormData({ ...editFormData, meioParticipacao: newMeio, numero: newNumero });
+                        }}
                       >
                         <option value="Consulta Pública">Consulta Pública (CP)</option>
                         <option value="Tomada de Subsídios">Tomada de Subsídios (TS)</option>
@@ -9416,6 +9478,337 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 className="px-8 py-2.5 bg-slate-800 text-white font-bold uppercase text-xs tracking-wider rounded-xl hover:bg-slate-700 transition-colors shadow-md"
               >
                 Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Tomada Modal */}
+      {deletingTomada && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-rose-100 flex items-center gap-3 bg-rose-50/50">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-rose-800">Confirmar Exclusão</h3>
+                <p className="text-xs text-rose-600/70">Ação irreversível</p>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              <p className="text-sm text-slate-700 leading-relaxed mb-4">
+                Você tem certeza que deseja excluir a Participação Social <strong className="text-slate-900">"{deletingTomada.title}"</strong>?
+              </p>
+              
+              {isFetchingDeleteCounts ? (
+                <div className="flex items-center gap-2 text-xs text-slate-500 italic p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <RefreshCw size={14} className="animate-spin" /> Verificando vínculos...
+                </div>
+              ) : deletingCounts ? (
+                <div className="space-y-2 p-3 bg-rose-50 rounded-lg border border-rose-100">
+                  <div className="text-xs font-medium text-rose-800">
+                    Ao excluir esta participação social, os seguintes dados associados também serão excluídos permanentemente:
+                  </div>
+                  <ul className="list-disc list-inside text-xs text-rose-700 space-y-1 ml-1">
+                    <li><strong className="font-bold">{deletingCounts.articles}</strong> dispositivos da minuta</li>
+                    <li><strong className="font-bold">{deletingCounts.contributions}</strong> contribuições da sociedade</li>
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+            
+            <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 rounded-b-2xl shrink-0">
+              <button
+                onClick={() => setDeletingTomada(null)}
+                className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+                disabled={isDeleting}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={isDeleting || isFetchingDeleteCounts}
+                className="px-5 py-2 bg-rose-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-rose-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw size={16} className="animate-spin" />
+                    Excluindo...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    Excluir Definitivamente
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Tomada Modal */}
+      {duplicateModalTomada && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                <Copy size={20} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Duplicar Participação Social</h3>
+                <p className="text-xs text-slate-500">Crie uma cópia para um novo ciclo</p>
+              </div>
+            </div>
+            
+            <div className="p-5 flex-1 overflow-y-auto space-y-4">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Origem</span>
+                <div className="text-sm font-medium text-slate-800 line-clamp-2">{duplicateModalTomada.title}</div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className={cn(
+                  "flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition-colors",
+                  duplicateCopySubjects ? "bg-blue-50 border-blue-300" : "bg-slate-50 border-slate-200"
+                )}>
+                  <input
+                    type="checkbox"
+                    checked={duplicateCopySubjects}
+                    onChange={(e) => setDuplicateCopySubjects(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                  />
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">Copiar Temas</div>
+                    <div className="text-[10px] text-slate-500">{(duplicateModalTomada.subjects || []).length} tema(s)</div>
+                  </div>
+                </label>
+                
+                <label className={cn(
+                  "flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition-colors",
+                  duplicateCopyAnexos ? "bg-blue-50 border-blue-300" : "bg-slate-50 border-slate-200"
+                )}>
+                  <input
+                    type="checkbox"
+                    checked={duplicateCopyAnexos}
+                    onChange={(e) => setDuplicateCopyAnexos(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                  />
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">Copiar Anexos</div>
+                    <div className="text-[10px] text-slate-500">{(duplicateModalTomada.anexos || []).length} arquivo(s)</div>
+                  </div>
+                </label>
+              </div>
+
+              
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-2">Quais textos da minuta deseja copiar?</label>
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDuplicateMode("proposed")}
+                    className={cn(
+                      "text-left px-4 py-3 border rounded-xl flex items-start gap-3 transition-colors",
+                      duplicateMode === "proposed" ? "bg-blue-50 border-blue-300 ring-1 ring-blue-300" : "bg-white border-slate-200 hover:border-slate-300"
+                    )}
+                  >
+                    <div className={cn("mt-0.5", duplicateMode === "proposed" ? "text-blue-600" : "text-slate-400")}>
+                      <FileText size={18} />
+                    </div>
+                    <div>
+                      <div className={cn("text-sm font-bold", duplicateMode === "proposed" ? "text-blue-800" : "text-slate-700")}>Minuta com Propostas Finais</div>
+                      <div className="text-xs text-slate-500 mt-0.5">Copia os artigos considerando as modificações consolidadas. O "Texto Final do Dispositivo" (pós-análise técnica) desta rodada se transformará no novo "Texto Proposto em Consulta (Minuta)" da nova rodada. Ideal para dar continuidade.</div>
+                    </div>
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setDuplicateMode("final")}
+                    className={cn(
+                      "text-left px-4 py-3 border rounded-xl flex items-start gap-3 transition-colors",
+                      duplicateMode === "final" ? "bg-blue-50 border-blue-300 ring-1 ring-blue-300" : "bg-white border-slate-200 hover:border-slate-300"
+                    )}
+                  >
+                    <div className={cn("mt-0.5", duplicateMode === "final" ? "text-blue-600" : "text-slate-400")}>
+                      <RotateCcw size={18} />
+                    </div>
+                    <div>
+                      <div className={cn("text-sm font-bold", duplicateMode === "final" ? "text-blue-800" : "text-slate-700")}>Minuta Original (Base)</div>
+                      <div className="text-xs text-slate-500 mt-0.5">Copia os artigos exatamente como estavam na minuta original (Textos Atuais e Textos Propostos iniciais). Nenhuma contribuição ou texto final aprovado nesta rodada será levado para a nova cópia.</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDuplicateMode("none")}
+                    className={cn(
+                      "text-left px-4 py-3 border rounded-xl flex items-start gap-3 transition-colors",
+                      duplicateMode === "none" ? "bg-blue-50 border-blue-300 ring-1 ring-blue-300" : "bg-white border-slate-200 hover:border-slate-300"
+                    )}
+                  >
+                    <div className={cn("mt-0.5", duplicateMode === "none" ? "text-blue-600" : "text-slate-400")}>
+                      <Trash2 size={18} />
+                    </div>
+                    <div>
+                      <div className={cn("text-sm font-bold", duplicateMode === "none" ? "text-blue-800" : "text-slate-700")}>Não Copiar Minuta</div>
+                      <div className="text-xs text-slate-500 mt-0.5">Cria uma nova participação vazia, preservando apenas os dados básicos da origem.</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+              {duplicateMode !== "none" && (
+              <div className="pt-2">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-slate-700">Selecione os dispositivos a serem copiados:</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (duplicateSelectedArticles.length === duplicateArticles.length) {
+                        setDuplicateSelectedArticles([]);
+                      } else {
+                        setDuplicateSelectedArticles(duplicateArticles.map(a => String(a.id)));
+                      }
+                    }}
+                    className="text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                  >
+                    {duplicateSelectedArticles.length === duplicateArticles.length ? "Desmarcar Todos" : "Marcar Todos"}
+                  </button>
+                </div>
+                
+                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white max-h-48 overflow-y-auto">
+                  {duplicateArticles.length > 0 ? (
+                    <div className="divide-y divide-slate-100">
+                      {duplicateArticles.map((article, idx) => {
+                        const isSelected = duplicateSelectedArticles.includes(String(article.id));
+                        return (
+                          <label key={article.id} className="flex items-start gap-3 p-3 hover:bg-slate-50 cursor-pointer transition-colors">
+                            <div className="pt-0.5">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setDuplicateSelectedArticles(prev => [...prev, String(article.id)]);
+                                  } else {
+                                    setDuplicateSelectedArticles(prev => prev.filter(id => id !== String(article.id)));
+                                  }
+                                }}
+                                className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-bold text-slate-800 flex items-center gap-2 mb-0.5">
+                                <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">{idx + 1}</span>
+                                {(article.type || "Artigo").charAt(0).toUpperCase() + (article.type || "Artigo").slice(1)}
+                              </div>
+                              <div 
+                                className="text-xs text-slate-600 line-clamp-1"
+                                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize((article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText) || "") }}
+                              />
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-center text-xs text-slate-500 italic">
+                      Nenhum dispositivo encontrado nesta minuta.
+                    </div>
+                  )}
+                </div>
+              </div>
+              )}
+            </div>
+
+            
+            <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 rounded-b-2xl shrink-0">
+              <button
+                onClick={() => setDuplicateModalTomada(null)}
+                className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+                disabled={isDuplicating}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmDuplicate}
+                disabled={isDuplicating}
+                className="px-5 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center gap-2"
+              >
+                {isDuplicating ? (
+                  <>
+                    <RefreshCw size={16} className="animate-spin" />
+                    Duplicando...
+                  </>
+                ) : (
+                  <>
+                    <Copy size={16} />
+                    Confirmar Duplicação
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Move Articles Modal */}
+      {isMoveModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                <Move size={20} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Mover Dispositivos</h3>
+                <p className="text-xs text-slate-500">Mova {selectedArticlesToMove.length} dispositivo(s) para outra participação social</p>
+              </div>
+            </div>
+            
+            <div className="p-5 flex-1 overflow-y-auto space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-2">Selecione a Participação Social de Destino:</label>
+                <select
+                  value={targetTomadaIdToMove}
+                  onChange={(e) => setTargetTomadaIdToMove(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">-- Selecione o destino --</option>
+                  {tomadas.filter(t => String(t.id) !== String(editingTomada?.id)).map(t => (
+                    <option key={t.id} value={String(t.id)}>{t.title} (ID: {t.id})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 rounded-b-2xl shrink-0">
+              <button
+                onClick={() => setIsMoveModalOpen(false)}
+                className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+                disabled={isMovingArticles}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleMoveArticles}
+                disabled={isMovingArticles || !targetTomadaIdToMove}
+                className="px-5 py-2 bg-amber-500 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-amber-600 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                {isMovingArticles ? (
+                  <>
+                    <RefreshCw size={16} className="animate-spin" />
+                    Movendo...
+                  </>
+                ) : (
+                  <>
+                    <Move size={16} />
+                    Confirmar Movimentação
+                  </>
+                )}
               </button>
             </div>
           </div>
