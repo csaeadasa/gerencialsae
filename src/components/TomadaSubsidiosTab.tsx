@@ -370,6 +370,7 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
   const isTable = article.contentType === 'table' || isTableJson(c.proposedText) || isTableJson(originalText);
   const diffParts = !isTable ? getSmartDiff(originalText, c.proposedText || "") : [];
   
+  const [hideHighlights, setHideHighlights] = useState(false);
   const [isEditingAnalysis, setIsEditingAnalysis] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [decision, setDecision] = useState(c.decision || "");
@@ -568,9 +569,18 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
       
       <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
         <div className="p-4">
-          <span className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-3">
-            {isTable ? "Tabela da Contribuição Sugerida (Com destaques)" : "Texto da Contribuição Sugerida (Com destaques)"}
-          </span>
+          <div className="flex items-center justify-between mb-3">
+            <span className="block text-xs font-black text-slate-600 uppercase tracking-wider">
+              {isTable ? "Tabela da Contribuição Sugerida (Com destaques)" : "Texto da Contribuição Sugerida (Com destaques)"}
+            </span>
+            <button 
+              type="button" 
+              onClick={() => setHideHighlights(prev => !prev)} 
+              className="text-[9px] font-bold uppercase tracking-wider text-slate-500 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 px-2 py-1.5 rounded-lg transition-colors border border-slate-200 shadow-sm"
+            >
+              {hideHighlights ? "Mostrar Destaques" : "Ocultar Destaques"}
+            </button>
+          </div>
           {isTable ? (
             c.isSuppressing || !c.proposedText?.trim() ? (
               <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-3">
@@ -590,6 +600,10 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
                 originalData={originalText && originalText !== c.proposedText ? originalText : undefined} 
               />
             )
+          ) : hideHighlights ? (
+            <div className="text-xs text-slate-800 font-medium whitespace-pre-line leading-relaxed">
+              {c.proposedText || ""}
+            </div>
           ) : (
             <div className="text-xs text-slate-800 font-medium whitespace-pre-line leading-relaxed">
               {diffParts.map((part, pIdx) => {
@@ -1776,6 +1790,16 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [isMovingArticles, setIsMovingArticles] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [showOrientacoesModal, setShowOrientacoesModal] = useState(false);
+  const [hideHighlightsSet, setHideHighlightsSet] = useState<Set<string | number>>(new Set());
+
+  const toggleHighlight = (id: string | number) => {
+    setHideHighlightsSet(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
 
   // Filter & Sort State
@@ -2787,120 +2811,137 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     }
   };
 
-  const renderUserContributionComparison = (baseText: string, suggestedText: string, contentType?: 'text' | 'table' | 'ementa' | 'considerandos') => {
-    const isTable = contentType === 'table' || isTableJson(baseText) || isTableJson(suggestedText);
+  const ComparativeViewer: React.FC<{
+  baseText: string;
+  suggestedText: string;
+  contentType?: 'text' | 'table' | 'ementa' | 'considerandos';
+}> = ({ baseText, suggestedText, contentType }) => {
+  const [hideHighlights, setHideHighlights] = useState(false);
+  const isTable = contentType === 'table' || isTableJson(baseText) || isTableJson(suggestedText);
 
-    if (isTable) {
-      return (
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100/90 px-3.5 py-2.5 rounded-xl border border-slate-200">
-            <div className="flex items-center gap-2">
-              <TableIcon size={15} className="text-emerald-700 shrink-0" />
-              <span className="text-xs font-black uppercase tracking-wider text-slate-800">
-                Comparativo: Tabela da Minuta × Proposta de Alteração
-              </span>
-            </div>
-            <span className="text-[10px] font-bold text-slate-500">
-              Células modificadas pelo cidadão são destacadas em verde
-            </span>
-          </div>
-
-          <RegulatoryTableView
-            data={suggestedText || baseText}
-            originalData={baseText}
-          />
-        </div>
-      );
-    }
-
-    const diffParts = getSmartDiff(baseText || "", suggestedText || "");
-    const hasAdded = diffParts.some(p => p.added);
-    const hasRemoved = diffParts.some(p => p.removed);
-    const isIdentical = !hasAdded && !hasRemoved;
-
+  if (isTable) {
     return (
       <div className="space-y-3">
-        {/* Header com Legenda Clara */}
         <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100/90 px-3.5 py-2.5 rounded-xl border border-slate-200">
           <div className="flex items-center gap-2">
-            <Sparkles size={15} className="text-emerald-700 shrink-0" />
+            <TableIcon size={15} className="text-emerald-700 shrink-0" />
             <span className="text-xs font-black uppercase tracking-wider text-slate-800">
-              Comparativo: Texto Proposto em Consulta (Minuta) × Texto da Contribuição Sugerida
+              Comparativo: Tabela da Minuta × Proposta de Alteração
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-600">
-            <span className="text-emerald-700 underline decoration-2 decoration-emerald-500/50 underline-offset-2">
-              [+ Texto Inserido]
+          <span className="text-[10px] font-bold text-slate-500">
+            Células modificadas pelo cidadão são destacadas em verde
+          </span>
+        </div>
+        <RegulatoryTableView
+          data={suggestedText || baseText}
+          originalData={baseText}
+        />
+      </div>
+    );
+  }
+
+  const diffParts = getSmartDiff(baseText || "", suggestedText || "");
+  const hasAdded = diffParts.some(p => p.added);
+  const hasRemoved = diffParts.some(p => p.removed);
+  const isIdentical = !hasAdded && !hasRemoved;
+
+  return (
+    <div className="space-y-3">
+      {/* Header com Legenda Clara */}
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100/90 px-3.5 py-2.5 rounded-xl border border-slate-200">
+        <div className="flex items-center gap-2">
+          <Sparkles size={15} className="text-emerald-700 shrink-0" />
+          <span className="text-xs font-black uppercase tracking-wider text-slate-800">
+            Comparativo: Texto Proposto em Consulta (Minuta) × Texto da Contribuição Sugerida
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-600">
+          <span className="text-emerald-700 underline decoration-2 decoration-emerald-500/50 underline-offset-2">
+            [+ Texto Inserido]
+          </span>
+          <span className="text-rose-500/80 line-through decoration-rose-500/80">
+            [- Texto Excluído]
+          </span>
+        </div>
+      </div>
+
+      {/* Grade Comparativa de 2 Colunas */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Painel 1: Texto Proposto da Minuta */}
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
+              1. Texto Proposto em Consulta (Minuta)
             </span>
-            <span className="text-rose-500/80 line-through decoration-rose-500/80">
-              [- Texto Excluído]
-            </span>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs h-full">
+            <div className="text-sm text-slate-700 font-medium leading-relaxed break-words">
+              {baseText || <span className="text-slate-400 italic">Nenhum texto base definido.</span>}
+            </div>
           </div>
         </div>
 
-        {/* Grade Comparativa de 2 Colunas */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Painel 1: Texto Proposto da Minuta */}
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
-                1. Texto Proposto em Consulta (Minuta)
-              </span>
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs h-full">
-              <div className="text-sm text-slate-700 font-medium leading-relaxed break-words">
-                {baseText || <span className="text-slate-400 italic">Nenhum texto base definido.</span>}
-              </div>
-            </div>
-          </div>
-
-          {/* Painel 2: Contribuição Sugerida com Destaque de Inserções e Exclusões */}
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-3">
+        {/* Painel 2: Contribuição Sugerida com Destaque de Inserções e Exclusões */}
+        <div className="mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
               <span className="text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-lg">
                 2. Texto da Contribuição Sugerida (Com destaques)
               </span>
             </div>
-            <div className="bg-white rounded-xl border border-emerald-300 p-4 shadow-2xs ring-2 ring-emerald-500/20 h-full">
-              {isIdentical ? (
-                <div className="text-sm text-slate-500 italic p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  Redação idêntica ao texto proposto da minuta (nenhuma alteração textual detectada).
-                </div>
-              ) : (
-                <div className="text-sm text-slate-800 font-medium leading-relaxed break-words">
-                  {diffParts.map((part, pIdx) => {
-                    if (part.added) {
-                      return (
-                        <span
-                          key={pIdx}
-                          className="text-emerald-700 font-semibold underline decoration-2 decoration-emerald-500/50 underline-offset-2"
-                          title="Texto inserido na sua proposta"
-                        >
-                          {part.value}
-                        </span>
-                      )
-                    }
-                    if (part.removed) {
-                      return (
-                        <span
-                          key={pIdx}
-                          className="text-rose-500/80 line-through decoration-rose-500/80 font-medium"
-                          title="Texto excluído na sua proposta"
-                        >
-                          {part.value}
-                        </span>
-                      )
-                    }
-                    return <span key={pIdx}>{part.value}</span>;
-                  })}
-                </div>
-              )}
-            </div>
+            <button 
+              type="button" 
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setHideHighlights(!hideHighlights); }} 
+              className="text-[9px] font-bold uppercase tracking-wider text-slate-500 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-50 px-2 py-1.5 rounded-lg transition-colors border border-slate-200 shadow-sm"
+            >
+              {hideHighlights ? "Mostrar Destaques" : "Ocultar Destaques"}
+            </button>
+          </div>
+          <div className="bg-white rounded-xl border border-emerald-300 p-4 shadow-2xs ring-2 ring-emerald-500/20 h-full">
+            {isIdentical ? (
+              <div className="text-sm text-slate-500 italic p-3 bg-slate-50 rounded-lg border border-slate-200">
+                Redação idêntica ao texto proposto da minuta (nenhuma alteração textual detectada).
+              </div>
+            ) : hideHighlights ? (
+              <div className="text-sm text-slate-800 font-medium leading-relaxed break-words">
+                {suggestedText || ""}
+              </div>
+            ) : (
+              <div className="text-sm text-slate-800 font-medium leading-relaxed break-words">
+                {diffParts.map((part, pIdx) => {
+                  if (part.added) {
+                    return (
+                      <span
+                        key={pIdx}
+                        className="text-emerald-700 font-semibold underline decoration-2 decoration-emerald-500/50 underline-offset-2"
+                        title="Texto inserido na sua proposta"
+                      >
+                        {part.value}
+                      </span>
+                    )
+                  }
+                  if (part.removed) {
+                    return (
+                      <span
+                        key={pIdx}
+                        className="text-rose-500/80 line-through decoration-rose-500/80 font-medium"
+                        title="Texto excluído na sua proposta"
+                      >
+                        {part.value}
+                      </span>
+                    )
+                  }
+                  return <span key={pIdx}>{part.value}</span>;
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};;
 
   const renderArticleDiff = (original: string, proposed: string, contentType?: 'text' | 'table' | 'ementa' | 'considerandos') => {
     if (contentType === 'table' || isTableJson(original) || isTableJson(proposed)) {
@@ -4254,13 +4295,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                 </div>
                               </div>
 
-                              {renderUserContributionComparison(
-                                (art.proposedText !== undefined && art.proposedText !== null && art.proposedText.trim() !== "")
-                                  ? art.proposedText
-                                  : (art.originalText || ""),
-                                uContrib.proposedText,
-                                art.contentType
-                              )}
+                              <ComparativeViewer 
+                                baseText={(art.proposedText !== undefined && art.proposedText !== null && art.proposedText.trim() !== "") ? art.proposedText : (art.originalText || "")} 
+                                suggestedText={uContrib.proposedText} 
+                                contentType={art.contentType} 
+                              />
 
                               <div>
                                 <span className="text-[11px] font-black uppercase tracking-widest text-slate-500 block mb-1.5">
@@ -4622,13 +4661,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         {/* Pré-visualização ao vivo do comparativo */}
                         {proposedText.trim() && (
                           <div className="pt-2">
-                            {renderUserContributionComparison(
-                              (art.proposedText !== undefined && art.proposedText !== null && art.proposedText.trim() !== "")
-                                ? art.proposedText
-                                : (art.originalText || ""),
-                              proposedText,
-                              art.contentType
-                            )}
+                            <ComparativeViewer 
+                              baseText={(art.proposedText !== undefined && art.proposedText !== null && art.proposedText.trim() !== "") ? art.proposedText : (art.originalText || "")} 
+                              suggestedText={proposedText} 
+                              contentType={art.contentType} 
+                            />
                           </div>
                         )}
 
@@ -7009,9 +7046,18 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                                 </div>
                                                 <div className="grid grid-cols-1 lg:grid-cols-2">
                                                   <div className="p-4 border-b lg:border-b-0 lg:border-r border-slate-200 bg-white">
-                                                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                                                      {isContribTable ? "Tabela da Contribuição Sugerida (Com destaques)" : "Texto da Contribuição Sugerida (Com destaques)"}
-                                                    </span>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                      <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                        {isContribTable ? "Tabela da Contribuição Sugerida (Com destaques)" : "Texto da Contribuição Sugerida (Com destaques)"}
+                                                      </span>
+                                                      <button 
+                                                        type="button" 
+                                                        onClick={() => toggleHighlight(c.id)} 
+                                                        className="text-[9px] font-bold uppercase tracking-wider text-slate-500 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 px-2 py-1 rounded transition-colors"
+                                                      >
+                                                        {hideHighlightsSet.has(c.id) ? "Mostrar Destaques" : "Ocultar Destaques"}
+                                                      </button>
+                                                    </div>
                                                     {isContribTable ? (
                                                       c.isSuppressing || !c.proposedText?.trim() ? (
                                                         <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 font-bold flex items-center gap-1.5">
@@ -7032,6 +7078,9 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                                       <div className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
                                                         {(() => {
                                                           const cOrigText = (art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "";
+                                                          if (hideHighlightsSet.has(c.id)) {
+                                                            return <span>{c.proposedText || ""}</span>;
+                                                          }
                                                           const cDiffParts = getSmartDiff(cOrigText, c.proposedText || "");
                                                           return cDiffParts.map((part, i) => (
                                                             part.added ? <span key={i} className="text-emerald-700 font-semibold underline decoration-2 decoration-emerald-500/50 underline-offset-2 break-words">{part.value}</span> :
