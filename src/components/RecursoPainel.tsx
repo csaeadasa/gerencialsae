@@ -75,7 +75,7 @@ const INITIAL_RECURSO_FILTERS: PanelFilters = {
   regiaoFilter: "all",
   searchTerm: "",
   chartValoresViewMode: "chart",
-  isFiltersExpanded: true
+  isFiltersExpanded: false
 };
 
 const INITIAL_OUVIDORIA_FILTERS: PanelFilters = {
@@ -87,7 +87,7 @@ const INITIAL_OUVIDORIA_FILTERS: PanelFilters = {
   regiaoFilter: "all",
   searchTerm: "",
   chartValoresViewMode: "chart",
-  isFiltersExpanded: true
+  isFiltersExpanded: false
 };
 
 export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPainelProps) {

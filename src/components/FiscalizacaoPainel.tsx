@@ -55,7 +55,7 @@ export function FiscalizacaoPainel({ tasks, plans = [], onEditTaskClick }: Fisca
   const [filterOverdueOnly, setFilterOverdueOnly] = useState(false);
 
   // Filters state (to match the PlanningTab layout & filter features)
-  const [isFiltersExpanded, setIsFiltersExpanded] = useState(true);
+  const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   const [planFilter, setPlanFilter] = useState<string>("all");
   const [tipoFiscalizacaoFilter, setTipoFiscalizacaoFilter] = useState<string>("all");
   const [etapaFilter, setEtapaFilter] = useState<string>("all");

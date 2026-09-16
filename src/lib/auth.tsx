@@ -259,6 +259,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const checkPermission = (moduleId: ModuleId, action: ActionType): boolean => {
+    // Modo de apresentação público (TV) permite visualizar painéis sem login
+    const isTvMode = typeof window !== 'undefined' && window.location.search.includes('modo=tv');
+    if (isTvMode && action === 'view') {
+      return true;
+    }
+
     if (!currentUser) return false;
     const role = roles.find(r => r.id === currentUser.roleId);
     if (!role) return false;

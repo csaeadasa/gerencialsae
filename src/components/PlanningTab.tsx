@@ -451,7 +451,7 @@ export function PlanningTab({
     }
   }, [tasks, currentUser, hasEvaluatedAlerts, responsiblesProp]);
   // Navigation, search & filter state
-  const [isDashboardFiltersExpanded, setIsDashboardFiltersExpanded] = useState(true);
+  const [isDashboardFiltersExpanded, setIsDashboardFiltersExpanded] = useState(false);
   const [isTasksFiltersExpanded, setIsTasksFiltersExpanded] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [hasSubtasksFilter, setHasSubtasksFilter] = useState(false);

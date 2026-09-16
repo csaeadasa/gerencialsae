@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -106,6 +106,7 @@ import {
 import { calculateDemand, formatNumber, formatInteger, cn } from "./lib/utils";
 import { RequirePermission, useAuth } from "./lib/auth";
 import { LoginPage } from "./components/LoginPage";
+import { PresentationControls } from "./components/PresentationMode";
 import { MapTab } from "./components/MapTab";
 import { HomeTab } from "./components/HomeTab";
 import { ManagerialHub } from "./components/ManagerialHub";
@@ -341,6 +342,12 @@ const isSameWb = (itemWbId: number | string | null | undefined, filterWbId: numb
   if (itemNormalized === null && filterNormalized === 2026) return true;
   return false;
 };
+
+interface PresentationConfig {
+  isActive: boolean;
+  intervalSeconds: number;
+  panels: string[];
+}
 
 export default function App() {
   const { currentUser, isSessionVerified, roles, logout, checkPermission } = useAuth();
@@ -581,6 +588,41 @@ export default function App() {
     const saved = localStorage.getItem("adasa-demands");
     return saved ? JSON.parse(saved) : [INITIAL_DEMAND];
   });
+  // Presentation Mode State
+  const [presentationConfig, setPresentationConfig] = useState<PresentationConfig>({ isActive: false, intervalSeconds: 30, panels: [] });
+  const [presentationIndex, setPresentationIndex] = useState(0);
+  const [previousTab, setPreviousTab] = useState("home");
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('modo') === 'tv') {
+      const tempoStr = searchParams.get('tempo');
+      const tempo = tempoStr ? parseInt(tempoStr, 10) : 30;
+      const paineisStr = searchParams.get('paineis');
+      const panels = paineisStr ? paineisStr.split(',') : ["planning", "reg_painel", "reg_agenda_painel", "reg_subsidios_painel", "analyze", "fisc_operational", "pub_painel"];
+      setPresentationConfig({ isActive: true, intervalSeconds: tempo, panels });
+      setPresentationIndex(0);
+      setActiveTab(panels[0] as any);
+      if (panels[0] === 'planning') setActivePlanningSubTab("dashboard");
+    }
+  }, []);
+
+  const handlePresentationNext = useCallback(() => {
+    const nextIdx = (presentationIndex + 1) % presentationConfig.panels.length;
+    setPresentationIndex(nextIdx);
+    const nextTab = presentationConfig.panels[nextIdx];
+    setActiveTab(nextTab as any);
+    if (nextTab === 'planning') setActivePlanningSubTab("dashboard");
+  }, [presentationIndex, presentationConfig.panels]);
+
+  const handlePresentationPrev = useCallback(() => {
+    const prevIdx = (presentationIndex - 1 + presentationConfig.panels.length) % presentationConfig.panels.length;
+    setPresentationIndex(prevIdx);
+    const prevTab = presentationConfig.panels[prevIdx];
+    setActiveTab(prevTab as any);
+    if (prevTab === 'planning') setActivePlanningSubTab("dashboard");
+  }, [presentationIndex, presentationConfig.panels]);
+
   const [activeTab, setActiveTab] = useState<"home" | "gerencial" | "public_hub" | "edit" | "compare" | "manage" | "analyze" | "templates" | "planning" | "users" | "departments" | "reg_cadastro" | "reg_agenda" | "reg_subsidios" | "reg_subsidios_painel" | "reg_painel" | "reg_agenda_painel" | "pub_cadastro" | "pub_painel" | "fisc_operational" | "recurso_painel">(
     "home",
   );
@@ -3758,8 +3800,9 @@ const renderSupplyTable = () => {
     setWaterBalances(prev => prev.map(b => isSameWb(b.id, selectedWaterBalanceId) ? { ...b, ...updates } : b));
   };
 
-  // Redirect anonymous users to Login page unless they are using a shared public route
-  if (!currentUser && !isPublicMode) {
+  // Redirect anonymous users to Login page unless they are using a shared public route or presentation mode
+  const isTvMode = typeof window !== 'undefined' && window.location.search.includes('modo=tv');
+  if (!currentUser && !isPublicMode && !isTvMode) {
     return <LoginPage />;
   }
 
@@ -9884,6 +9927,13 @@ const renderSupplyTable = () => {
                 isPublic={false}
                 showOnlyPublic={false}
                 showToast={showToast}
+                onStartPresentation={(panels, interval) => {
+                  setPreviousTab(activeTab);
+                  setPresentationConfig({ isActive: true, intervalSeconds: interval, panels });
+                  setPresentationIndex(0);
+                  setActiveTab(panels[0]);
+                  if (panels[0] === "planning") setActivePlanningSubTab("dashboard");
+                }}
               />
             </motion.div>
           ) : activeTab === "public_hub" ? (
@@ -9905,11 +9955,32 @@ const renderSupplyTable = () => {
                 isPublic={false}
                 showOnlyPublic={true}
                 showToast={showToast}
+                onStartPresentation={(panels, interval) => {
+                  setPreviousTab(activeTab);
+                  setPresentationConfig({ isActive: true, intervalSeconds: interval, panels });
+                  setPresentationIndex(0);
+                  setActiveTab(panels[0]);
+                  if (panels[0] === "planning") setActivePlanningSubTab("dashboard");
+                }}
               />
             </motion.div>
           ) : null}
         </AnimatePresence>
       </main>
+      
+      {presentationConfig.isActive && (
+        <PresentationControls 
+          config={presentationConfig} 
+          currentIndex={presentationIndex} 
+          onNext={handlePresentationNext} 
+          onPrev={handlePresentationPrev} 
+          onExit={() => {
+            window.location.search = "";
+            window.location.hash = "";
+            setPresentationConfig({ ...presentationConfig, isActive: false });
+          }} 
+        />
+      )}
     </div>
   );
 }
