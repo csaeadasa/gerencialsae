@@ -44,6 +44,7 @@ import {
   List,
   Flag,
   Link2,
+  ExternalLink,
   Users,
   Copy,
   FileDigit,
@@ -3176,11 +3177,18 @@ export function PlanningTab({
   };
 
   const handleAddLink = () => {
-    if (!newLinkUrl.trim()) return;
+    if (!newLinkUrl.trim()) {
+      showToast("Aviso", "Por favor, insira a URL do link.", "warning");
+      return;
+    }
+    let cleanUrl = newLinkUrl.trim();
+    if (!/^https?:\/\//i.test(cleanUrl)) {
+      cleanUrl = "https://" + cleanUrl;
+    }
     const link = {
       id: Math.random().toString(36).substr(2, 9),
-      url: newLinkUrl.trim(),
-      title: newLinkTitle.trim() || newLinkUrl.trim(),
+      url: cleanUrl,
+      title: newLinkTitle.trim() || cleanUrl,
       createdAt: new Date().toISOString()
     };
     
@@ -3190,6 +3198,7 @@ export function PlanningTab({
     }));
     setNewLinkUrl("");
     setNewLinkTitle("");
+    showToast("Link Adicionado", "O link foi adicionado à lista. Clique em 'Gravar Alterações' para salvar.", "info");
   };
 
   const handleDeleteLink = (linkId: string) => {
@@ -3198,6 +3207,7 @@ export function PlanningTab({
       ...prev,
       links: prev.links?.filter(l => l.id !== linkId) || []
     }));
+    showToast("Link Removido", "O link foi removido da lista. Clique em 'Gravar Alterações' para salvar as alterações.", "info");
   };
 
   // Helper to format any date into YYYY-MM-DD for form input[type="date"]
@@ -3288,8 +3298,28 @@ export function PlanningTab({
         ? editingTask.endDate.trim()
         : null;
 
+      // Auto-include any link that the user typed into the input fields without clicking "Adicionar"
+      let currentLinks = Array.isArray(editingTask.links) ? [...editingTask.links] : [];
+      if (newLinkUrl && newLinkUrl.trim()) {
+        let cleanUrl = newLinkUrl.trim();
+        if (!/^https?:\/\//i.test(cleanUrl)) {
+          cleanUrl = "https://" + cleanUrl;
+        }
+        const pendingLink = {
+          id: Math.random().toString(36).substr(2, 9),
+          url: cleanUrl,
+          title: newLinkTitle.trim() || cleanUrl,
+          createdAt: new Date().toISOString()
+        };
+        currentLinks.push(pendingLink);
+        setNewLinkUrl("");
+        setNewLinkTitle("");
+      }
+
       const payload = {
         ...editingTask,
+        links: currentLinks,
+        comments: editingTask.comments || [],
         startDate: cleanStartDate,
         endDate: cleanEndDate,
         progress: finalProgress,
@@ -3337,7 +3367,7 @@ export function PlanningTab({
           });
         }
 
-        // Keep the form open, update state with saved task, ensuring formatted dates and weight are preserved for the form
+        // Keep the form open, update state with saved task, ensuring formatted dates, links, and weight are preserved for the form
         setFormMode("edit");
         const returnedData = resData.data;
         setEditingTask({
@@ -3345,7 +3375,9 @@ export function PlanningTab({
           startDate: fmtDate(returnedData.startDate || cleanStartDate),
           endDate: fmtDate(returnedData.endDate || cleanEndDate),
           weight: returnedData.weight !== undefined && returnedData.weight !== null ? returnedData.weight : finalWeight,
-          checklist: returnedData.checklist || editingTask.checklist || []
+          checklist: returnedData.checklist || editingTask.checklist || [],
+          links: returnedData.links || currentLinks || [],
+          comments: returnedData.comments || editingTask.comments || []
         });
         setNewAddedComments([]);
         
@@ -3449,6 +3481,8 @@ export function PlanningTab({
       checklist: task.type === "fiscalizacao"
         ? ensureFiscalizacaoChecklist(task.checklist)
         : task.checklist || [],
+      links: Array.isArray(task.links) ? task.links : [],
+      comments: Array.isArray(task.comments) ? task.comments : [],
       weight: task.weight !== undefined && task.weight !== null ? task.weight : 1
     });
     setTaskFormTab("form");
@@ -8930,6 +8964,22 @@ export function PlanningTab({
                                          </span>
                                        )}
                                      </span>
+                                     {task.links && task.links.length > 0 && (
+                                       <div className="mt-1 flex items-center gap-1.5">
+                                         <span 
+                                           className="inline-flex text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 items-center gap-1 shadow-xs cursor-pointer transition-colors"
+                                           title={`${task.links.length} link(s) vinculado(s): ${task.links.map(l => l.title || l.url).join(', ')}. Clique para abrir.`}
+                                           onClick={(e) => {
+                                             e.stopPropagation();
+                                             handleEditTask(task);
+                                             setTaskFormTab("links");
+                                           }}
+                                         >
+                                           <Link2 size={10} className="stroke-[2.5]" />
+                                           {task.links.length} {task.links.length === 1 ? 'Link Vinculado' : 'Links Vinculados'}
+                                         </span>
+                                       </div>
+                                     )}
                                      {task.parentId && taskById[task.parentId] && (
                                        <span className="text-[9px] text-indigo-500 font-bold uppercase mt-0.5 block truncate max-w-xs" title={`Subtarefa de: ${taskById[task.parentId].title}`}>
                                           Subtarefa de: {taskById[task.parentId].title}
@@ -10184,6 +10234,20 @@ export function PlanningTab({
                                           >
                                             <Scale size={10} className="stroke-[2.5]" />
                                             Etapa: {(t.ouvidoriaData || t.recursoData)?.situacao || "Recebido"}
+                                          </span>
+                                        )}
+                                        {t.links && t.links.length > 0 && (
+                                          <span 
+                                            className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 flex items-center gap-1 shadow-xs cursor-pointer shrink-0 transition-colors"
+                                            title={`${t.links.length} link(s) vinculado(s): ${t.links.map(l => l.title || l.url).join(', ')}. Clique para abrir.`}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleEditTask(t);
+                                              setTaskFormTab("links");
+                                            }}
+                                          >
+                                            <Link2 size={10} className="stroke-[2.5]" />
+                                            {t.links.length} {t.links.length === 1 ? 'Link' : 'Links'}
                                           </span>
                                         )}
                                       </div>
@@ -11751,9 +11815,15 @@ export function PlanningTab({
                     <button
                       type="button"
                       onClick={() => setTaskFormTab("links")}
-                      className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors cursor-pointer ${taskFormTab === "links" ? "bg-adasa-mid text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                      className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 ${taskFormTab === "links" ? "bg-adasa-mid text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
                     >
-                      Links
+                      <Link2 size={14} />
+                      <span>Links</span>
+                      {editingTask.links && editingTask.links.length > 0 && (
+                        <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-bold leading-none ${taskFormTab === "links" ? "bg-white text-indigo-700" : "bg-indigo-100 text-indigo-700"}`}>
+                          {editingTask.links.length}
+                        </span>
+                      )}
                     </button>
                     <button
                       type="button"
@@ -12551,22 +12621,58 @@ export function PlanningTab({
 
               {taskFormTab === "links" && (
                 <div className="space-y-4">
-                  <div className="space-y-3 max-h-[40vh] overflow-y-auto custom-scrollbar pr-2">
+                  <div className="space-y-3 max-h-[42vh] overflow-y-auto custom-scrollbar pr-2">
                     {(!editingTask.links || editingTask.links.length === 0) ? (
-                      <p className="text-xs text-slate-400 italic font-medium">Nenhum link cadastrado para esta atividade.</p>
+                      <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center">
+                        <Link2 size={24} className="mx-auto text-slate-400 mb-2" />
+                        <p className="text-sm font-semibold text-slate-700">Nenhum link vinculado a esta atividade</p>
+                        <p className="text-xs text-slate-400 mt-1">Utilize o campo abaixo para vincular documentos externos, processos SEI, páginas web ou repositórios.</p>
+                      </div>
                     ) : (
                       editingTask.links.map(l => (
-                        <div key={l.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex justify-between items-center">
-                          <div className="flex flex-col">
-                            <span className="text-sm font-semibold text-slate-700">{l.title}</span>
-                            <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-xs text-adasa-mid hover:underline truncate max-w-[300px]">
-                              {l.url}
-                            </a>
-                            <span className="text-[9px] text-slate-400 mt-1">Adicionado em: {formatDateTime(l.createdAt)}</span>
+                        <div key={l.id} className="bg-slate-50 hover:bg-slate-100/80 transition-colors border border-slate-200 rounded-xl p-3.5 flex justify-between items-center group">
+                          <div className="flex items-center gap-3 min-w-0 pr-3">
+                            <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                              <ExternalLink size={16} />
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <a 
+                                href={l.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="text-sm font-bold text-indigo-700 hover:text-indigo-900 hover:underline flex items-center gap-1.5 truncate"
+                                title={`Abrir: ${l.url}`}
+                              >
+                                <span className="truncate">{l.title || l.url}</span>
+                                <ExternalLink size={12} className="shrink-0 opacity-70" />
+                              </a>
+                              <span className="text-xs text-slate-500 font-mono truncate max-w-lg mt-0.5">
+                                {l.url}
+                              </span>
+                              {l.createdAt && (
+                                <span className="text-[10px] text-slate-400 mt-1">
+                                  Vinculado em: {formatDateTime(l.createdAt)}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <button onClick={() => handleDeleteLink(l.id)} className="p-1.5 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Excluir">
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <a 
+                              href={l.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="px-3 py-1.5 text-xs font-bold text-indigo-700 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
+                            >
+                              <ExternalLink size={12} />
+                              <span>Acessar</span>
+                            </a>
+                            <button 
+                              type="button"
+                              onClick={() => handleDeleteLink(l.id)} 
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" 
+                              title="Remover link"
+                            >
+                              <Trash2 size={16} />
                             </button>
                           </div>
                         </div>
@@ -12574,31 +12680,50 @@ export function PlanningTab({
                     )}
                   </div>
                   
-                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-4">
-                    <h4 className="text-sm font-bold text-slate-700">Link para um arquivo ou site</h4>
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <Link2 size={16} className="text-indigo-600" />
+                        Vincular Novo Link ou Documento
+                      </h4>
+                      <span className="text-[11px] text-slate-400">Pressione Adicionar ou salve diretamente</span>
+                    </div>
+
                     <div className="space-y-3">
                       <div className="space-y-1">
-                        <label className="block text-xs font-medium text-slate-600">Adicionar um link</label>
+                        <label className="block text-xs font-bold text-slate-700">URL ou Endereço do Link *</label>
                         <input 
-                          type="url"
+                          type="text"
                           value={newLinkUrl}
                           onChange={e => setNewLinkUrl(e.target.value)}
-                          placeholder="https:// Colar o link"
-                          className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:border-indigo-500 outline-none transition-colors"
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddLink();
+                            }
+                          }}
+                          placeholder="https://exemplo.gov.br/documento ou www.link.com"
+                          className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 outline-none transition-colors"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="block text-xs font-medium text-slate-600">Texto para exibição</label>
+                        <label className="block text-xs font-bold text-slate-700">Texto / Título para Exibição (Opcional)</label>
                         <input 
                           type="text"
                           value={newLinkTitle}
                           onChange={e => setNewLinkTitle(e.target.value)}
-                          placeholder="Insira um título de exibição"
-                          className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:border-indigo-500 outline-none transition-colors"
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddLink();
+                            }
+                          }}
+                          placeholder="Ex: Processo SEI, Relatório Técnico, Planilha Google"
+                          className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 outline-none transition-colors"
                         />
                       </div>
                     </div>
-                    <div className="flex gap-3 justify-end pt-2">
+                    <div className="flex gap-3 justify-end pt-1">
                       <button 
                         type="button"
                         onClick={() => {
@@ -12607,13 +12732,15 @@ export function PlanningTab({
                         }}
                         className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors"
                       >
-                        Cancelar
+                        Limpar
                       </button>
                       <button 
+                        type="button"
                         onClick={handleAddLink}
-                        className="px-4 py-2 text-xs font-bold text-white bg-indigo-500 hover:bg-indigo-600 rounded-lg transition-colors"
+                        className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
                       >
-                        Adicionar
+                        <Plus size={14} />
+                        Adicionar à Lista
                       </button>
                     </div>
                   </div>
@@ -12627,6 +12754,7 @@ export function PlanningTab({
                       Fechar
                     </button>
                     <button
+                      type="button"
                       onClick={handleFormSubmit}
                       className="px-5 py-2 font-bold text-xs text-white bg-adasa-mid hover:bg-adasa-dark rounded-xl transition-colors shadow-sm"
                     >
