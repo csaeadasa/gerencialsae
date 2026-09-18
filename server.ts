@@ -206,7 +206,7 @@ async function rollUpTask(client: any, parentId: number | null) {
   if (res.rows.length === 0) {
     await client.query(
       `UPDATE pl_tasks 
-       SET progress = 0, status = 'Não iniciada', start_date = NULL, end_date = NULL
+       SET progress = 0, status = 'Não iniciada'
        WHERE id = $1`,
       [parentId]
     );
@@ -226,11 +226,11 @@ async function rollUpTask(client: any, parentId: number | null) {
   for (const row of res.rows) {
     if (row.start_date) {
       const d = new Date(row.start_date);
-      if (!minStart || d < minStart) minStart = d;
+      if (!isNaN(d.getTime()) && (!minStart || d < minStart)) minStart = d;
     }
     if (row.end_date) {
       const d = new Date(row.end_date);
-      if (!maxEnd || d > maxEnd) maxEnd = d;
+      if (!isNaN(d.getTime()) && (!maxEnd || d > maxEnd)) maxEnd = d;
     }
     
     // Fallback to 1 if weight is undefined or zero (if they really want to ignore, they can use 0, but usually we fallback to 1)
@@ -250,14 +250,19 @@ async function rollUpTask(client: any, parentId: number | null) {
     status = "Em andamento";
   }
 
-  const parentDatesRes = await client.query("SELECT end_date FROM pl_tasks WHERE id = $1", [parentId]);
-  const oldParentEndDate = parentDatesRes.rows.length > 0 && parentDatesRes.rows[0].end_date ? new Date(parentDatesRes.rows[0].end_date).getTime() : 0;
+  const parentDatesRes = await client.query("SELECT start_date, end_date FROM pl_tasks WHERE id = $1", [parentId]);
+  const currentParentStart = parentDatesRes.rows.length > 0 && parentDatesRes.rows[0].start_date ? new Date(parentDatesRes.rows[0].start_date) : null;
+  const currentParentEnd = parentDatesRes.rows.length > 0 && parentDatesRes.rows[0].end_date ? new Date(parentDatesRes.rows[0].end_date) : null;
+  const oldParentEndDate = currentParentEnd ? currentParentEnd.getTime() : 0;
+
+  const effectiveStart = minStart || currentParentStart;
+  const effectiveEnd = maxEnd || currentParentEnd;
 
   await client.query(
     `UPDATE pl_tasks 
      SET start_date = $1, end_date = $2, progress = $3, status = $4
      WHERE id = $5`,
-    [minStart, maxEnd, avgProgress, status, parentId]
+    [effectiveStart, effectiveEnd, avgProgress, status, parentId]
   );
 
   const newParentEndDate = maxEnd ? new Date(maxEnd).getTime() : 0;
@@ -2277,6 +2282,7 @@ export async function startServer(isVercel = false) {
             dependsOnTaskId: t.depends_on_task_id ? Number(t.depends_on_task_id) : null,
             updatedAt: t.updated_at,
             updatedBy: t.updated_by,
+            seiProcess: t.sei_process || null,
             weight: t.weight !== undefined && t.weight !== null ? Number(t.weight) : 1,
             type: t.type === 'recurso' ? 'demanda_ouvidoria' : t.type,
             fiscalizacaoData: t.fiscalizacao_data, ouvidoriaData: t.ouvidoria_data, recursoData: t.ouvidoria_data, recursoRevData: t.recurso_rev_data,
@@ -4857,6 +4863,17 @@ export async function startServer(isVercel = false) {
         const finalProgress = progress !== undefined ? parseInt(progress) : 0;
         const finalStatus = finalProgress === 100 ? "Concluída" : finalProgress > 0 ? "Em andamento" : "Não iniciada";
         
+        let finalStartDate: Date | null = null;
+        if (startDate && typeof startDate === "string" && startDate.trim() !== "" && startDate !== "null" && startDate !== "undefined") {
+          const parsed = new Date(startDate);
+          if (!isNaN(parsed.getTime())) finalStartDate = parsed;
+        }
+        let finalEndDate: Date | null = null;
+        if (endDate && typeof endDate === "string" && endDate.trim() !== "" && endDate !== "null" && endDate !== "undefined") {
+          const parsed = new Date(endDate);
+          if (!isNaN(parsed.getTime())) finalEndDate = parsed;
+        }
+
         let finalAreaIds = areaIds || [];
         let finalCategoryIds = categoryIds || [];
         if (parentId) {
@@ -4870,8 +4887,9 @@ export async function startServer(isVercel = false) {
             }
         }
         
-        const reqWeight = parseInt(req.body.weight as any, 10);
-        const finalWeight = isNaN(reqWeight) ? 1 : reqWeight;
+        const rawWeight = req.body.weight;
+        const parsedWeight = (rawWeight !== undefined && rawWeight !== null && rawWeight !== "") ? parseFloat(rawWeight) : 1.0;
+        const finalWeight = isNaN(parsedWeight) ? 1.0 : parsedWeight;
         const result = await client.query(
           `INSERT INTO pl_tasks (title, description, start_date, end_date, status, parent_id, progress, priority, category, assigned_to, notes, plan_id, depends_on_task_id, updated_at, updated_by, sei_process, weight, type, fiscalizacao_data, ouvidoria_data, recurso_rev_data, checklist)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), $14, $15, $16, $17, $18, $19, $20, $21)
@@ -4879,8 +4897,8 @@ export async function startServer(isVercel = false) {
           [
             title || "Sem título",
             description || "",
-            startDate ? new Date(startDate) : null,
-            endDate ? new Date(endDate) : null,
+            finalStartDate,
+            finalEndDate,
             finalStatus,
             parentId ? parseInt(parentId) : null,
             finalProgress,
@@ -4892,7 +4910,7 @@ export async function startServer(isVercel = false) {
             dependsOnTaskId ? parseInt(dependsOnTaskId) : null,
             req.body.updatedBy || "SGI Pro",
             req.body.seiProcess || null,
-            isNaN(finalWeight) ? 1.0 : finalWeight,
+            finalWeight,
             type || "default",
             fiscalizacaoData ? JSON.stringify(fiscalizacaoData) : null,
             (ouvidoriaData || recursoData) ? JSON.stringify(ouvidoriaData || recursoData) : null,
@@ -4967,30 +4985,42 @@ export async function startServer(isVercel = false) {
           await rollUpTask(client, createdTask.parent_id);
         }
         
+        const refreshedRes = await client.query("SELECT * FROM pl_tasks WHERE id = $1", [createdTaskId]);
+        const finalSaved = refreshedRes.rows[0] || createdTask;
+
         await client.query("COMMIT");
         
         res.json({
           success: true,
           data: {
-            id: Number(createdTask.id),
-            title: createdTask.title,
-            description: createdTask.description,
-            startDate: createdTask.start_date,
-            endDate: createdTask.end_date,
-            status: createdTask.status,
-            parentId: createdTask.parent_id ? Number(createdTask.parent_id) : null,
-            progress: Number(createdTask.progress) || 0,
-            priority: createdTask.priority,
-            category: createdTask.category,
+            id: Number(finalSaved.id),
+            title: finalSaved.title,
+            description: finalSaved.description,
+            startDate: finalSaved.start_date ? new Date(finalSaved.start_date).toISOString().split('T')[0] : null,
+            endDate: finalSaved.end_date ? new Date(finalSaved.end_date).toISOString().split('T')[0] : null,
+            status: finalSaved.status,
+            parentId: finalSaved.parent_id ? Number(finalSaved.parent_id) : null,
+            progress: Number(finalSaved.progress) || 0,
+            priority: finalSaved.priority,
+            category: finalSaved.category,
             assignedTo: finalAssignedTo,
-            createdBy: createdTask.created_by,
-            notes: createdTask.notes,
-            planId: createdTask.plan_id ? Number(createdTask.plan_id) : null,
-            type: createdTask.type,
-            fiscalizacaoData: createdTask.fiscalizacao_data, ouvidoriaData: createdTask.ouvidoria_data, recursoData: createdTask.ouvidoria_data, recursoRevData: createdTask.recurso_rev_data,
+            createdBy: finalSaved.created_by,
+            notes: finalSaved.notes,
+            planId: finalSaved.plan_id ? Number(finalSaved.plan_id) : null,
+            weight: finalSaved.weight !== undefined && finalSaved.weight !== null ? Number(finalSaved.weight) : 1,
+            seiProcess: finalSaved.sei_process || null,
+            dependsOnTaskId: finalSaved.depends_on_task_id ? Number(finalSaved.depends_on_task_id) : null,
+            checklist: finalSaved.checklist || [],
+            type: finalSaved.type,
+            fiscalizacaoData: finalSaved.fiscalizacao_data,
+            ouvidoriaData: finalSaved.ouvidoria_data,
+            recursoData: finalSaved.ouvidoria_data,
+            recursoRevData: finalSaved.recurso_rev_data,
             areaIds: areaIds || [],
             responsibleIds: responsibleIds || [],
-            categoryIds: categoryIds || []
+            categoryIds: categoryIds || [],
+            updatedAt: finalSaved.updated_at,
+            updatedBy: finalSaved.updated_by
           }
         });
       } catch (err) {
@@ -5024,14 +5054,22 @@ export async function startServer(isVercel = false) {
         const childrenCheck = await client.query("SELECT COUNT(*) FROM pl_tasks WHERE parent_id = $1", [taskId]);
         const hasChildren = parseInt(childrenCheck.rows[0].count, 10) > 0;
 
-        let finalStartDate = startDate ? new Date(startDate) : null;
-        let finalEndDate = endDate ? new Date(endDate) : null;
+        let finalStartDate: Date | null = null;
+        if (startDate && typeof startDate === "string" && startDate.trim() !== "" && startDate !== "null" && startDate !== "undefined") {
+          const parsed = new Date(startDate);
+          if (!isNaN(parsed.getTime())) finalStartDate = parsed;
+        }
+        let finalEndDate: Date | null = null;
+        if (endDate && typeof endDate === "string" && endDate.trim() !== "" && endDate !== "null" && endDate !== "undefined") {
+          const parsed = new Date(endDate);
+          if (!isNaN(parsed.getTime())) finalEndDate = parsed;
+        }
         let finalProgress = progress !== undefined ? parseInt(progress) : 0;
         let finalStatus = finalProgress === 100 ? "Concluída" : finalProgress > 0 ? "Em andamento" : "Não iniciada";
 
         if (hasChildren) {
-          finalStartDate = currentTaskRes.rows[0].start_date;
-          finalEndDate = currentTaskRes.rows[0].end_date;
+          finalStartDate = currentTaskRes.rows[0].start_date || finalStartDate;
+          finalEndDate = currentTaskRes.rows[0].end_date || finalEndDate;
           finalProgress = currentTaskRes.rows[0].progress || 0;
           finalStatus = finalProgress === 100 ? "Concluída" : finalProgress > 0 ? "Em andamento" : "Não iniciada";
         }
@@ -5049,8 +5087,9 @@ export async function startServer(isVercel = false) {
             }
         }
 
-        const reqWeight = parseInt(req.body.weight as any, 10);
-        const finalWeight = isNaN(reqWeight) ? 1 : reqWeight;
+        const rawWeight = req.body.weight;
+        const parsedWeight = (rawWeight !== undefined && rawWeight !== null && rawWeight !== "") ? parseFloat(rawWeight) : 1.0;
+        const finalWeight = isNaN(parsedWeight) ? 1.0 : parsedWeight;
         const result = await client.query(
           `UPDATE pl_tasks 
            SET title = $1, description = $2, start_date = $3, end_date = $4, status = $5, progress = $6, priority = $7, category = $8, assigned_to = $9, notes = $10, parent_id = $11, plan_id = $12, depends_on_task_id = $13, updated_at = NOW(), updated_by = $14, sei_process = $16, weight = $17, type = $18, fiscalizacao_data = $19, ouvidoria_data = $20, recurso_rev_data = $21, checklist = $22
@@ -5073,7 +5112,7 @@ export async function startServer(isVercel = false) {
             req.body.updatedBy || "SGI Pro",
             taskId,
             seiProcess || null,
-            isNaN(finalWeight) ? 1.0 : finalWeight,
+            finalWeight,
             type || "default",
             fiscalizacaoData ? JSON.stringify(fiscalizacaoData) : null,
             (ouvidoriaData || recursoData) ? JSON.stringify(ouvidoriaData || recursoData) : null,
@@ -5162,30 +5201,42 @@ export async function startServer(isVercel = false) {
           await rollUpTask(client, oldParentId);
         }
 
+        const refreshedRes = await client.query("SELECT * FROM pl_tasks WHERE id = $1", [taskId]);
+        const finalSaved = refreshedRes.rows[0] || updatedTask;
+
         await client.query("COMMIT");
         
         res.json({
           success: true,
           data: {
-            id: Number(updatedTask.id),
-            title: updatedTask.title,
-            description: updatedTask.description,
-            startDate: updatedTask.start_date,
-            endDate: updatedTask.end_date,
-            status: updatedTask.status,
-            parentId: updatedTask.parent_id ? Number(updatedTask.parent_id) : null,
-            progress: Number(updatedTask.progress) || 0,
-            priority: updatedTask.priority,
-            category: updatedTask.category,
+            id: Number(finalSaved.id),
+            title: finalSaved.title,
+            description: finalSaved.description,
+            startDate: finalSaved.start_date ? new Date(finalSaved.start_date).toISOString().split('T')[0] : null,
+            endDate: finalSaved.end_date ? new Date(finalSaved.end_date).toISOString().split('T')[0] : null,
+            status: finalSaved.status,
+            parentId: finalSaved.parent_id ? Number(finalSaved.parent_id) : null,
+            progress: Number(finalSaved.progress) || 0,
+            priority: finalSaved.priority,
+            category: finalSaved.category,
             assignedTo: finalAssignedTo,
-            createdBy: updatedTask.created_by,
-            notes: updatedTask.notes,
-            planId: updatedTask.plan_id ? Number(updatedTask.plan_id) : null,
-            type: updatedTask.type,
-            fiscalizacaoData: updatedTask.fiscalizacao_data, ouvidoriaData: updatedTask.ouvidoria_data, recursoData: updatedTask.ouvidoria_data, recursoRevData: updatedTask.recurso_rev_data,
-            areaIds: areaIds || [],
+            createdBy: finalSaved.created_by,
+            notes: finalSaved.notes,
+            planId: finalSaved.plan_id ? Number(finalSaved.plan_id) : null,
+            weight: finalSaved.weight !== undefined && finalSaved.weight !== null ? Number(finalSaved.weight) : 1,
+            seiProcess: finalSaved.sei_process || null,
+            dependsOnTaskId: finalSaved.depends_on_task_id ? Number(finalSaved.depends_on_task_id) : null,
+            checklist: finalSaved.checklist || [],
+            type: finalSaved.type,
+            fiscalizacaoData: finalSaved.fiscalizacao_data,
+            ouvidoriaData: finalSaved.ouvidoria_data,
+            recursoData: finalSaved.ouvidoria_data,
+            recursoRevData: finalSaved.recurso_rev_data,
+            areaIds: finalAreaIds,
             responsibleIds: responsibleIds || [],
-            categoryIds: categoryIds || []
+            categoryIds: finalCategoryIds,
+            updatedAt: finalSaved.updated_at,
+            updatedBy: finalSaved.updated_by
           }
         });
       } catch (err) {

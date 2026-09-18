@@ -451,11 +451,20 @@ export function PlanningTab({
     }
   }, [tasks, currentUser, hasEvaluatedAlerts, responsiblesProp]);
   // Navigation, search & filter state
+  const defaultStatusFilter = (activeSubTab === "dashboard" || (activeSubTab as string) === "painel") && !isMyTasksSelected
+    ? ["Não iniciada", "Em andamento", "Concluída"]
+    : ["Não iniciada", "Em andamento"];
+
+  useEffect(() => {
+    setStatusFilter(defaultStatusFilter);
+  }, [activeSubTab, isMyTasksSelected]);
+
+
   const [isDashboardFiltersExpanded, setIsDashboardFiltersExpanded] = useState(false);
   const [isTasksFiltersExpanded, setIsTasksFiltersExpanded] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [hasSubtasksFilter, setHasSubtasksFilter] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<string[]>(["Não iniciada", "Em andamento"]);
+  const [statusFilter, setStatusFilter] = useState<string[]>(defaultStatusFilter);
   const [situationFilter, setSituationFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -482,7 +491,7 @@ export function PlanningTab({
   const [periodValueFilter, setPeriodValueFilter] = useState<string>("all");
 
   const isAnyFilterActive = useMemo(() => {
-    const isStatusFiltered = !(statusFilter.length === 2 && statusFilter.includes("Não iniciada") && statusFilter.includes("Em andamento")) && statusFilter.length !== 3;
+    const isStatusFiltered = statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s));
     return (
       isStatusFiltered ||
       situationFilter !== "all" ||
@@ -1587,7 +1596,7 @@ export function PlanningTab({
         if (isMyTasksSelected) {
           setViewMode(prev => ["area", "responsible", "table", "gantt"].includes(prev) ? "board" : prev);
         }
-        setStatusFilter(["Não iniciada", "Em andamento"]);
+        setStatusFilter(defaultStatusFilter);
         setSituationFilter("all");
         setPriorityFilter("all");
         setCategoryFilter("all");
@@ -3191,6 +3200,24 @@ export function PlanningTab({
     }));
   };
 
+  // Helper to format any date into YYYY-MM-DD for form input[type="date"]
+  const fmtDate = (d: any): string => {
+    if (!d) return "";
+    if (typeof d === "string") {
+      const trimmed = d.trim();
+      if (trimmed === "" || trimmed === "null" || trimmed === "undefined") return "";
+      const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (match) return match[1];
+    }
+    try {
+      const dateObj = new Date(d);
+      if (isNaN(dateObj.getTime())) return "";
+      return dateObj.toISOString().split("T")[0];
+    } catch {
+      return "";
+    }
+  };
+
   // Submit task create or edit form
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -3201,50 +3228,42 @@ export function PlanningTab({
       return;
     }
 
-    // 2. Data Início e Data fim: obrigatório.
-    if (!editingTask.startDate) {
-      showToast("Validação", "A data de início é obrigatória.", "warning");
-      return;
-    }
-    if (!editingTask.endDate) {
-      showToast("Validação", "A data de fim é obrigatória.", "warning");
-      return;
-    }
-
-    // 3. Data Fim não pode ser menor que a Data Início.
-    const startD = new Date(editingTask.startDate);
-    const endD = new Date(editingTask.endDate);
-    if (endD < startD) {
-      showToast("Validação", "A data de fim não pode ser menor que a data de início.", "warning");
-      return;
+    // 2. Data Início e Data fim: Se ambas fornecidas, valida consistência cronológica (permite nulos para tarefas importadas/não agendadas)
+    if (editingTask.startDate && editingTask.endDate) {
+      const startD = new Date(editingTask.startDate);
+      const endD = new Date(editingTask.endDate);
+      if (endD < startD) {
+        showToast("Validação", "A data de fim não pode ser menor que a data de início.", "warning");
+        return;
+      }
     }
 
-    // 4. Prioridade: Obrigatório.
+    // 3. Prioridade: Obrigatório.
     if (!editingTask.priority) {
       showToast("Validação", "A prioridade é obrigatória.", "warning");
       return;
     }
 
-    // 5. Plano de Atividades (Vincular a um): Obrigatório.
-    if (!editingTask.planId) {
+    // 4. Plano de Atividades (Vincular a um): Obrigatório se houver planos cadastrados
+    if (plans && plans.length > 0 && !editingTask.planId) {
       showToast("Validação", "O vínculo com um Plano de Atividades é obrigatório.", "warning");
       return;
     }
 
-    // 6. Áreas de Vinculação: Obrigatório.
-    if (!editingTask.areaIds || editingTask.areaIds.length === 0) {
+    // 5. Áreas de Vinculação: Obrigatório se houver áreas cadastradas
+    if (areas && areas.length > 0 && (!editingTask.areaIds || editingTask.areaIds.length === 0)) {
       showToast("Validação", "A seleção de pelo menos uma Área de Vinculação é obrigatória.", "warning");
       return;
     }
 
-    // 7. Categorias: Obrigatório, pelo menos uma
-    if (!editingTask.categoryIds || editingTask.categoryIds.length === 0) {
+    // 6. Categorias: Obrigatório se houver categorias cadastradas
+    if (categories && categories.length > 0 && (!editingTask.categoryIds || editingTask.categoryIds.length === 0)) {
       showToast("Validação", "A seleção de pelo menos uma Categoria é obrigatória.", "warning");
       return;
     }
 
-    // 8. Responsáveis Designados: Obrigatório, pelo menos um.
-    if (!editingTask.responsibleIds || editingTask.responsibleIds.length === 0) {
+    // 7. Responsáveis Designados: Obrigatório para criação de novas tarefas
+    if (formMode === "create" && responsibles && responsibles.length > 0 && (!editingTask.responsibleIds || editingTask.responsibleIds.length === 0)) {
       showToast("Validação", "A designação de pelo menos um Responsável é obrigatória.", "warning");
       return;
     }
@@ -3255,12 +3274,24 @@ export function PlanningTab({
       const method = isEdit ? "PUT" : "POST";
 
       const finalProgress = parseInt(editingTask.progress as any) || 0;
-      const finalWeight = editingTask.weight !== undefined && editingTask.weight !== "" && !isNaN(parseInt(editingTask.weight as any, 10)) ? parseInt(editingTask.weight as any, 10) : 1;
+      const rawWeight = editingTask.weight;
+      const finalWeight = (rawWeight !== undefined && rawWeight !== null && rawWeight !== "" && !isNaN(Number(rawWeight)))
+        ? Number(rawWeight)
+        : 1;
       const finalStatus = finalProgress === 100 ? "Concluída" : finalProgress > 0 ? "Em andamento" : "Não iniciada";
       const author = currentUser?.name || "Administrador";
 
+      const cleanStartDate = editingTask.startDate && typeof editingTask.startDate === "string" && editingTask.startDate.trim() !== ""
+        ? editingTask.startDate.trim()
+        : null;
+      const cleanEndDate = editingTask.endDate && typeof editingTask.endDate === "string" && editingTask.endDate.trim() !== ""
+        ? editingTask.endDate.trim()
+        : null;
+
       const payload = {
         ...editingTask,
+        startDate: cleanStartDate,
+        endDate: cleanEndDate,
         progress: finalProgress,
         weight: finalWeight,
         status: finalStatus,
@@ -3306,9 +3337,16 @@ export function PlanningTab({
           });
         }
 
-        // Keep the form open, update state with saved task, switch to edit mode if it was create
+        // Keep the form open, update state with saved task, ensuring formatted dates and weight are preserved for the form
         setFormMode("edit");
-        setEditingTask(resData.data);
+        const returnedData = resData.data;
+        setEditingTask({
+          ...returnedData,
+          startDate: fmtDate(returnedData.startDate || cleanStartDate),
+          endDate: fmtDate(returnedData.endDate || cleanEndDate),
+          weight: returnedData.weight !== undefined && returnedData.weight !== null ? returnedData.weight : finalWeight,
+          checklist: returnedData.checklist || editingTask.checklist || []
+        });
         setNewAddedComments([]);
         
         // Force refresh all tasks to ensure correct state and Rollup updates are loaded
@@ -3400,15 +3438,6 @@ export function PlanningTab({
   const handleEditTask = (task: Task) => {
     setFormMode("edit");
     setEditTaskParentSearch("");
-    // Format dates back to YYYY-MM-DD for form binding
-    const fmtDate = (d: string | null) => {
-      if (!d) return "";
-      try {
-        return new Date(d).toISOString().split("T")[0];
-      } catch {
-        return "";
-      }
-    };
 
     setEditingTask({
       ...task,
@@ -3420,7 +3449,7 @@ export function PlanningTab({
       checklist: task.type === "fiscalizacao"
         ? ensureFiscalizacaoChecklist(task.checklist)
         : task.checklist || [],
-      weight: task.weight !== undefined ? task.weight : 1
+      weight: task.weight !== undefined && task.weight !== null ? task.weight : 1
     });
     setTaskFormTab("form");
     setIsFormOpen(true);
@@ -5153,14 +5182,14 @@ export function PlanningTab({
             </div>
 
             {/* Clear Filters Button if any is changed */}
-            {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || statusFilter.length !== 2 || !statusFilter.includes("Não iniciada") || !statusFilter.includes("Em andamento") || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || periodTypeFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all") && (
+            {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || periodTypeFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all") && (
               <div className="pt-2 flex justify-end">
                 <button
                   onClick={() => {
                     setPlanFilter("all");
                     setSelectedAreaIds([]);
                     setSelectedResponsibleIds([]);
-                    setStatusFilter(["Não iniciada", "Em andamento"]);
+                    setStatusFilter(defaultStatusFilter);
                     setSituationFilter("all");
                     setPriorityFilter("all");
                     setCategoryFilter("all");
@@ -8062,11 +8091,11 @@ export function PlanningTab({
 
                   {/* Consultar / Limpar Buttons */}
                   <div className="flex justify-center items-center gap-4 pt-2">
-                    {(planFilter !== "all" || statusFilter.length !== 2 || !statusFilter.includes("Não iniciada") || !statusFilter.includes("Em andamento") || situationFilter !== "all" || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
+                    {(planFilter !== "all" || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || situationFilter !== "all" || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
                       <button
                         onClick={() => {
                           setPlanFilter("all");
-                          setStatusFilter(["Não iniciada", "Em andamento"]);
+                          setStatusFilter(defaultStatusFilter);
                           setSituationFilter("all");
                           setTaskTypeFilter("all");
                           setSearchTerm("");
@@ -8355,13 +8384,13 @@ export function PlanningTab({
 
               {/* Consultar / Limpar Buttons */}
               <div className="flex justify-center items-center gap-4 pt-2">
-                  {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || statusFilter.length !== 2 || !statusFilter.includes("Não iniciada") || !statusFilter.includes("Em andamento") || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
+                  {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
                     <button
                       onClick={() => {
                         setPlanFilter("all");
                         setSelectedAreaIds([]);
                         setSelectedResponsibleIds([]);
-                        setStatusFilter(["Não iniciada", "Em andamento"]);
+                        setStatusFilter(defaultStatusFilter);
                         setSituationFilter("all");
                         setPriorityFilter("all");
                         setCategoryFilter("all");
@@ -12146,11 +12175,13 @@ export function PlanningTab({
                     <input
                       type="number"
                       min="0"
-                      step="1"
-                      value={editingTask.weight !== undefined ? editingTask.weight : ""}
+                      step="any"
+                      value={editingTask.weight !== undefined && editingTask.weight !== null ? editingTask.weight : ""}
                       onChange={(e) => {
-                        setEditingTask(prev => ({ ...prev, weight: e.target.value as any }));
+                        const val = e.target.value;
+                        setEditingTask(prev => ({ ...prev, weight: val === "" ? ("" as any) : parseFloat(val) }));
                       }}
+                      placeholder="1"
                       className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none transition-all placeholder:text-slate-400"
                     />
                   </div>

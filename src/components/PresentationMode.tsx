@@ -97,26 +97,25 @@ export const PresentationControls: React.FC<PresentationControlsProps> = ({ conf
       const elapsed = timestamp - startTime;
 
       if (elapsed > pauseStart && elapsed < (pauseStart + scrollDuration)) {
-        // Calculate progress within the scrolling window (0 to 1)
-        const scrollProgress = (elapsed - pauseStart) / scrollDuration;
+        const timeScrollingMs = elapsed - pauseStart;
+        // Velocidade padrão lenta (pixels por segundo)
+        const PIXELS_PER_SECOND = 40;
+        const targetScroll = (timeScrollingMs / 1000) * PIXELS_PER_SECOND;
         
         let scrolled = false;
-
         // Try scrolling the main container if it has internal overflow
         if (mainContainer) {
           const maxScrollMain = Math.max(0, mainContainer.scrollHeight - mainContainer.clientHeight);
           if (maxScrollMain > 0) {
-            const targetScroll = maxScrollMain * scrollProgress;
-            mainContainer.scrollTo({ top: targetScroll, behavior: 'auto' });
+            mainContainer.scrollTo({ top: Math.min(targetScroll, maxScrollMain), behavior: 'auto' });
             scrolled = true;
           }
         }
-
+        
         // Try scrolling the window if the document is taller than the viewport
         const maxScrollWindow = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
         if (maxScrollWindow > 0) {
-          const targetScroll = maxScrollWindow * scrollProgress;
-          window.scrollTo({ top: targetScroll, behavior: 'auto' });
+          window.scrollTo({ top: Math.min(targetScroll, maxScrollWindow), behavior: 'auto' });
           scrolled = true;
         }
       }
