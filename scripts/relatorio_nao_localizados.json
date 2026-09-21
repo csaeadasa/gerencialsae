@@ -1,0 +1,223 @@
+[
+  {
+    "idCsv": "1",
+    "processoSei": "00197-00001369/2019-99",
+    "documentoSei": "DESPACHO",
+    "nomeUsuario": "Ouvidoria GDF",
+    "tipoManifestacao": "Reclamação",
+    "servico": "Água",
+    "categoria": "Impedimento de Acesso",
+    "etapa": "Finalizado",
+    "apuracao": "Reclamação referente a multa por impedimento das faturas",
+    "datas": {
+      "recebido": "2019-03-22",
+      "emAnaliseTecnica": "2019-03-23",
+      "tramitadoParaOuvidoria": "2019-03-28",
+      "finalizado": "2019-04-03"
+    }
+  },
+  {
+    "idCsv": "2",
+    "processoSei": "00197-00001374/2019-00",
+    "documentoSei": "DESPACHO",
+    "nomeUsuario": "Ouvidoria GDF",
+    "tipoManifestacao": "Reclamação",
+    "servico": "Água",
+    "categoria": "Quitação de Débitos",
+    "etapa": "Finalizado",
+    "apuracao": "Reclamação referente a multa por impedimento de corte",
+    "datas": {
+      "recebido": "2019-03-22",
+      "emAnaliseTecnica": "2019-03-27",
+      "tramitadoParaOuvidoria": "2019-03-28",
+      "finalizado": "2019-04-08"
+    }
+  },
+  {
+    "idCsv": "3",
+    "processoSei": "00197-00001589/2019-12",
+    "documentoSei": "MEMO",
+    "nomeUsuario": "Ouvidoria GDF",
+    "tipoManifestacao": "Denúncia",
+    "servico": "Água",
+    "categoria": "Outros",
+    "etapa": "Finalizado",
+    "apuracao": "Denuncia de construção de uma provável Estação Elevatória irregular",
+    "datas": {
+      "recebido": "2019-04-03",
+      "emAnaliseTecnica": "2019-04-12",
+      "tramitadoParaOuvidoria": "2019-05-16",
+      "finalizado": "2019-05-16"
+    }
+  },
+  {
+    "idCsv": "4",
+    "processoSei": "",
+    "documentoSei": "MEMO",
+    "nomeUsuario": "Ouvidoria GDF",
+    "tipoManifestacao": "Denúncia",
+    "servico": "Esgoto",
+    "categoria": "Outros",
+    "etapa": "Finalizado",
+    "apuracao": "Denuncia sobre lançamento de efluente irregular no córrego localizado próximo do Morro da Capelinha",
+    "datas": {
+      "recebido": "2019-05-03",
+      "emAnaliseTecnica": "2019-05-24",
+      "tramitadoParaOuvidoria": "2019-06-10",
+      "finalizado": "2019-05-23"
+    }
+  },
+  {
+    "idCsv": "6",
+    "processoSei": "00197-00002501/2019-80",
+    "documentoSei": "MEMO",
+    "nomeUsuario": "Ouvidoria GDF",
+    "tipoManifestacao": "Denúncia",
+    "servico": "Esgoto",
+    "categoria": "Outros",
+    "etapa": "Finalizado",
+    "apuracao": "Denuncia sobre lançamento de efluente irregular em corpo hídrico (Ribeirão Sobradinho)",
+    "datas": {
+      "recebido": "2019-06-05",
+      "emAnaliseTecnica": "2019-06-05",
+      "tramitadoParaOuvidoria": "2019-06-10",
+      "finalizado": "2022-08-11"
+    }
+  },
+  {
+    "idCsv": "8",
+    "processoSei": "00197-00002866/2019-12",
+    "documentoSei": "Nota Técnica SEI-GDF n.º 70/2019 - ADASA/SAE/CORA",
+    "nomeUsuario": "Temis Dantas Varella Barca",
+    "tipoManifestacao": "Reclamação",
+    "servico": "Água",
+    "categoria": "Desativação/Ligação de Água",
+    "etapa": "Finalizado",
+    "apuracao": "Pede cancelamento de fatura emitidas após pedido de suspensão do fornecimento feito pelo usuário",
+    "datas": {
+      "recebido": "2019-08-02",
+      "emAnaliseTecnica": "2019-09-04",
+      "tramitadoParaOuvidoria": "2019-10-15",
+      "finalizado": "2019-10-15"
+    }
+  },
+  {
+    "idCsv": "11",
+    "processoSei": "00197-00001245/2019-11",
+    "documentoSei": "Nota Técnica SEI-GDF n.º 63/2019 - ADASA/SAE/CORA",
+    "nomeUsuario": "Dayanne Esteves Oliveira Correa",
+    "tipoManifestacao": "Reclamação",
+    "servico": "Água",
+    "categoria": "Vazamento Imperceptível",
+    "etapa": "Finalizado",
+    "apuracao": "Pede refaturamento - vazamento teria influenciado no alto valor da fatura e manutenção foi foi acomp",
+    "datas": {
+      "recebido": "2019-09-18",
+      "emAnaliseTecnica": "2019-08-19",
+      "tramitadoParaOuvidoria": "2019-09-18",
+      "finalizado": "2019-09-18"
+    }
+  },
+  {
+    "idCsv": "15",
+    "processoSei": "00197-00003873/2019-23",
+    "documentoSei": "MEMO 30279403",
+    "nomeUsuario": "Luiz Roberto Paranhos de Guimarães",
+    "tipoManifestacao": "Reclamação",
+    "servico": "Água",
+    "categoria": "Vazamento Imperceptível",
+    "etapa": "Finalizado",
+    "apuracao": "Revisão de fatura - existencia de vazamentos imperceptiveis",
+    "datas": {
+      "recebido": "2019-10-07",
+      "emAnaliseTecnica": "2019-10-10",
+      "tramitadoParaOuvidoria": "2019-10-24",
+      "finalizado": "2019-10-24"
+    }
+  },
+  {
+    "idCsv": "16",
+    "processoSei": "00197-00003388/2019-50",
+    "documentoSei": "Memorando 11 SAE/COFA",
+    "nomeUsuario": "Thalita Barbosa de Sousa",
+    "tipoManifestacao": "Reclamação",
+    "servico": "Água",
+    "categoria": "Falta de Água",
+    "etapa": "Finalizado",
+    "apuracao": "Reclamação de falta de água na residência",
+    "datas": {
+      "recebido": "2019-10-24",
+      "emAnaliseTecnica": "2019-10-24",
+      "tramitadoParaOuvidoria": "2019-11-05",
+      "finalizado": "2019-11-05"
+    }
+  },
+  {
+    "idCsv": "17",
+    "processoSei": "00197-00004166/2019-54",
+    "documentoSei": "Memorando SEI -GDF",
+    "nomeUsuario": "Soraya Cortizo Quintanha Nascimento",
+    "tipoManifestacao": "Reclamação",
+    "servico": "Água",
+    "categoria": "Vazamento Imperceptível",
+    "etapa": "Finalizado",
+    "apuracao": "Revisão de calculo de Vazamento Imperceptível",
+    "datas": {
+      "recebido": "2019-10-31",
+      "emAnaliseTecnica": "2019-10-31",
+      "tramitadoParaOuvidoria": "2019-11-18",
+      "finalizado": "2019-11-18"
+    }
+  },
+  {
+    "idCsv": "18",
+    "processoSei": "00197-00004166/2019-54",
+    "documentoSei": "MEMO 31084513",
+    "nomeUsuario": "Soraya Cortizo Quintanilha do Nascimento",
+    "tipoManifestacao": "Reclamação",
+    "servico": "Água",
+    "categoria": "Vazamento Imperceptível",
+    "etapa": "Finalizado",
+    "apuracao": "Revisão de fatura - existencia de vazamentos imperceptiveis",
+    "datas": {
+      "recebido": "2019-10-31",
+      "emAnaliseTecnica": "2019-11-01",
+      "tramitadoParaOuvidoria": "2019-11-18",
+      "finalizado": "2019-11-20"
+    }
+  },
+  {
+    "idCsv": "19",
+    "processoSei": "00197-00003752/2019-81",
+    "documentoSei": "Nota Técnica SEI-GDF n.º 31/2019- ADASA/SAE/COFA",
+    "nomeUsuario": "Trindade e Reis Consultores LTDA",
+    "tipoManifestacao": "Solicitação",
+    "servico": "Água",
+    "categoria": "Vazamento Imperceptível",
+    "etapa": "Finalizado",
+    "apuracao": "Pede desconto de vazamento imperceptível",
+    "datas": {
+      "recebido": "2019-10-31",
+      "emAnaliseTecnica": "2019-10-31",
+      "tramitadoParaOuvidoria": "2019-11-18",
+      "finalizado": "2019-11-18"
+    }
+  },
+  {
+    "idCsv": "114",
+    "processoSei": "00197-00000968/2021-18",
+    "documentoSei": "Certificação 73710465",
+    "nomeUsuario": "JOSE FRANCISCO SANTANA",
+    "tipoManifestacao": "Reclamação",
+    "servico": "Água",
+    "categoria": "Consumo Medido",
+    "etapa": "Finalizado",
+    "apuracao": "A fatura ref. 02/2021 apresentou valor superior a sua média de consumo.",
+    "datas": {
+      "recebido": "2021-07-20",
+      "emAnaliseTecnica": "2021-07-21",
+      "tramitadoParaOuvidoria": "2021-08-10",
+      "finalizado": "2021-08-12"
+    }
+  }
+]

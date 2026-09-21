@@ -468,10 +468,20 @@ export function ResolutionsTab({ showToast, currentUser }: ResolutionsTabProps) 
                   return (
                     <tr key={res.id} className="hover:bg-slate-50/40 transition-colors group align-top">
                       <td className="px-5 py-4 font-semibold text-slate-700">
-                        <div className="flex flex-col">
-                          <span className="text-xs text-indigo-600 font-bold uppercase tracking-widest">{res.especie}</span>
-                          <span className="text-sm font-bold text-slate-800">Nº {res.numero} / {res.ano}</span>
-                          <span className="text-[10px] text-slate-400 font-semibold mt-1 bg-slate-100 px-1.5 py-0.5 rounded w-fit uppercase">{res.tipo}</span>
+                        <div className="flex items-start gap-3">
+                          <div className="w-12 h-16 rounded shadow-xs border border-slate-200 overflow-hidden shrink-0 bg-white">
+                            <img 
+                              src={res.imagem_capa || "/adasa-resolucoes.png"} 
+                              alt={`Capa da ${res.especie} ${res.numero}`} 
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover" 
+                            />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-xs text-indigo-600 font-bold uppercase tracking-widest">{res.especie}</span>
+                            <span className="text-sm font-bold text-slate-800">Nº {res.numero} / {res.ano}</span>
+                            <span className="text-[10px] text-slate-400 font-semibold mt-1 bg-slate-100 px-1.5 py-0.5 rounded w-fit uppercase">{res.tipo}</span>
+                          </div>
                         </div>
                       </td>
                       <td className="px-5 py-4 text-xs font-semibold text-slate-500">

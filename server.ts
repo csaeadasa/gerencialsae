@@ -68,6 +68,67 @@ function parseSafeFloatOrNull(val: any): number | null {
   return isNaN(parsed) ? null : parsed;
 }
 
+export function extractSeiProcessFromTitle(title: string): string | null {
+  if (!title || typeof title !== "string") return null;
+
+  // 1. Direct match for standard pattern: 00197-00003008/2019-87 (or other 5-digit organ like 00092)
+  const exact = title.match(/(\d{5})-(\d{8})\/(\d{4})-(\d{2})/);
+  if (exact) {
+    return `${exact[1]}-${exact[2]}/${exact[3]}-${exact[4]}`;
+  }
+
+  // 2. Standard pattern with flexible spacing/separators:
+  const m1 = title.match(/(\d{4,6})[\.\-\s]+(\d{4,9})\s*[\/]\s*(\d{4})[\.\-\s]+(\d{1,2})/);
+  if (m1) {
+    const organ = m1[1].padStart(5, "0").slice(-5);
+    const num = m1[2].padStart(8, "0").slice(-8);
+    const year = m1[3];
+    const dv = m1[4].padStart(2, "0");
+    return `${organ}-${num}/${year}-${dv}`;
+  }
+
+  // 3. Corrupted slash: e.g. 00197-000042982023-62
+  const m2 = title.match(/(\d{4,6})[\.\-\s]+(\d{8})(\d{4})[\.\-\s]+(\d{2})/);
+  if (m2) {
+    const organ = m2[1].padStart(5, "0").slice(-5);
+    const num = m2[2];
+    const year = m2[3];
+    const dv = m2[4];
+    return `${organ}-${num}/${year}-${dv}`;
+  }
+
+  // 4. Missing hyphen between organ and number: 0019700002029/2023
+  const m3 = title.match(/(\d{5})(\d{8})\s*[\/]\s*(\d{4})(?:[\.\-\s]+(\d{2}))?/);
+  if (m3) {
+    const organ = m3[1];
+    const num = m3[2];
+    const year = m3[3];
+    const dv = m3[4] ? m3[4].padStart(2, "0") : null;
+    return dv ? `${organ}-${num}/${year}-${dv}` : `${organ}-${num}/${year}`;
+  }
+
+  // 5. Older format or without check digits: 0197-000669/2006 or 00197-0000458/2017
+  const m4 = title.match(/(\d{4,5})[\.\-\s]+(\d{4,8})\s*[\/]\s*(\d{4})/);
+  if (m4) {
+    const organ = m4[1].padStart(5, "0");
+    const num = m4[2].padStart(8, "0");
+    const year = m4[3];
+    return `${organ}-${num}/${year}`;
+  }
+
+  // 6. Shorthand with Adasa context: "Processo Recurso de Revisão 2648/2025-18"
+  const m5 = title.match(/(?:Processo|Proc\.?|SEI)[^\d\/]*(\d{1,8})\s*[\/]\s*(\d{4})[\.\-\s]+(\d{2})/i);
+  if (m5) {
+    const organ = "00197";
+    const num = m5[1].padStart(8, "0");
+    const year = m5[2];
+    const dv = m5[3];
+    return `${organ}-${num}/${year}-${dv}`;
+  }
+
+  return null;
+}
+
 function getDbPool(): Pool {
   if (!dbPool) {
     const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
@@ -866,27 +927,11 @@ async function runStartupMigration() {
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS links JSONB DEFAULT '[]'::jsonb;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS comments JSONB DEFAULT '[]'::jsonb;`);
 
-      // Migrate legacy task type 'recurso' to 'demanda_ouvidoria'
+      // Migrate legacy task type 'recurso' to 'demanda_ouvidoria' if needed
       await client.query(`
         UPDATE pl_tasks 
         SET type = 'demanda_ouvidoria'
         WHERE type = 'recurso';
-      `);
-
-      // Set task type to 'demanda_ouvidoria' for all tasks under category DEMANDAS OUVIDORIA or OUVIDORIA
-      await client.query(`
-        UPDATE pl_tasks 
-        SET type = 'demanda_ouvidoria',
-            ouvidoria_data = COALESCE(ouvidoria_data, '{"situacao": "Recebido", "tipoManifestacao": "Demanda Ouvidoria"}'::jsonb)
-        WHERE id IN (
-          SELECT t.id FROM pl_tasks t
-          LEFT JOIN pl_task_categories tc ON tc.task_id = t.id
-          LEFT JOIN pl_categories c ON c.id = tc.category_id
-          WHERE UPPER(TRIM(c.name)) LIKE '%DEMANDAS OUVIDORIA%'
-             OR UPPER(TRIM(c.name)) LIKE '%OUVIDORIA%'
-             OR UPPER(TRIM(t.category)) LIKE '%DEMANDAS OUVIDORIA%'
-             OR UPPER(TRIM(t.category)) LIKE '%OUVIDORIA%'
-        ) AND (type IS NULL OR type = 'default' OR type = 'recurso');
       `);
 
       // Update any existing recurso_data jsonb that still references 'Reclamação'
@@ -896,87 +941,22 @@ async function runStartupMigration() {
         WHERE ouvidoria_data IS NOT NULL AND ouvidoria_data->>'tipoManifestacao' = 'Reclamação';
       `);
 
-      // Seed progressive random stage dates for Recurso de Revisão, Demanda de Ouvidoria, and Fiscalização if missing
+      // Extract and update sei_process from title for tasks where sei_process is null or empty
       try {
-        const tasksToUpdate = await client.query(`
-          SELECT id, type, start_date, end_date, fiscalizacao_data, ouvidoria_data, recurso_rev_data 
+        const tasksForSei = await client.query(`
+          SELECT id, title, sei_process 
           FROM pl_tasks 
-          WHERE (type IN ('recurso_revisao', 'demanda_ouvidoria', 'fiscalizacao') 
-             OR fiscalizacao_data IS NOT NULL 
-             OR ouvidoria_data IS NOT NULL 
-             OR recurso_rev_data IS NOT NULL)
+          WHERE (sei_process IS NULL OR sei_process = '')
+            AND title IS NOT NULL
         `);
-
-        const recursoRevStages = ['Recebido', 'Em Análise Técnica', 'Encaminhado à Diretoria', 'Notificação do Usuário', 'Finalizado'];
-        const ouvidoriaStages = ['Recebido', 'Em Análise Técnica', 'Tramitado para a Ouvidoria', 'Encaminhado à Diretoria', 'Retornado da Diretoria', 'Finalizado'];
-        const fiscStages = ['Planejamento', 'Execução', 'Monitoramento', 'Finalizada'];
-
-        for (const row of tasksToUpdate.rows) {
-          const tId = Number(row.id);
-          let baseYear = 2025;
-          if (row.start_date) {
-            const y = new Date(row.start_date).getFullYear();
-            if (!isNaN(y) && y >= 2017 && y <= 2026) baseYear = y;
-          } else if (row.end_date) {
-            const y = new Date(row.end_date).getFullYear();
-            if (!isNaN(y) && y >= 2017 && y <= 2026) baseYear = y;
-          } else {
-            baseYear = 2022 + (tId % 4);
-          }
-
-          const generateDates = (stagesList: string[]) => {
-            const result: Record<string, string> = {};
-            const seed = (tId || 1);
-            const startMonth = (seed % 7);
-            const startDay = ((seed * 7) % 18) + 1;
-            const curDate = new Date(baseYear, startMonth, startDay);
-            for (let i = 0; i < stagesList.length; i++) {
-              const stage = stagesList[i];
-              result[stage] = curDate.toISOString().split('T')[0];
-              let addDays = 10;
-              if (stage === 'Encaminhado à Diretoria' || stage === 'Tramitado para a Ouvidoria') {
-                addDays = 20 + ((seed * 3) % 9);
-              } else if (stage === 'Em Análise Técnica') {
-                addDays = 15 + ((seed * 2) % 8);
-              } else if (stage === 'Recebido') {
-                addDays = 7 + (seed % 6);
-              } else {
-                addDays = 8 + (seed % 7);
-              }
-              curDate.setDate(curDate.getDate() + addDays);
-            }
-            return result;
-          };
-
-          // 1. Recurso de Revisão
-          if (row.type === 'recurso_revisao' || row.recurso_rev_data) {
-            const rev = row.recurso_rev_data || { situacao: 'Recebido' };
-            if (!rev.datasEtapas || Object.keys(rev.datasEtapas).length < 2) {
-              rev.datasEtapas = generateDates(recursoRevStages);
-              await client.query("UPDATE pl_tasks SET recurso_rev_data = $1 WHERE id = $2", [rev, tId]);
-            }
-          }
-
-          // 2. Demanda de Ouvidoria
-          if (row.type === 'demanda_ouvidoria' || row.ouvidoria_data) {
-            const ouv = row.ouvidoria_data || { situacao: 'Recebido' };
-            if (!ouv.datasEtapas || Object.keys(ouv.datasEtapas).length < 2) {
-              ouv.datasEtapas = generateDates(ouvidoriaStages);
-              await client.query("UPDATE pl_tasks SET ouvidoria_data = $1 WHERE id = $2", [ouv, tId]);
-            }
-          }
-
-          // 3. Fiscalização
-          if (row.type === 'fiscalizacao' || row.fiscalizacao_data) {
-            const fisc = row.fiscalizacao_data || { etapa: 'Planejamento' };
-            if (!fisc.datasEtapas || Object.keys(fisc.datasEtapas).length < 2) {
-              fisc.datasEtapas = generateDates(fiscStages);
-              await client.query("UPDATE pl_tasks SET fiscalizacao_data = $1 WHERE id = $2", [fisc, tId]);
-            }
+        for (const row of tasksForSei.rows) {
+          const extracted = extractSeiProcessFromTitle(row.title);
+          if (extracted) {
+            await client.query("UPDATE pl_tasks SET sei_process = $1 WHERE id = $2", [extracted, row.id]);
           }
         }
-      } catch (errStage) {
-        console.error("Erro ao popular datas das etapas no banco:", errStage);
+      } catch (errSei) {
+        console.error("Erro ao extrair e atualizar sei_process das tarefas:", errSei);
       }
 
       // Ensure pl_task_models and pl_model_tasks tables exist for task templates
@@ -1707,18 +1687,19 @@ export async function startServer(isVercel = false) {
       for (const record of records) {
         const progress = Math.max(0, Math.min(100, Number.parseInt(record.progress, 10) || 0));
         const status = progress === 100 ? "Concluída" : progress > 0 ? "Em andamento" : "Não iniciada";
+        const effectiveSei = record.seiProcess || extractSeiProcessFromTitle(record.title) || null;
         const taskResult = await client.query(
           `INSERT INTO pl_tasks (title, description, start_date, end_date, status, progress, priority, category, assigned_to, notes, plan_id, updated_at, updated_by, sei_process, weight, type, fiscalizacao_data, checklist)
            VALUES ($1, $2, $3, $4, $5, $6, 'Média', 'PONTUAIS', '', '', $7, NOW(), 'Importação Mapas', $8, 1, 'fiscalizacao', $9::jsonb, '[]'::jsonb)
            RETURNING id`,
-          [record.title || "Fiscalização sem título", record.description || "", record.startDate || null, record.endDate || null, status, progress, Number(record.planId) > 0 ? Number(record.planId) : null, record.seiProcess || null, JSON.stringify(record.fiscalizacaoData || {})]
+          [record.title || "Fiscalização sem título", record.description || "", record.startDate || null, record.endDate || null, status, progress, Number(record.planId) > 0 ? Number(record.planId) : null, effectiveSei, JSON.stringify(record.fiscalizacaoData || {})]
         );
         const taskId = taskResult.rows[0]?.id;
         const data: any = record.fiscalizacaoData || {}; const metadata: any = data.mapasMetadata || {}; const document: any = data.documentos?.[0] || {};
         await client.query(
           `INSERT INTO fisc_map_fiscalizacoes (task_id, external_id, processo_sei, ano, objetivo, regiao, situacao, tipo_documento, destinatario, modalidade, programada, sei_documento, data_documento, constatacoes, nao_conformes, recomendacoes, determinacoes, tn, ai, tac, conformidade, latitude, longitude, coordenada_origem, data)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25::jsonb)`,
-          [taskId, data.codigo || null, record.seiProcess || null, metadata.ano ?? null, data.objetivo || record.description || null, data.regiaoAdministrativa || null, metadata.situacaoOriginal || status, document.tipo || null, document.destinatario || null, data.tipo || null, data.programacao || null, document.numeroSei || null, document.data || null, metadata.constataçõesAgregadas ?? null, metadata.naoConformidadesAgregadas ?? null, metadata.recomendacoes ?? null, metadata.determinacoes ?? null, metadata.termosNotificacaoAgregados ?? null, metadata.autosInfracaoAgregados ?? null, metadata.tac ?? null, metadata.conformidadeInformada ?? null, data.latitude || null, data.longitude || null, data.latitude && data.longitude ? "real" : "referencia", JSON.stringify(record)]
+          [taskId, data.codigo || null, effectiveSei, metadata.ano ?? null, data.objetivo || record.description || null, data.regiaoAdministrativa || null, metadata.situacaoOriginal || status, document.tipo || null, document.destinatario || null, data.tipo || null, data.programacao || null, document.numeroSei || null, document.data || null, metadata.constataçõesAgregadas ?? null, metadata.naoConformidadesAgregadas ?? null, metadata.recomendacoes ?? null, metadata.determinacoes ?? null, metadata.termosNotificacaoAgregados ?? null, metadata.autosInfracaoAgregados ?? null, metadata.tac ?? null, metadata.conformidadeInformada ?? null, data.latitude || null, data.longitude || null, data.latitude && data.longitude ? "real" : "referencia", JSON.stringify(record)]
         );
       }
       await client.query("COMMIT");
@@ -4827,7 +4808,7 @@ export async function startServer(isVercel = false) {
                RETURNING id
             `, [
                record.title || "Sem título", "", startDate, endDate, status, progress, weight, prio,
-               catName || "", "", record.notes || "", planId, record.sei_process || null,
+               catName || "", "", record.notes || "", planId, record.sei_process || extractSeiProcessFromTitle(record.title) || null,
                record.created_by || "Importação", completedAtDate, record.completed_by || null, isProg
             ]);
             
@@ -4856,6 +4837,600 @@ export async function startServer(isVercel = false) {
     } catch (error: any) {
       console.error("Erro no import-tasks:", error);
       res.status(500).json({ success: false, error: error.message || "Erro desconhecido na importação" });
+    }
+  });
+
+  app.post("/api/ouvidoria/import-csv", async (req, res) => {
+    try {
+      const { csvText } = req.body;
+      if (!csvText || typeof csvText !== "string" || !csvText.trim()) {
+        return res.status(400).json({ success: false, error: "Conteúdo do CSV não informado." });
+      }
+
+      const parseDate = (dateStr: any): string | null => {
+        if (!dateStr) return null;
+        const d = String(dateStr).trim();
+        if (!d || d === '-' || d.toLowerCase() === 'não há') return null;
+        const parts = d.split('/');
+        if (parts.length === 3) {
+          const day = parts[0].padStart(2, '0');
+          const month = parts[1].padStart(2, '0');
+          const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+          return `${year}-${month}-${day}`;
+        }
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+        return null;
+      };
+
+      const normalizeSeiDigits = (sei: any): string => {
+        if (!sei) return '';
+        return String(sei).replace(/\D/g, '');
+      };
+
+      const extractDigitsFromText = (text: any): string[] => {
+        if (!text) return [];
+        const matches = String(text).match(/\d{4,6}[\.\-\s]*\d{4,9}[\.\-\s\/\\]*\d{4}[\.\-\s]*\d{1,2}/g);
+        if (matches) {
+          return matches.map(m => normalizeSeiDigits(m)).filter(m => m.length >= 10);
+        }
+        const digits = normalizeSeiDigits(text);
+        return digits.length >= 10 ? [digits] : [];
+      };
+
+      const firstLine = csvText.split('\n')[0] || '';
+      const delimiter = firstLine.includes(';') ? ';' : ',';
+
+      const records = parse(csvText, {
+        columns: true,
+        skip_empty_lines: true,
+        delimiter,
+        relax_quotes: true,
+        relax_column_count: true,
+        trim: true
+      }) as any[];
+
+      const pool = getDbPool();
+      const { rows: tasks } = await pool.query(`
+        SELECT id, title, sei_process, type, ouvidoria_data
+        FROM pl_tasks
+      `);
+
+      const taskMapByDigits = new Map<string, any[]>();
+      const allTasks: { task: any; digSet: Set<string> }[] = [];
+
+      for (const t of tasks) {
+        const digSet = new Set<string>();
+        if (t.sei_process) {
+          const d = normalizeSeiDigits(t.sei_process);
+          if (d.length >= 10) digSet.add(d);
+        }
+        if (t.title) {
+          const found = extractDigitsFromText(t.title);
+          for (const f of found) {
+            if (f.length >= 10) digSet.add(f);
+          }
+        }
+        if (t.ouvidoria_data && typeof t.ouvidoria_data === 'object' && t.ouvidoria_data.numeroSei) {
+          const d = normalizeSeiDigits(t.ouvidoria_data.numeroSei);
+          if (d.length >= 10) digSet.add(d);
+        }
+
+        allTasks.push({ task: t, digSet });
+        for (const d of digSet) {
+          if (!taskMapByDigits.has(d)) {
+            taskMapByDigits.set(d, []);
+          }
+          taskMapByDigits.get(d)!.push(t);
+        }
+      }
+
+      const updatedTasks: any[] = [];
+      const notFoundRecords: any[] = [];
+
+      for (const row of records) {
+        const csvId = row['ID'] || '';
+        const seiRaw = (row['Nº do Processo SEI'] || row['Processo SEI'] || row['SEI'] || '').trim();
+        const docSei = (row['Nº Documento SEI'] || row['Documento SEI'] || '').trim();
+        const nomeUsuario = (row['Nome do Usuário'] || row['Usuário'] || '').trim();
+        const endereco = (row['Endereço do Usuário'] || row['Endereço'] || '').trim();
+        const ra = (row['Região Administrativa'] || row['RA'] || '').trim();
+        const classificacao = (row['Classificação do Imóvel'] || '').trim();
+        const tipoManifestacao = (row['Tipo de Manifestação'] || '').trim();
+        const servico = (row['Serviço'] || '').trim();
+        const categoria = (row['Categoria'] || '').trim();
+        const etapa = (row['Etapa'] || row['Situação'] || '').trim();
+        const resultado = (row['Resultado do Processo'] || '').trim();
+        const complexidade = (row['Complexidade'] || '').trim();
+        const apuracao = (row['Apuração'] || '').trim();
+        const posOuv = (row['Posicionamento Ouvidoria\n'] || row['Posicionamento Ouvidoria'] || '').trim();
+        const posSae = (row['Posicionamento SAE'] || '').trim();
+        const posJur = (row['Posicionamento Jurídico'] || '').trim();
+        const posDir = (row['Posicionamento Diretoria'] || '').trim();
+        const obs = (row['Observação'] || '').trim();
+
+        const dtRecebido = parseDate(row['Recebido']);
+        const dtAnalise = parseDate(row['Em Análise Técnica']);
+        const dtTramitado = parseDate(row['Tramitado para a Ouvidoria']);
+        const dtFinalizado = parseDate(row['Finalizado']);
+
+        const seiDigits = normalizeSeiDigits(seiRaw);
+        let matchedTask: any = null;
+
+        if (seiDigits && seiDigits.length >= 10) {
+          if (taskMapByDigits.has(seiDigits)) {
+            const cands = taskMapByDigits.get(seiDigits)!;
+            matchedTask = cands.find(c => c.type === 'demanda_ouvidoria' || c.ouvidoria_data) || cands[0];
+          } else {
+            for (const item of allTasks) {
+              for (const d of item.digSet) {
+                if (d.includes(seiDigits) || seiDigits.includes(d)) {
+                  matchedTask = item.task;
+                  break;
+                }
+              }
+              if (matchedTask) break;
+            }
+          }
+        }
+
+        if (!matchedTask && nomeUsuario && nomeUsuario.length > 5 && nomeUsuario !== 'Não identificado' && nomeUsuario !== 'Ouvidoria GDF') {
+          const uLower = nomeUsuario.toLowerCase();
+          const foundByName = tasks.find(t => t.title && t.title.toLowerCase().includes(uLower));
+          if (foundByName) {
+            matchedTask = foundByName;
+          }
+        }
+
+        if (!matchedTask) {
+          notFoundRecords.push({
+            idCsv: csvId,
+            processoSei: seiRaw,
+            documentoSei: docSei,
+            nomeUsuario: nomeUsuario,
+            tipoManifestacao: tipoManifestacao,
+            servico: servico,
+            categoria: categoria,
+            etapa: etapa,
+            apuracao: apuracao.slice(0, 120),
+            datas: {
+              recebido: dtRecebido,
+              emAnaliseTecnica: dtAnalise,
+              tramitadoParaOuvidoria: dtTramitado,
+              finalizado: dtFinalizado
+            }
+          });
+          continue;
+        }
+
+        const existingOuv = matchedTask.ouvidoria_data && typeof matchedTask.ouvidoria_data === 'object'
+          ? { ...matchedTask.ouvidoria_data }
+          : {};
+
+        const existingDates = existingOuv.datasEtapas && typeof existingOuv.datasEtapas === 'object'
+          ? { ...existingOuv.datasEtapas }
+          : {};
+
+        if (dtRecebido) existingDates['Recebido'] = dtRecebido;
+        if (dtAnalise) existingDates['Em Análise Técnica'] = dtAnalise;
+        if (dtTramitado) existingDates['Tramitado para a Ouvidoria'] = dtTramitado;
+        if (dtFinalizado) existingDates['Finalizado'] = dtFinalizado;
+
+        const newOuvData = {
+          ...existingOuv,
+          numeroSei: seiRaw || existingOuv.numeroSei || matchedTask.sei_process || '',
+          numeroDocumentoSei: docSei || existingOuv.numeroDocumentoSei || '',
+          nomeUsuario: nomeUsuario || existingOuv.nomeUsuario || '',
+          enderecoUsuario: endereco || existingOuv.enderecoUsuario || '',
+          regiaoAdministrativa: ra || existingOuv.regiaoAdministrativa || '',
+          classificacaoImovel: classificacao || existingOuv.classificacaoImovel || 'Residencial',
+          tipoManifestacao: tipoManifestacao || existingOuv.tipoManifestacao || 'Reclamação',
+          servico: servico || existingOuv.servico || 'Água',
+          categoria: categoria || existingOuv.categoria || 'Consumo Medido',
+          situacao: etapa || existingOuv.situacao || 'Finalizado',
+          resultadoProcesso: resultado || existingOuv.resultadoProcesso || '',
+          complexidade: complexidade || existingOuv.complexidade || 'Média',
+          apuracao: apuracao || existingOuv.apuracao || '',
+          posicionamentoOuvidoria: posOuv || existingOuv.posicionamentoOuvidoria || '',
+          posicionamentoSAE: posSae || existingOuv.posicionamentoSAE || '',
+          posicionamentoJuridico: posJur || existingOuv.posicionamentoJuridico || '',
+          posicionamentoDiretoria: posDir || existingOuv.posicionamentoDiretoria || '',
+          observacao: obs || existingOuv.observacao || '',
+          datasEtapas: existingDates
+        };
+
+        const finalSeiProcess = seiRaw || matchedTask.sei_process;
+
+        await pool.query(`
+          UPDATE pl_tasks
+          SET ouvidoria_data = $1,
+              sei_process = $2,
+              type = 'demanda_ouvidoria',
+              updated_at = NOW(),
+              updated_by = 'SGI Pro (Importação Ouvidoria)'
+          WHERE id = $3
+        `, [JSON.stringify(newOuvData), finalSeiProcess, matchedTask.id]);
+
+        updatedTasks.push({
+          csvId,
+          taskId: matchedTask.id,
+          seiRaw,
+          taskTitle: matchedTask.title,
+          etapa,
+          docSei,
+          usuario: nomeUsuario
+        });
+      }
+
+      res.json({
+        success: true,
+        totalRecords: records.length,
+        updatedCount: updatedTasks.length,
+        notFoundCount: notFoundRecords.length,
+        updatedTasks,
+        notFoundRecords
+      });
+    } catch (err: any) {
+      console.error("Erro em /api/ouvidoria/import-csv:", err);
+      res.status(500).json({ success: false, error: err.message || "Erro no processamento da planilha" });
+    }
+  });
+
+  app.post("/api/recurso-revisao/import-csv", async (req, res) => {
+    try {
+      const { csvText, createMissing = false } = req.body;
+      if (!csvText || typeof csvText !== "string" || !csvText.trim()) {
+        return res.status(400).json({ success: false, error: "Conteúdo do CSV não informado." });
+      }
+
+      const parseDate = (dateStr: any): string | null => {
+        if (!dateStr) return null;
+        const d = String(dateStr).trim();
+        if (!d || d === '-' || d.toLowerCase() === 'não há' || d.toLowerCase() === 'n/a') return null;
+        const parts = d.split('/');
+        if (parts.length === 3) {
+          const day = parts[0].padStart(2, '0');
+          const month = parts[1].padStart(2, '0');
+          const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+          return `${year}-${month}-${day}`;
+        }
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+        return null;
+      };
+
+      const parseCurrency = (val: any): number | null => {
+        if (val === null || val === undefined) return null;
+        let s = String(val).trim();
+        if (!s || s === '-' || s.toLowerCase() === 'n/a' || s.toLowerCase() === 'sem valor') return null;
+        const isNegative = s.includes('-');
+        s = s.replace(/[^\d,\.]/g, '');
+        if (!s) return 0;
+        if (s.includes('.') && s.includes(',')) {
+          s = s.replace(/\./g, '').replace(',', '.');
+        } else if (s.includes(',')) {
+          s = s.replace(',', '.');
+        }
+        const n = parseFloat(s);
+        if (isNaN(n)) return null;
+        return isNegative ? -Math.abs(n) : n;
+      };
+
+      const normalizeSeiDigits = (sei: any): string => {
+        if (!sei) return '';
+        return String(sei).replace(/\D/g, '');
+      };
+
+      const extractDigitsFromText = (text: any): string[] => {
+        if (!text) return [];
+        const matches = String(text).match(/\d{4,6}[\.\-\s]*\d{4,9}[\.\-\s\/\\]*\d{4}[\.\-\s]*\d{1,2}/g);
+        if (matches) {
+          return matches.map(m => normalizeSeiDigits(m)).filter(m => m.length >= 10);
+        }
+        const digits = normalizeSeiDigits(text);
+        return digits.length >= 10 ? [digits] : [];
+      };
+
+      const firstLine = csvText.split('\n')[0] || '';
+      const delimiter = firstLine.includes(';') ? ';' : ',';
+
+      const records = parse(csvText, {
+        columns: true,
+        skip_empty_lines: true,
+        delimiter,
+        relax_quotes: true,
+        relax_column_count: true,
+        trim: true
+      }) as any[];
+
+      const pool = getDbPool();
+      const { rows: tasks } = await pool.query(`
+        SELECT id, title, sei_process, type, recurso_rev_data
+        FROM pl_tasks
+      `);
+
+      const taskMapByDigits = new Map<string, any[]>();
+      const allTasks: { task: any; digSet: Set<string> }[] = [];
+
+      for (const t of tasks) {
+        const digSet = new Set<string>();
+        if (t.sei_process) {
+          const d = normalizeSeiDigits(t.sei_process);
+          if (d.length >= 10) digSet.add(d);
+        }
+        if (t.title) {
+          const found = extractDigitsFromText(t.title);
+          for (const f of found) {
+            if (f.length >= 10) digSet.add(f);
+          }
+        }
+        if (t.recurso_rev_data && typeof t.recurso_rev_data === 'object') {
+          if (t.recurso_rev_data.numeroSei) {
+            const d = normalizeSeiDigits(t.recurso_rev_data.numeroSei);
+            if (d.length >= 10) digSet.add(d);
+          }
+          if (t.recurso_rev_data.numeroProcesso) {
+            const d = normalizeSeiDigits(t.recurso_rev_data.numeroProcesso);
+            if (d.length >= 10) digSet.add(d);
+          }
+        }
+
+        allTasks.push({ task: t, digSet });
+        for (const d of digSet) {
+          if (!taskMapByDigits.has(d)) {
+            taskMapByDigits.set(d, []);
+          }
+          taskMapByDigits.get(d)!.push(t);
+        }
+      }
+
+      const updatedTasks: any[] = [];
+      const createdTasks: any[] = [];
+      const notFoundRecords: any[] = [];
+
+      for (const row of records) {
+        const csvId = row['ID'] || '';
+        const seiRaw = (row['Nº do Processo SEI Adasa'] || row['Nº do Processo SEI'] || row['Processo SEI Adasa'] || row['Processo SEI'] || row['SEI'] || '').trim();
+        const procCaesb = (row['Nº do Processo Caesb'] || row['Processo Caesb'] || '').trim();
+        const notaTecnica = (row['Nº Nota Técnica'] || row['Nota Técnica'] || '').trim();
+        const recorrente = (row['Recorrente / Interessado'] || row['Recorrente'] || row['Interessado'] || '').trim();
+        const inscricaoCaesb = (row['Nº Inscrição Caesb'] || row['Inscrição Caesb'] || '').trim();
+        const ra = (row['Região Administrativa'] || row['RA'] || '').trim();
+        const lat = (row['Latitude'] || '').trim();
+        const lng = (row['Longitude'] || '').trim();
+        const servico = (row['Tipo de Serviço'] || row['Serviço'] || 'Água').trim();
+        const classificacao = (row['Classificação do Imóvel'] || row['Classificação'] || 'Residencial').trim();
+        const irregularidadeEncontrada = (row['Irregularidade Encontrada (Selecionada)'] || row['Irregularidade Encontrada'] || row['Irregularidade'] || '').trim();
+        const qtdeIrregularidades = (row['Qtde Irregularidades'] || row['Quantidade'] || '1').trim();
+        const tipoInfracao = (row['Tipo de Infração (Selecionado)'] || row['Tipo de Infração'] || '').trim();
+        const etapaAtual = (row['Etapa Atual'] || row['Etapa'] || 'Finalizado').trim();
+        const situacao = (row['Situação'] || row['Resultado'] || '').trim();
+        const dataExtrato = parseDate(row['Data Extrato Diretoria']);
+        const dataNotificacao = parseDate(row['Data Notificação Usuário']);
+        const valMultaAplicada = parseCurrency(row['Valor da Multa Aplicada pelo Prestador']);
+        const valMultaApos = parseCurrency(row['Valor da Multa Após Recurso']);
+        const valDiferenca = parseCurrency(row['Diferença Em Favor do Usuário']);
+        const posDir = (row['Posicionamento Diretoria'] || '').trim();
+        const reuniaoPublica = (row['Reunião Pública Diretoria'] || row['Reunião Pública'] || '').trim();
+        const obs = (row['Observações Complementares'] || row['Observação'] || row['Observações'] || '').trim();
+        const dtRecebido = parseDate(row['Recebido']);
+        const dtFinalizado = parseDate(row['Finalizado']);
+
+        const seiDigits = normalizeSeiDigits(seiRaw);
+        let matchedTask: any = null;
+
+        if (seiDigits && seiDigits.length >= 10) {
+          if (taskMapByDigits.has(seiDigits)) {
+            const cands = taskMapByDigits.get(seiDigits)!;
+            matchedTask = cands.find(c => c.type === 'recurso_revisao' || c.recurso_rev_data) || cands[0];
+          } else {
+            for (const item of allTasks) {
+              for (const d of item.digSet) {
+                if (d.includes(seiDigits) || seiDigits.includes(d)) {
+                  matchedTask = item.task;
+                  break;
+                }
+              }
+              if (matchedTask) break;
+            }
+          }
+        }
+
+        // Secondary fallback by recorrente name
+        if (!matchedTask && recorrente && recorrente.length > 5 && recorrente !== 'Não informado' && recorrente !== 'Não identificado') {
+          const uLower = recorrente.toLowerCase();
+          const foundByName = tasks.find(t => t.title && t.title.toLowerCase().includes(uLower));
+          if (foundByName) {
+            matchedTask = foundByName;
+          }
+        }
+
+        // Tertiary fallback by Caesb process digits
+        if (!matchedTask && procCaesb) {
+          const caesbDigits = normalizeSeiDigits(procCaesb);
+          if (caesbDigits.length >= 8) {
+            const foundByCaesb = tasks.find(t => {
+              const d = normalizeSeiDigits(t.title || '');
+              return d.includes(caesbDigits) || (t.recurso_rev_data && normalizeSeiDigits(t.recurso_rev_data.numeroProcessoCaesb || '').includes(caesbDigits));
+            });
+            if (foundByCaesb) {
+              matchedTask = foundByCaesb;
+            }
+          }
+        }
+
+        if (!matchedTask) {
+          if (createMissing && (seiRaw || recorrente)) {
+            const taskTitle = `C02 - Recurso de Revisão: ${recorrente || 'Interessado'} - ${seiRaw || 'S/N'}${irregularidadeEncontrada ? ` - ${irregularidadeEncontrada}` : ''}`;
+            const finalDates: Record<string, string> = {};
+            if (dtRecebido) finalDates['Recebido'] = dtRecebido;
+            if (dataExtrato) finalDates['Encaminhado à Diretoria'] = dataExtrato;
+            if (dataNotificacao) finalDates['Notificação do Usuário'] = dataNotificacao;
+            if (dtFinalizado) finalDates['Finalizado'] = dtFinalizado;
+
+            const newRevData = {
+              numeroSei: seiRaw || '',
+              numeroProcessoCaesb: procCaesb || '',
+              numeroProcesso: procCaesb || '',
+              numeroNotaTecnica: notaTecnica || '',
+              recorrente: recorrente || '',
+              inscricaoCaesb: inscricaoCaesb || '',
+              regiaoAdministrativa: ra || '',
+              latitude: lat || '',
+              longitude: lng || '',
+              servico: servico || 'Água',
+              tipoRecurso: 'Recurso de Revisão',
+              classificacaoImovel: classificacao || 'Residencial',
+              irregularidadeEncontrada: irregularidadeEncontrada || '',
+              irregularidade: irregularidadeEncontrada || '',
+              qtdeIrregularidades: qtdeIrregularidades || '1',
+              tipoInfracao: tipoInfracao || '',
+              situacao: etapaAtual || 'Finalizado',
+              resultado: situacao || 'Em Análise',
+              dataExtratoDiretoria: dataExtrato || '',
+              dataNotificacaoUsuario: dataNotificacao || '',
+              valorMultaQuestionada: valMultaAplicada !== null ? valMultaAplicada : undefined,
+              valorMultaMantida: valMultaApos !== null ? valMultaApos : undefined,
+              diferencaFavorUsuario: valDiferenca !== null ? valDiferenca : undefined,
+              posicionamentoDiretoria: posDir || '',
+              decisaoDiretoria: posDir || '',
+              reuniaoPublicaDiretoria: reuniaoPublica || '',
+              observacao: obs || '',
+              datasEtapas: finalDates
+            };
+
+            const isDone = (etapaAtual || '').toLowerCase().includes('finaliz');
+            const insertRes = await pool.query(`
+              INSERT INTO pl_tasks (
+                title, description, sei_process, type, status, progress, priority, category,
+                recurso_rev_data, created_at, updated_at, created_by, updated_by
+              ) VALUES ($1, $2, $3, 'recurso_revisao', $4, $5, 'Média', 'PONTUAIS', $6, NOW(), NOW(), 'SGI Pro (Importação Recurso)', 'SGI Pro (Importação Recurso)')
+              RETURNING id, title, sei_process
+            `, [
+              taskTitle,
+              posDir || obs || 'Importado via planilha de Recursos de Revisão',
+              seiRaw || null,
+              isDone ? 'Concluída' : 'Em andamento',
+              isDone ? 100 : 50,
+              JSON.stringify(newRevData)
+            ]);
+
+            const created = insertRes.rows[0];
+            createdTasks.push({
+              csvId,
+              taskId: created.id,
+              seiRaw,
+              taskTitle: created.title,
+              recorrente,
+              etapa: etapaAtual,
+              situacao
+            });
+            continue;
+          }
+
+          notFoundRecords.push({
+            idCsv: csvId,
+            processoSei: seiRaw,
+            processoCaesb: procCaesb,
+            notaTecnica: notaTecnica,
+            recorrente: recorrente,
+            regiaoAdministrativa: ra,
+            servico: servico,
+            irregularidade: irregularidadeEncontrada,
+            tipoInfracao: tipoInfracao,
+            etapa: etapaAtual,
+            situacao: situacao,
+            valorMultaAplicada: valMultaAplicada,
+            valorMultaApos: valMultaApos,
+            datas: {
+              recebido: dtRecebido,
+              dataExtrato: dataExtrato,
+              dataNotificacao: dataNotificacao,
+              finalizado: dtFinalizado
+            }
+          });
+          continue;
+        }
+
+        const existingRev = matchedTask.recurso_rev_data && typeof matchedTask.recurso_rev_data === 'object'
+          ? { ...matchedTask.recurso_rev_data }
+          : {};
+
+        const existingDates = existingRev.datasEtapas && typeof existingRev.datasEtapas === 'object'
+          ? { ...existingRev.datasEtapas }
+          : {};
+
+        if (dtRecebido) existingDates['Recebido'] = dtRecebido;
+        if (dataExtrato) existingDates['Encaminhado à Diretoria'] = dataExtrato;
+        if (dataNotificacao) existingDates['Notificação do Usuário'] = dataNotificacao;
+        if (dtFinalizado) existingDates['Finalizado'] = dtFinalizado;
+
+        const newRevData = {
+          ...existingRev,
+          numeroSei: seiRaw || existingRev.numeroSei || matchedTask.sei_process || '',
+          numeroProcessoCaesb: procCaesb || existingRev.numeroProcessoCaesb || existingRev.numeroProcesso || '',
+          numeroProcesso: procCaesb || existingRev.numeroProcesso || '',
+          numeroNotaTecnica: notaTecnica || existingRev.numeroNotaTecnica || '',
+          recorrente: recorrente || existingRev.recorrente || '',
+          inscricaoCaesb: inscricaoCaesb || existingRev.inscricaoCaesb || '',
+          regiaoAdministrativa: ra || existingRev.regiaoAdministrativa || '',
+          latitude: lat || existingRev.latitude || '',
+          longitude: lng || existingRev.longitude || '',
+          servico: servico || existingRev.servico || 'Água',
+          tipoRecurso: existingRev.tipoRecurso || 'Recurso de Revisão',
+          classificacaoImovel: classificacao || existingRev.classificacaoImovel || 'Residencial',
+          irregularidadeEncontrada: irregularidadeEncontrada || existingRev.irregularidadeEncontrada || '',
+          irregularidade: irregularidadeEncontrada || existingRev.irregularidade || '',
+          qtdeIrregularidades: qtdeIrregularidades || existingRev.qtdeIrregularidades || '1',
+          tipoInfracao: tipoInfracao || existingRev.tipoInfracao || '',
+          situacao: etapaAtual || existingRev.situacao || 'Finalizado',
+          resultado: situacao || existingRev.resultado || 'Em Análise',
+          dataExtratoDiretoria: dataExtrato || existingRev.dataExtratoDiretoria || '',
+          dataNotificacaoUsuario: dataNotificacao || existingRev.dataNotificacaoUsuario || '',
+          valorMultaQuestionada: valMultaAplicada !== null ? valMultaAplicada : (existingRev.valorMultaQuestionada ?? undefined),
+          valorMultaMantida: valMultaApos !== null ? valMultaApos : (existingRev.valorMultaMantida ?? undefined),
+          diferencaFavorUsuario: valDiferenca !== null ? valDiferenca : (existingRev.diferencaFavorUsuario ?? undefined),
+          posicionamentoDiretoria: posDir || existingRev.posicionamentoDiretoria || '',
+          decisaoDiretoria: posDir || existingRev.decisaoDiretoria || '',
+          reuniaoPublicaDiretoria: reuniaoPublica || existingRev.reuniaoPublicaDiretoria || '',
+          observacao: obs || existingRev.observacao || '',
+          datasEtapas: existingDates
+        };
+
+        const finalSeiProcess = seiRaw || matchedTask.sei_process;
+
+        await pool.query(`
+          UPDATE pl_tasks
+          SET recurso_rev_data = $1,
+              sei_process = $2,
+              type = 'recurso_revisao',
+              updated_at = NOW(),
+              updated_by = 'SGI Pro (Importação Recurso)'
+          WHERE id = $3
+        `, [JSON.stringify(newRevData), finalSeiProcess, matchedTask.id]);
+
+        updatedTasks.push({
+          csvId,
+          taskId: matchedTask.id,
+          seiRaw,
+          taskTitle: matchedTask.title,
+          recorrente,
+          etapa: etapaAtual,
+          situacao
+        });
+      }
+
+      res.json({
+        success: true,
+        totalRecords: records.length,
+        updatedCount: updatedTasks.length,
+        createdCount: createdTasks.length,
+        notFoundCount: notFoundRecords.length,
+        updatedTasks,
+        createdTasks,
+        notFoundRecords
+      });
+    } catch (err: any) {
+      console.error("Erro em /api/recurso-revisao/import-csv:", err);
+      res.status(500).json({ success: false, error: err.message || "Erro no processamento da planilha de recursos" });
     }
   });
 
@@ -4915,7 +5490,7 @@ export async function startServer(isVercel = false) {
             planId ? parseInt(planId) : null,
             dependsOnTaskId ? parseInt(dependsOnTaskId) : null,
             req.body.updatedBy || "SGI Pro",
-            req.body.seiProcess || null,
+            req.body.seiProcess || extractSeiProcessFromTitle(title) || null,
             finalWeight,
             type || "default",
             fiscalizacaoData ? JSON.stringify(fiscalizacaoData) : null,
@@ -5121,7 +5696,7 @@ export async function startServer(isVercel = false) {
             dependsOnTaskId ? parseInt(dependsOnTaskId) : null,
             req.body.updatedBy || "SGI Pro",
             taskId,
-            seiProcess || null,
+            seiProcess || extractSeiProcessFromTitle(title) || null,
             finalWeight,
             type || "default",
             fiscalizacaoData ? JSON.stringify(fiscalizacaoData) : null,

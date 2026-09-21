@@ -1,0 +1,1190 @@
+[
+  {
+    "csvId": "5",
+    "taskId": 416,
+    "seiRaw": "00197-00001021/2019-00",
+    "taskTitle": "F000 - 00197-00001021/2019-00: Reclamação Bruno Ramos Monteiro Vieites",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica SEI-GDF n.º 80/2019 - ADASA/SAE/CORA",
+    "usuario": "Bruno Ramos Monteiro Vieites"
+  },
+  {
+    "csvId": "7",
+    "taskId": 427,
+    "seiRaw": "00197-00003075/2019-00",
+    "taskTitle": "F000 - 00197-00003075/2019-00: Reclamação Adelino Alcebiades",
+    "etapa": "Finalizado",
+    "docSei": "MEMO",
+    "usuario": "Adelino Alcebiade Ferreira Junior"
+  },
+  {
+    "csvId": "9",
+    "taskId": 401,
+    "seiRaw": "00197-00003326/2019-48",
+    "taskTitle": "00197-00003326/2019-48: Denuncia Esgoto",
+    "etapa": "Finalizado",
+    "docSei": "MEMO",
+    "usuario": "Ouvidoria GDF"
+  },
+  {
+    "csvId": "10",
+    "taskId": 413,
+    "seiRaw": "00197-00003252/2019-40",
+    "taskTitle": "00197-00003252/2019-40: Recurso de Revisão Sidney Lima",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica SEI-GDF n.º 90/2019 - ADASA/SAE/CORA",
+    "usuario": "Sidney Nery de Lima"
+  },
+  {
+    "csvId": "12",
+    "taskId": 434,
+    "seiRaw": "00197-00003708/2019-71",
+    "taskTitle": "F000 - 00197-00003708/2019-71: Lançamento de efluente no córrego Samambaia",
+    "etapa": "Finalizado",
+    "docSei": "DESPACHO",
+    "usuario": "Ouvidoria GDF"
+  },
+  {
+    "csvId": "13",
+    "taskId": 412,
+    "seiRaw": "00197-00002458/2019-52",
+    "taskTitle": "F000 - 00197-00002458/2019-52:  Reclamação José Botelho Filho",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica SEI-GDF n.º 87/2019 - ADASA/SAE/CORA",
+    "usuario": "Jose Botelho Filho"
+  },
+  {
+    "csvId": "14",
+    "taskId": 13,
+    "seiRaw": "00197-00002141/2019-16",
+    "taskTitle": "00197-00002141/2019-16: Reclamação Re-083444/2019",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica SEI-GDF n.º 85/2019 - ADASA/SAE/CORA",
+    "usuario": "Márcia Missias Gomes"
+  },
+  {
+    "csvId": "20",
+    "taskId": 420,
+    "seiRaw": "00197-00003259/2019-61",
+    "taskTitle": "F000 - 00197-00003259/2019-61: Recurso Administrativo- Pedro David",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 34211278",
+    "usuario": "Pedro David de Oliveira"
+  },
+  {
+    "csvId": "21",
+    "taskId": 427,
+    "seiRaw": "00197-00003075/2019-00",
+    "taskTitle": "F000 - 00197-00003075/2019-00: Reclamação Adelino Alcebiades",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 16 - SAE/COFA",
+    "usuario": "Adelino Alcebiades Ferreira Junior"
+  },
+  {
+    "csvId": "22",
+    "taskId": 417,
+    "seiRaw": "00197-00003560/2019-75",
+    "taskTitle": "00197-00003560/2019-75: Recurso de Revisão Francisco Coelho",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica SEI-GDF n.º 93/2019 - ADASA/SAE/CORA",
+    "usuario": "Francisco Bezerra Coelho"
+  },
+  {
+    "csvId": "23",
+    "taskId": 445,
+    "seiRaw": "00197-00004279/2019-50",
+    "taskTitle": "00197-00004279/2019-50: Recurso Adm Francisco Liberato de Sousa",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica SEI-GDF n.º 35/2019- ADASA/SAE/COFA",
+    "usuario": "Francisco Liberato de Sousa"
+  },
+  {
+    "csvId": "24",
+    "taskId": 437,
+    "seiRaw": "00197-00004683/2019-23",
+    "taskTitle": "00197-00004683/2019-23: Recursos Adm Francisco Sávio Couto Pinheiro",
+    "etapa": "Finalizado",
+    "docSei": "Caesb atendeu a pretensão do usuário",
+    "usuario": "Francisco Savio Couto Pinheiro"
+  },
+  {
+    "csvId": "25",
+    "taskId": 442,
+    "seiRaw": "00197-00004287/2019-04",
+    "taskTitle": "00197-00004287/2019-04: Reclamação Suely Ferreira de Carvalho",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica SEI-GDF n.º 1/2020- ADASA/SAE/COFA",
+    "usuario": "Suely Ferreira de Carvalho"
+  },
+  {
+    "csvId": "26",
+    "taskId": 460,
+    "seiRaw": "00197-00004894/2019-66",
+    "taskTitle": "00197-00004894/2019-66: Reclamação de Erica Cristina de Santi",
+    "etapa": "Finalizado",
+    "docSei": "COFA",
+    "usuario": "Erica Cristina de Santi"
+  },
+  {
+    "csvId": "27",
+    "taskId": 448,
+    "seiRaw": "00197-00004710/2019-68",
+    "taskTitle": "00197-00004710/2019-68: Reclamação Fernanda Tavares Linhares",
+    "etapa": "Finalizado",
+    "docSei": "Termo de Notificação de Fiscalização 01/2020",
+    "usuario": "Fernanda Tavares Linhares Alvarenga"
+  },
+  {
+    "csvId": "28",
+    "taskId": 451,
+    "seiRaw": "00197-00004581/2019-16",
+    "taskTitle": "00197-00004581/2019-16: Reclamação Wilma Magalhães Baeza",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica 02/2020- COFA",
+    "usuario": "Wilma Magalhães Baeza"
+  },
+  {
+    "csvId": "29",
+    "taskId": 455,
+    "seiRaw": "00197-00004756/2019-87",
+    "taskTitle": "00197-00004756/2019-87:  Reclamação de Francimar Pereira Almeida.",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica 03/2020- COFA",
+    "usuario": "Francimar Pereira Almeida"
+  },
+  {
+    "csvId": "30",
+    "taskId": 459,
+    "seiRaw": "00197-00004631/2019-57",
+    "taskTitle": "00197-00004631/2019-57: Reclamação Terezinha Rodrigues dos Santos",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica 14 (37685074)",
+    "usuario": "Terezinha Rodrigues dos Santos"
+  },
+  {
+    "csvId": "31",
+    "taskId": 473,
+    "seiRaw": "00197-00000064/2020-01",
+    "taskTitle": "00197-00005018/2019-57: Reclamação do Sr. Luiz Claudio Cruz Vieira (Subremdição)",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 39/2020",
+    "usuario": "Luiz Claudio Cruz Vieira"
+  },
+  {
+    "csvId": "32",
+    "taskId": 473,
+    "seiRaw": "00197-00005018/2019-57",
+    "taskTitle": "00197-00005018/2019-57: Reclamação do Sr. Luiz Claudio Cruz Vieira (Subremdição)",
+    "etapa": "Finalizado",
+    "docSei": "Relatório de Fiscalização 17",
+    "usuario": "Vinicius Lima de Jesus"
+  },
+  {
+    "csvId": "33",
+    "taskId": 484,
+    "seiRaw": "00197-00003470/2019-84",
+    "taskTitle": "00197-00003470/2019-84: Reclamação Sr. Carlos Alexandre Moreira Neves",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica 09/2020 COFA",
+    "usuario": "Carlos Alexandre Moreira Neves"
+  },
+  {
+    "csvId": "34",
+    "taskId": 486,
+    "seiRaw": "00197-00000196/2020-25",
+    "taskTitle": "00197-00000196/2020-25: Reclamação Sr. RAIMUNDO NONATO",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 20/2020-COFA",
+    "usuario": "Raimundo Nonato Ribeiro Custódio"
+  },
+  {
+    "csvId": "35",
+    "taskId": 487,
+    "seiRaw": "00197-00005012/2019-80",
+    "taskTitle": "00197-00005012/2019-80: Reclamação Sr. José Barbosa Dantas",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 30/2020-COFA",
+    "usuario": "José Barbosa Dantas"
+  },
+  {
+    "csvId": "36",
+    "taskId": 488,
+    "seiRaw": "00197-00004965/2019-21",
+    "taskTitle": "00197-00004965/2019-21: Reclamação Sra. Márcia Rodrigues Farias Machado Costa",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 43/2020-COFA",
+    "usuario": "Márcia Rodrigues Farias Machado Costa"
+  },
+  {
+    "csvId": "37",
+    "taskId": 486,
+    "seiRaw": "00197-00000196/2020-25",
+    "taskTitle": "00197-00000196/2020-25: Reclamação Sr. RAIMUNDO NONATO",
+    "etapa": "Finalizado",
+    "docSei": "Nota tec 37865207",
+    "usuario": "Raimundo Nonato Ribeiro Custódio"
+  },
+  {
+    "csvId": "38",
+    "taskId": 520,
+    "seiRaw": "00197-00004943/2019-61",
+    "taskTitle": "00197-00004943/2019-61: Reclamação Sr. Alexandre Vitoria de Resende",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 31/2020-COFA",
+    "usuario": "Alexandre Vitoria de Resende"
+  },
+  {
+    "csvId": "39",
+    "taskId": 505,
+    "seiRaw": "00197-00000079/2020-61",
+    "taskTitle": "00197-00000079/2020-61: Reclamação Sra. Antônia Alves de Oliveira",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 18/2020-COFA",
+    "usuario": "Antônia Alves de Oliveira"
+  },
+  {
+    "csvId": "40",
+    "taskId": 518,
+    "seiRaw": "00197-00000778/2020-10",
+    "taskTitle": "F000 - Reclamação Alberto Nascimento: 00197-00000778/2020-10",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 25/2020 -COFA",
+    "usuario": "Alberto Nascimento"
+  },
+  {
+    "csvId": "41",
+    "taskId": 522,
+    "seiRaw": "00197-00000789/2020-91",
+    "taskTitle": "00197-00000789/2020-91: Reclamação Victor Macedo Pessoa",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N° 28/2020 - COFA",
+    "usuario": "VICTOR MACEDO PESSOA"
+  },
+  {
+    "csvId": "42",
+    "taskId": 527,
+    "seiRaw": "00197-00001307/2020-11",
+    "taskTitle": "00197-00001307/2020-11: Reclamação Sra. Maria Eunice Cardoso dos Santos",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 37/2020-COFA",
+    "usuario": "Maria Eunice Cardoso dos Santos"
+  },
+  {
+    "csvId": "43",
+    "taskId": 537,
+    "seiRaw": "00197-00001139/2020-63",
+    "taskTitle": "00197-00001139/2020-63: Reclamação Sr. José Joaquim de Carvalho",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 49/2020-COFA",
+    "usuario": "José Joaquim de Carvalho"
+  },
+  {
+    "csvId": "44",
+    "taskId": 542,
+    "seiRaw": "00197-00001413/2020-02",
+    "taskTitle": "00197-00001413/2020-02: Reclamação Sr. Antonio Carlos Dos Santos",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 9/2020",
+    "usuario": "Antonio Carlos Dos Santos"
+  },
+  {
+    "csvId": "45",
+    "taskId": 543,
+    "seiRaw": "00197-00001747/2020-78",
+    "taskTitle": "00197-00001747/2020-78 Reclamação Maria Rosa Eduardo de Almeida",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 51/2020-COFA",
+    "usuario": "Maria Rosa Eduardo de Almeida"
+  },
+  {
+    "csvId": "46",
+    "taskId": 550,
+    "seiRaw": "00197-00001708/2020-71",
+    "taskTitle": "00197-00001708/2020-71: Reclamação Representante Legal Sr. Antônio Silva",
+    "etapa": "Finalizado",
+    "docSei": "-",
+    "usuario": "Antonio Pereira da Silva"
+  },
+  {
+    "csvId": "47",
+    "taskId": 554,
+    "seiRaw": "00197-00001790/2020-33",
+    "taskTitle": "00197-00001790/2020-33: Reclamação Antonio Pereira da Silva (Síndico)",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 10/2020",
+    "usuario": "Antonio Pereira da Silva"
+  },
+  {
+    "csvId": "48",
+    "taskId": 563,
+    "seiRaw": "00197-00001962/2020-79",
+    "taskTitle": "00197-00001962/2020-79: Reclamação Emília Maria Alves da Nobrega",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 16/2020-COFA",
+    "usuario": "Emília Maria Alves da Nobrega"
+  },
+  {
+    "csvId": "49",
+    "taskId": 562,
+    "seiRaw": "00197-00001980/2020-51",
+    "taskTitle": "00197-00001980/2020-51: Reclamação Juraci Barreto da Silva Júnior",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 63/2020-COFA",
+    "usuario": "Juraci Barreto da Silva Junior"
+  },
+  {
+    "csvId": "50",
+    "taskId": 558,
+    "seiRaw": "00197-00001982/2020-40",
+    "taskTitle": "00197-00001982/2020-40: Reclamação Maria Lúcia Gomes",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 54/2020-COFA",
+    "usuario": "Maria Lúcia Gomes"
+  },
+  {
+    "csvId": "52",
+    "taskId": 609,
+    "seiRaw": "00197-00002846/2020-77",
+    "taskTitle": "00197-00002846/2020-77: Reclamação Beatriz Silva Neves",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 22/2020",
+    "usuario": "Beatriz Silva Neves"
+  },
+  {
+    "csvId": "53",
+    "taskId": 559,
+    "seiRaw": "00197-00001981/2020-03",
+    "taskTitle": "SUBMEDIÇÃO - 00197-00001981/2020-03: Reclamação Fernando Henrique Gonçalves Pires",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 22/2020",
+    "usuario": "Genesco Aparecido"
+  },
+  {
+    "csvId": "54",
+    "taskId": 615,
+    "seiRaw": "00197-00003120/2020-51",
+    "taskTitle": "F027 - 00197-00003120/2020-51: Reclamação Carlos Henrique Rodrigues Cunha",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 52383333",
+    "usuario": "CARLOS HENRIQUE RODRIGUES DA CUNHA"
+  },
+  {
+    "csvId": "55",
+    "taskId": 567,
+    "seiRaw": "00197-00002026/2020-85",
+    "taskTitle": "F000 - 00197-00002026/2020-85: Reclamação Esgoto",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 57/2020 -COFA",
+    "usuario": "Jones Cardoso"
+  },
+  {
+    "csvId": "56",
+    "taskId": 569,
+    "seiRaw": "00197-00002024/2020-96",
+    "taskTitle": "00197-00002024/2020-96: Reclamação Dalva Soccal Seyffarth",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 19/2020",
+    "usuario": "Dalva Soccal Seyffarth"
+  },
+  {
+    "csvId": "57",
+    "taskId": 566,
+    "seiRaw": "00197-00002035/2020-76",
+    "taskTitle": "00197-00002035/2020-76: Recllamação Camila Carrato Bandeira da Costa Bezerra",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 21/2020",
+    "usuario": "Camila Carrato Bandeira da Costa Bezerra"
+  },
+  {
+    "csvId": "58",
+    "taskId": 568,
+    "seiRaw": "00197-00002055/2020-47",
+    "taskTitle": "F000 - 00197-00002055/2020-47: Reclamação  Patrícia Mendes",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 20/2020",
+    "usuario": "Patrícia Mendes"
+  },
+  {
+    "csvId": "59",
+    "taskId": 570,
+    "seiRaw": "00197-00001988/2020-17",
+    "taskTitle": "00197-00001988/2020-17: Reclamação Conta Àgua - Lago Norte",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 13/2020",
+    "usuario": "Jose Augusto Pimentel"
+  },
+  {
+    "csvId": "60",
+    "taskId": 580,
+    "seiRaw": "00197-00001778/2020-29",
+    "taskTitle": "F000 - 00197-00001778/2020-29: Reclamação Alberto Nascimento",
+    "etapa": "Finalizado",
+    "docSei": "-",
+    "usuario": "Alexandre Ferreira dias"
+  },
+  {
+    "csvId": "61",
+    "taskId": 605,
+    "seiRaw": "00197-00002242/2020-21",
+    "taskTitle": "00197-00002242/2020-21: Reclamação Nathália Palma de Queiroz",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 75/2020-COFA",
+    "usuario": "Nathália Palmas de Queiroz"
+  },
+  {
+    "csvId": "62",
+    "taskId": 589,
+    "seiRaw": "00197-00002308/2020-82",
+    "taskTitle": "F027: Reclamação Alexandre Naoum (TN) (00197-00002308/2020-82)",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 71/2020 - ADASA/SAE/COFA",
+    "usuario": "Alexandre Naum"
+  },
+  {
+    "csvId": "64",
+    "taskId": 581,
+    "seiRaw": "00197-00002187/2020-79",
+    "taskTitle": "00197-00002187/2020-79: Reclamação Renato Fiz Vieira",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 64/2020-COFA",
+    "usuario": "Renato Fix Vieira"
+  },
+  {
+    "csvId": "65",
+    "taskId": 587,
+    "seiRaw": "00197-00002388/2020-76",
+    "taskTitle": "00197-00002388/2020-76: Reclamação Marcia Suaiden",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 68/2020-COFA",
+    "usuario": "Marcia Suaiden"
+  },
+  {
+    "csvId": "66",
+    "taskId": 588,
+    "seiRaw": "00197-00002394/2020-23",
+    "taskTitle": "00197-00002394/2020-23: Reclamação Miguel Medeiro (Termo de notificação)",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 67/2020-COFA",
+    "usuario": "Miguel Endrigo"
+  },
+  {
+    "csvId": "67",
+    "taskId": 586,
+    "seiRaw": "00197-00002416/2020-55",
+    "taskTitle": "00197-00002416/2020-55: Reclamação Aurélio Toneli",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 70/2020-COFA",
+    "usuario": "Auréli Toneli"
+  },
+  {
+    "csvId": "68",
+    "taskId": 606,
+    "seiRaw": "00197-00002452/2020-19",
+    "taskTitle": "00197-00002452/2020-19: Reclamação Jorge Luiz",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 76/2020-COFA",
+    "usuario": "Jorge Luiz"
+  },
+  {
+    "csvId": "69",
+    "taskId": 590,
+    "seiRaw": "00197-00002458/2020-96",
+    "taskTitle": "F000 - 00197-00002458/2020-96: Reclamação Comercio de Balanças e Refrigeração",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 69/2020-COFA",
+    "usuario": "Comércio de Balança e Refrigeração"
+  },
+  {
+    "csvId": "70",
+    "taskId": 607,
+    "seiRaw": "00197-00002305/2020-49",
+    "taskTitle": "00197-00002305/2020-49: Reclamação Condomínio Hope",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 79/2020-COFA",
+    "usuario": "Condomínio HOPE"
+  },
+  {
+    "csvId": "71",
+    "taskId": 591,
+    "seiRaw": "00197-00002381/2020-54",
+    "taskTitle": "00197-00002381/2020-54: Reclamação José Edmundo - Lago Norte",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 18/2020",
+    "usuario": "José Edmundo Maya Viana"
+  },
+  {
+    "csvId": "72",
+    "taskId": 585,
+    "seiRaw": "00197-00002147/2020-27",
+    "taskTitle": "00197-00002147/2020-27: Reclamação Cleuza de Paula",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 65/2020-COFA",
+    "usuario": "Cleuza de Paula"
+  },
+  {
+    "csvId": "73",
+    "taskId": 593,
+    "seiRaw": "00197-00002461/2020-18",
+    "taskTitle": "00197-00002461/2020-18: Reclamação Associação de moradores do Lago Sul",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 26/2020",
+    "usuario": "Associação de Moradores do Lago Sul"
+  },
+  {
+    "csvId": "74",
+    "taskId": 592,
+    "seiRaw": "00197-00002389/2020-11",
+    "taskTitle": "00197-00002389/2020-11: Reclamação Francisco Ferreira Lobo (Lago Norte)",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 23/2020",
+    "usuario": "Francisco Ferreira Lobo"
+  },
+  {
+    "csvId": "75",
+    "taskId": 594,
+    "seiRaw": "00197-00002479/2020-10",
+    "taskTitle": "00197-00002479/2020-10: Reclamação Michel Auguste Ismael Dollet (Lago Norte)",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 25/2020",
+    "usuario": "Michel Auguste"
+  },
+  {
+    "csvId": "76",
+    "taskId": 596,
+    "seiRaw": "00197-00002444/2020-72",
+    "taskTitle": "00197-00002444/2020-72: Reclamação Tatiana Coelho França",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 29/2020",
+    "usuario": "Mário Pedro dos Santos"
+  },
+  {
+    "csvId": "77",
+    "taskId": 615,
+    "seiRaw": "00197-00002023/2020-41",
+    "taskTitle": "F027 - 00197-00003120/2020-51: Reclamação Carlos Henrique Rodrigues Cunha",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica N.º 84/2020-COFA",
+    "usuario": "Carlos Henrique Rodrigues"
+  },
+  {
+    "csvId": "78",
+    "taskId": 598,
+    "seiRaw": "00197-00002475/2020-23",
+    "taskTitle": "00197-00002475/2020-23- Reclamação Sra. Ana Maria Barros",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 27/2020",
+    "usuario": "Ana Maria Barros"
+  },
+  {
+    "csvId": "79",
+    "taskId": 601,
+    "seiRaw": "00197-00002383/2020-43",
+    "taskTitle": "00197-00002383/2020-43- Reclamação Sra. Leide Dayana Gomes",
+    "etapa": "Finalizado",
+    "docSei": "Memorando N° 62/2020",
+    "usuario": "Leide Dayana Gomes"
+  },
+  {
+    "csvId": "80",
+    "taskId": 608,
+    "seiRaw": "00197-00002613/2020-74",
+    "taskTitle": "00197-00002613/2020-74: Reclamações Mario Cesar Pinheiro Maia (Lago Norte)",
+    "etapa": "Finalizado",
+    "docSei": "Informação Técnica n.º 34/2020",
+    "usuario": "Mário Cesar Pinheiro"
+  },
+  {
+    "csvId": "81",
+    "taskId": 611,
+    "seiRaw": "00197-00002652/2020-71",
+    "taskTitle": "00197-00002652/2020-71: Reclamação Edson de Souza Queiroz",
+    "etapa": "Finalizado",
+    "docSei": "-",
+    "usuario": "Edson de Souza Queiroz"
+  },
+  {
+    "csvId": "82",
+    "taskId": 612,
+    "seiRaw": "00197-00002450/2020-20",
+    "taskTitle": "00197-00002450/2020-20: Reclamação Marina Pires dos Santos",
+    "etapa": "Finalizado",
+    "docSei": "-",
+    "usuario": "Marina Pires dos Santos"
+  },
+  {
+    "csvId": "83",
+    "taskId": 615,
+    "seiRaw": "00197-00003120/2020-51",
+    "taskTitle": "F027 - 00197-00003120/2020-51: Reclamação Carlos Henrique Rodrigues Cunha",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica nº 01/2021",
+    "usuario": "Carlos Henrique Rodrigues Cunha"
+  },
+  {
+    "csvId": "84",
+    "taskId": 631,
+    "seiRaw": "00197-00000072/2021-21",
+    "taskTitle": "F027: Reclamação Condomínio Estância Quintas da Alvorada (00197-00000072/2021-21)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho (55467529)",
+    "usuario": "Valter"
+  },
+  {
+    "csvId": "85",
+    "taskId": 633,
+    "seiRaw": "00197-00000269/2021-60",
+    "taskTitle": "F027 - 00197-00000269/2021-60: Pedido de Informação Bárbara Borges Carvalho Piauilino",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 61582903",
+    "usuario": "Bárbara Borges Carvalho Piauilino"
+  },
+  {
+    "csvId": "86",
+    "taskId": 637,
+    "seiRaw": "00197-00000051/2021-13",
+    "taskTitle": "F027:  Reclamação Elizanjela (Ligação de Água) (00197-00000051/2021-13)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 58166854",
+    "usuario": "ELIZANJELA MARIA DA SILVA"
+  },
+  {
+    "csvId": "87",
+    "taskId": 636,
+    "seiRaw": "00197-00000388/2021-12",
+    "taskTitle": "F027: Pedido de Informação: Luis Roberto Pereira do Nascimento (00197-00000388/2021-12)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 57520848",
+    "usuario": "Luis Roberto Pereira do Nascimento"
+  },
+  {
+    "csvId": "88",
+    "taskId": 639,
+    "seiRaw": "00197-00003029/2020-36",
+    "taskTitle": "F027: Reclamação Patrícia Viana (00197-00003029/2020-36)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando nº08/2021",
+    "usuario": "Sebastião Nadia Viana"
+  },
+  {
+    "csvId": "89",
+    "taskId": 639,
+    "seiRaw": "00197-00003029/2020-36",
+    "taskTitle": "F027: Reclamação Patrícia Viana (00197-00003029/2020-36)",
+    "etapa": "Finalizado",
+    "docSei": "",
+    "usuario": "Patricia Viana"
+  },
+  {
+    "csvId": "90",
+    "taskId": 641,
+    "seiRaw": "00197-00000429/2021-71",
+    "taskTitle": "F027: Pedido de Informação: Habite-se aproveitamento de águas pluviais (00197-00000429/2021-71)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando nº 11/2021",
+    "usuario": "Maria Figueira"
+  },
+  {
+    "csvId": "91",
+    "taskId": 637,
+    "seiRaw": "00197-00000051/2021-13",
+    "taskTitle": "F027:  Reclamação Elizanjela (Ligação de Água) (00197-00000051/2021-13)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando n° 18/2021",
+    "usuario": "Maria Elizângela"
+  },
+  {
+    "csvId": "92",
+    "taskId": 660,
+    "seiRaw": "00197-00000629/2021-23",
+    "taskTitle": "F027: reclamação águas pluviais (00197-00000629/2021-23)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 58397869",
+    "usuario": "Amanda Martins Costa Mello"
+  },
+  {
+    "csvId": "93",
+    "taskId": 628,
+    "seiRaw": "00197-00000030/2021-90",
+    "taskTitle": "F027: Reclamação Gerson Gomes (00197-00000030/2021-90)",
+    "etapa": "Finalizado",
+    "docSei": "EXTRATO DE DECISÃO DA DIRETORIA Nº 172/2021",
+    "usuario": "Gerson Gomes"
+  },
+  {
+    "csvId": "95",
+    "taskId": 661,
+    "seiRaw": "00197-00000623/2021-56",
+    "taskTitle": "F027: Denúncia esgoto em águas pluviais (00197-00000623/2021-56)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 56298362",
+    "usuario": "ROBERSON BRUNO LOBO OLIVIERI"
+  },
+  {
+    "csvId": "96",
+    "taskId": 662,
+    "seiRaw": "00197-00000348/2021-71",
+    "taskTitle": "F027 - 00197-00000348/2021-71 - Nota Técnica - hidrômetro com submedição e sobremedição",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica 13/2021",
+    "usuario": "Processos de Submedição"
+  },
+  {
+    "csvId": "97",
+    "taskId": 664,
+    "seiRaw": "00197-00000778/2021-92",
+    "taskTitle": "F027 - 00197-00000778/2021-92: Denúncia extravasamento esgoto sobradinho",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 60009857",
+    "usuario": "Anônimo"
+  },
+  {
+    "csvId": "98",
+    "taskId": 666,
+    "seiRaw": "00197-00000942/2021-61",
+    "taskTitle": "F024 - 00197-00000942/2021-61: Denúncia vazamento esgoto - demora atendimento Caesb",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 64336965",
+    "usuario": "Amanda Martins Costa Mello"
+  },
+  {
+    "csvId": "100",
+    "taskId": 668,
+    "seiRaw": "00197-00000906/2021-06",
+    "taskTitle": "F024 - 00197-00000906/2021-06: Solicitação de dados ETE Sobradinho",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 60882726",
+    "usuario": "Hiarque de Oliveira Souza"
+  },
+  {
+    "csvId": "101",
+    "taskId": 670,
+    "seiRaw": "00197-00000989/2021-25",
+    "taskTitle": "F009 - 00197-00000989/2021-25: Denúncia de não atendimento do Cond. Nova Colina",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 64083891",
+    "usuario": "Denúncia pelos meios de comunicação"
+  },
+  {
+    "csvId": "102",
+    "taskId": 673,
+    "seiRaw": "00197-00003221/2020-22",
+    "taskTitle": "F027: Reclamação usuário valores serviços Caesb 00197-00003221/2020-22",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica  17/2021",
+    "usuario": "Raimunda Araujo Vicente"
+  },
+  {
+    "csvId": "103",
+    "taskId": 674,
+    "seiRaw": "00197-00001110/2021-62",
+    "taskTitle": "F027 - 00197-00001110/2021-62: Recurso Reclamação Cristiano (Contestação de valor de fatura)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 70474075",
+    "usuario": "Cristiano Ferreira Peres"
+  },
+  {
+    "csvId": "104",
+    "taskId": 675,
+    "seiRaw": "00197-00001173/2021-19",
+    "taskTitle": "F027: Reclamação sujeira obra caesb Park Way (00197-00001173/2021-19)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 77454439",
+    "usuario": "Vilma Santos"
+  },
+  {
+    "csvId": "105",
+    "taskId": 684,
+    "seiRaw": "00197-00001238/2021-26",
+    "taskTitle": "F027: Denúncia Furto de água (00197-00001238/2021-26)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 63856332",
+    "usuario": "ALINE BATISTA DE OLIVEIRA"
+  },
+  {
+    "csvId": "106",
+    "taskId": 680,
+    "seiRaw": "00197-00001337/2021-16",
+    "taskTitle": "F027- Denúncia usuário serviço incompleto Caesb  (00197-00001337/2021-16)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 64968998",
+    "usuario": "Rones da Silva"
+  },
+  {
+    "csvId": "107",
+    "taskId": 679,
+    "seiRaw": "00197-00001211/2021-33",
+    "taskTitle": "F027: Solicitação de informação sobre normas para redução de perdas (00197-00001211/2021-33)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 64118182",
+    "usuario": "Izabela Collares"
+  },
+  {
+    "csvId": "108",
+    "taskId": 678,
+    "seiRaw": "00197-00000600/2021-41",
+    "taskTitle": "F027: Reclamação José Gonçalo (Cobrança indevida) (00197-00000600/2021-41)",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica 21/2021",
+    "usuario": "José Gonçalo Silva dias"
+  },
+  {
+    "csvId": "110",
+    "taskId": 683,
+    "seiRaw": "0197-00001181/2021-65",
+    "taskTitle": "F027: Denúncia serviço incompleto Caesb (0197-00001181/2021-65)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 67181858",
+    "usuario": "JESUINO MOURA BARBOSA NUNES FILHO"
+  },
+  {
+    "csvId": "111",
+    "taskId": 688,
+    "seiRaw": "00197-00001554/2021-06",
+    "taskTitle": "F027- Denúncia usuário serviço incompleto Caesb  (00197-00001554/2021-06)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 65797344",
+    "usuario": "CAESB"
+  },
+  {
+    "csvId": "112",
+    "taskId": 687,
+    "seiRaw": "00197-00001630/2021-75",
+    "taskTitle": "F027- Denúncia usuário - falta de tampa de esgoto (00197-00001630/2021-75)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 68141852",
+    "usuario": "Amanda Martins Costa Mello"
+  },
+  {
+    "csvId": "113",
+    "taskId": 689,
+    "seiRaw": "00197-00001657/2021-68",
+    "taskTitle": "F027: Reclamação de notificação indevida (00197-00001657/2021-68)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 67008772",
+    "usuario": "FERNANDA GLAUCIA"
+  },
+  {
+    "csvId": "115",
+    "taskId": 695,
+    "seiRaw": "00197-00001452/2021-82",
+    "taskTitle": "F027: Reclamação Raimunda Araujo - Cobrança indevida Caesb (00197-00001452/2021-82)",
+    "etapa": "Finalizado",
+    "docSei": "Certificação 74135964",
+    "usuario": "Raimunda Araujo Vicente"
+  },
+  {
+    "csvId": "116",
+    "taskId": 691,
+    "seiRaw": "00197-00001823/2021-26",
+    "taskTitle": "F009 - 00197-00001823/2021-26: Denúncia desperdício água",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 66701797",
+    "usuario": "Tainá Luiza Timm Lopes"
+  },
+  {
+    "csvId": "117",
+    "taskId": 693,
+    "seiRaw": "00197-00001806/2021-99",
+    "taskTitle": "F024 - Denúncia lançamento irregular de esgoto (00197-00001806/2021-99)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 69945335",
+    "usuario": "Anônimo"
+  },
+  {
+    "csvId": "118",
+    "taskId": 692,
+    "seiRaw": "00197-00001911/2021-28",
+    "taskTitle": "F027: Denúncia Serviço incompleto Caesb (00197-00001911/2021-28)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 69585083",
+    "usuario": "Mohara de Melo Guimaraes"
+  },
+  {
+    "csvId": "119",
+    "taskId": 696,
+    "seiRaw": "00197-00001966/2021-38",
+    "taskTitle": "F009 - Denúncia falta d'água constante Ceilândia (00197-00001966/2021-38)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 69124702",
+    "usuario": "Luana Paloma Gomes"
+  },
+  {
+    "csvId": "120",
+    "taskId": 698,
+    "seiRaw": "00197-00001750/2021-72",
+    "taskTitle": "F027: Reclamação Alexander Nascimento - Furto de água   (00197-00001750/2021-72)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 72836776",
+    "usuario": "Alexander Nascimento de Araújo"
+  },
+  {
+    "csvId": "121",
+    "taskId": 697,
+    "seiRaw": "00197-00001866/2021-10",
+    "taskTitle": "F027: Reclamação Francisco Hélio - Atraso ligação de água (00197-00001866/2021-10)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 73698121",
+    "usuario": "FRANCISCO HÉLIO RODRIGUES"
+  },
+  {
+    "csvId": "122",
+    "taskId": 699,
+    "seiRaw": "00197-00001896/2021-18",
+    "taskTitle": "F027: Reclamação Pedro Paulo D. Menezes - Serviço inadequado Caesb (00197-00001896/2021-18)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 69260868",
+    "usuario": "Pedro Paulo Dantas de Menezes"
+  },
+  {
+    "csvId": "123",
+    "taskId": 700,
+    "seiRaw": "00197-00002063/2021-74",
+    "taskTitle": "F027 - 00197-00002063/2021-74: Pedido de inf. Adalberto B. Dantas",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 69563032",
+    "usuario": "Adalberto Barbosa Dantas"
+  },
+  {
+    "csvId": "124",
+    "taskId": 702,
+    "seiRaw": "00197-00002194/2021-51",
+    "taskTitle": "F009 - Denúncia de Vazamento no asfalto da rua (00197-00002194/2021-51)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 70426220",
+    "usuario": "José Maria Lopes da Silva"
+  },
+  {
+    "csvId": "125",
+    "taskId": 705,
+    "seiRaw": "00197-00000403/2021-22",
+    "taskTitle": "F027: Reclamação Iuri David Iunes (00197-00000403/2021-22)",
+    "etapa": "Finalizado",
+    "docSei": "Certificação 71861110",
+    "usuario": "Iuri David Nunes"
+  },
+  {
+    "csvId": "126",
+    "taskId": 706,
+    "seiRaw": "00197-00002305/2021-20",
+    "taskTitle": "F024 - Denúncia de esgoto (00197-00002305/2021-20)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 72114149",
+    "usuario": "Alex Diognes Dias"
+  },
+  {
+    "csvId": "127",
+    "taskId": 714,
+    "seiRaw": "00197-00002312/2021-21",
+    "taskTitle": "F027: Reclamação Sr. José Afonso - Serviço  incompleto (00197-00002312/2021-21)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 73278690",
+    "usuario": "Jose Afonso Arino de Sousa"
+  },
+  {
+    "csvId": "128",
+    "taskId": 708,
+    "seiRaw": "00197-00002137/2021-72",
+    "taskTitle": "F027: Reclamação PARUACU ADM E PARTICIP. - vazamento imperceptível (00197-00002137/2021-72)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 75283327",
+    "usuario": "marcio queiroz"
+  },
+  {
+    "csvId": "129",
+    "taskId": 707,
+    "seiRaw": "00197-00002330/2021-11",
+    "taskTitle": "F027: Denúncia Lucas Galdino - obstrução rede esgoto - usuário (00197-00002330/2021-11)",
+    "etapa": "Finalizado",
+    "docSei": "Certificação 72091800",
+    "usuario": "Lucas Galdino Cardos dos Reis"
+  },
+  {
+    "csvId": "130",
+    "taskId": 690,
+    "seiRaw": "00197-00002206/2021-48",
+    "taskTitle": "F027: Reclamação cobrança indevida ((00197-00002206/2021-48)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 71547797",
+    "usuario": "Claudinei Pimenta"
+  },
+  {
+    "csvId": "131",
+    "taskId": 710,
+    "seiRaw": "00197-00002474/2021-60",
+    "taskTitle": "F027: Reclamação Sr. Lamberto Ricarte - Esgoto Condominial (00197-00002474/2021-60)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 73226005",
+    "usuario": "Lamberto Ricarte Serra Júnior"
+  },
+  {
+    "csvId": "132",
+    "taskId": 712,
+    "seiRaw": "00197-00002384/2021-79",
+    "taskTitle": "F027: Solicitação de informação rede de água - Lucas Leite (00197-00002384/2021-79)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 72167454",
+    "usuario": "Lucas Leite Flores"
+  },
+  {
+    "csvId": "133",
+    "taskId": 729,
+    "seiRaw": "00197-00002363/2021-53",
+    "taskTitle": "F020 - 00197-00003184/2021-33: Ação fiscalizatória decorrente do processo de reclamação do Sr. Lamberto Ricarte Serra Júnior",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 107955540",
+    "usuario": "Lamberto Ricarte Serra Júnior"
+  },
+  {
+    "csvId": "134",
+    "taskId": 715,
+    "seiRaw": "00070-00002828/2020-01",
+    "taskTitle": "F024: Manifestação SAE em processo SEAGRI - Processo 00070-00002828/2020-01",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 72595616",
+    "usuario": "POLIENGE S.A"
+  },
+  {
+    "csvId": "135",
+    "taskId": 719,
+    "seiRaw": "00197-00002813/2021-16",
+    "taskTitle": "F027: Denúncia: Marcelo Leonardo Benini - Processo (00197-00002813/2021-16)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 76955673",
+    "usuario": "Marcelo Leonardo Benini"
+  },
+  {
+    "csvId": "136",
+    "taskId": 721,
+    "seiRaw": "00197-00002028/2021-55",
+    "taskTitle": "F027 - 00197-00002028/2021-55: Reclamação Sr. Francisco Inairo Gomes- Vazamento imperceptível",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 74594808",
+    "usuario": "Francisco Inairo Gomes do Nascimento"
+  },
+  {
+    "csvId": "137",
+    "taskId": 720,
+    "seiRaw": "00197-00002268/2021-50",
+    "taskTitle": "F027: Reclamação Sr. Jorge Caldas - CEP cadastrado indevidamente ( 00197-00002268/2021-50)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 74167579",
+    "usuario": "Jorge Caldas"
+  },
+  {
+    "csvId": "138",
+    "taskId": 722,
+    "seiRaw": "00197-00002995/2021-17",
+    "taskTitle": "F027: Solicitação de Informações  - MPDFT - Processo 00197-00002995/2021-17",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 74691574",
+    "usuario": "MPDFT"
+  },
+  {
+    "csvId": "139",
+    "taskId": 718,
+    "seiRaw": "00197-00002967/2021-08",
+    "taskTitle": "F027: Fiscalização referente ao processo de Reclamação do Sr. Alexander (00197-00002967/2021-08)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 76674842",
+    "usuario": "Alexander Nascimento de Araújo"
+  },
+  {
+    "csvId": "140",
+    "taskId": 728,
+    "seiRaw": "00197-00003079/2021-02",
+    "taskTitle": "F017 - 00197-00003079/2021-02: Reclamação FESMPDFT - Problema inst. esgoto",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 82105183",
+    "usuario": "FUNDAÇÃO ESCOLA SUPERIOR DO MPDFT"
+  },
+  {
+    "csvId": "141",
+    "taskId": 724,
+    "seiRaw": "00197-00002643/2021-61",
+    "taskTitle": "F027: Reclamação Sra. Mariane Gonçalves- Revisão de fatura (00197-00002643/2021-61)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 74898267",
+    "usuario": "MARIANE VICENTINI GONCALVES"
+  },
+  {
+    "csvId": "142",
+    "taskId": 725,
+    "seiRaw": "00197-00002752/2021-89",
+    "taskTitle": "F027: Reclamação: Klebysson De Oliveira da Silva - Processo (00197-00002752/2021-89)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 76085752",
+    "usuario": "Klebysson De Oliveira da Silva"
+  },
+  {
+    "csvId": "143",
+    "taskId": 731,
+    "seiRaw": "00197.00002142/2021-85",
+    "taskTitle": "F018: Reclamação: Francisco da Chagas - Processo: 00197.00002142/2021-85",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 77225422",
+    "usuario": "Francisco das Chagas Pires de Sousa"
+  },
+  {
+    "csvId": "144",
+    "taskId": 736,
+    "seiRaw": "00197-00002998/2021-51",
+    "taskTitle": "F018: Reclamação: Adriana Brochado- Processo: 00197-00002998/2021-51",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 77084547",
+    "usuario": "ADRIANA LEPESQUEUR BROCHADO"
+  },
+  {
+    "csvId": "145",
+    "taskId": 754,
+    "seiRaw": "00197-00003001/2021-80",
+    "taskTitle": "F018: Reclamação: Ailton Carvalho Alencar - Revisão de parcelamento (00197-00003001/2021-80)",
+    "etapa": "Finalizado",
+    "docSei": "Nota Técnica 85472101",
+    "usuario": "Ailton Carvalho alencar"
+  },
+  {
+    "csvId": "146",
+    "taskId": 739,
+    "seiRaw": "00197-00002918/2021-67",
+    "taskTitle": "F018: Reclamação: Manoel Bomfim /Condomínio do Edifício Residencial Demartin - Processo: 00197-00002918/2021-67",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 77381332",
+    "usuario": "Manoel Bomfim Pereira de Sousa"
+  },
+  {
+    "csvId": "147",
+    "taskId": 727,
+    "seiRaw": "00197-00003196/2021-68",
+    "taskTitle": "F018: Ação fiscalizatória decorrente do processo de reclamação da Sra.Mariane Vicentini Gonçalves (00197-00003196/2021-68)",
+    "etapa": "Finalizado",
+    "docSei": "Despacho 77505167",
+    "usuario": "MARIANE VICENTINI GONCALVES"
+  },
+  {
+    "csvId": "148",
+    "taskId": 740,
+    "seiRaw": "00197-00003100/2021-61",
+    "taskTitle": "F018: Revisão de contas: Andrea Nascimento de Oliveira (00197-00003100/2021-61)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 77310852",
+    "usuario": "Andrea Nascimento de Oliveira"
+  },
+  {
+    "csvId": "149",
+    "taskId": 745,
+    "seiRaw": "00197-00003214/2021-10",
+    "taskTitle": "F018: Reclamação: Edifício Vintage Manacá(00197-00003214/2021-10)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 78141101",
+    "usuario": "Condomínio Ed. Vintage Manacá"
+  },
+  {
+    "csvId": "150",
+    "taskId": 747,
+    "seiRaw": "00197-00003332/2021-10",
+    "taskTitle": "F018: Reclamação: Condomínio SQN 111 Bloco E - Contestação de resíduo negativo (00197-00003332/2021-10)",
+    "etapa": "Finalizado",
+    "docSei": "Memorando 78397023",
+    "usuario": "CARLOS HENRIQUE RODRIGUES DA CUNHA"
+  }
+]

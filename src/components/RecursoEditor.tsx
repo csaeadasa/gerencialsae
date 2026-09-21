@@ -286,15 +286,27 @@ export const RecursoEditor: React.FC<Props> = ({ data, onChange }) => {
         </div>
       </div>
 
-      <div className="space-y-1">
-        <label className="text-xs font-bold text-slate-600">Nº do Processo SEI</label>
-        <input
-          type="text"
-          placeholder="Ex: 00107-00001234/2026-00"
-          value={localData.numeroSei || ''}
-          onChange={e => updateField('numeroSei', e.target.value)}
-          className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-adasa-mid outline-none font-medium"
-        />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-slate-600">Nº do Processo SEI</label>
+          <input
+            type="text"
+            placeholder="Ex: 00107-00001234/2026-00"
+            value={localData.numeroSei || ''}
+            onChange={e => updateField('numeroSei', e.target.value)}
+            className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-adasa-mid outline-none font-medium"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-slate-600">Nº Documento SEI</label>
+          <input
+            type="text"
+            placeholder="Ex: 12345678"
+            value={localData.numeroDocumentoSei || ''}
+            onChange={e => updateField('numeroDocumentoSei', e.target.value)}
+            className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-adasa-mid outline-none font-medium"
+          />
+        </div>
       </div>
 
       <div className="space-y-1">

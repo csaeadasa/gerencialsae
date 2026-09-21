@@ -27,11 +27,14 @@ export function ResolutionDetailsModal({ resolution, onClose }: { resolution: an
         
         <div className="p-6 border-b border-slate-100 flex items-start justify-between bg-slate-50/50">
           <div className="flex gap-4 items-start">
-            {fullRes.imagem_capa && (
-              <div className="w-16 h-24 rounded-lg shadow-sm border border-slate-200 overflow-hidden shrink-0 bg-white">
-                <img src={fullRes.imagem_capa} alt="Capa" className="w-full h-full object-cover" />
-              </div>
-            )}
+            <div className="w-16 h-24 rounded-lg shadow-sm border border-slate-200 overflow-hidden shrink-0 bg-white">
+              <img 
+                src={fullRes.imagem_capa || "/adasa-resolucoes.png"} 
+                alt="Capa da Resolução" 
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover" 
+              />
+            </div>
             <div>
               <h3 className="text-xl font-black text-slate-800 tracking-tight">
                 {fullRes.especie} Nº {fullRes.numero} / {fullRes.ano}

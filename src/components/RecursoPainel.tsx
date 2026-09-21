@@ -36,8 +36,13 @@ import {
   Table,
   CheckCircle,
   Clock,
-  RotateCcw
+  RotateCcw,
+  Upload,
+  X,
+  Download,
+  FileSpreadsheet
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { Task } from "../types";
 import { RecursoSpatialMap } from "./RecursoSpatialMap";
 import {
@@ -92,6 +97,96 @@ const INITIAL_OUVIDORIA_FILTERS: PanelFilters = {
 
 export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPainelProps) {
   const [activeTab, setActiveTab] = useState<'ouvidoria' | 'recurso_revisao'>('recurso_revisao');
+
+  // CSV/XLSX Import Modal State (Demanda Ouvidoria & Recurso de Revisão)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importText, setImportText] = useState("");
+  const [createMissingTasks, setCreateMissingTasks] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    success: boolean;
+    totalRecords: number;
+    updatedCount: number;
+    createdCount?: number;
+    notFoundCount: number;
+    updatedTasks: any[];
+    createdTasks?: any[];
+    notFoundRecords: any[];
+  } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const handleRunImport = async () => {
+    setImportError(null);
+    setImportResult(null);
+
+    let csvContent = importText.trim();
+
+    if (!csvContent && !importFile) {
+      setImportError("Por favor, selecione um arquivo CSV/Excel ou cole os dados da planilha.");
+      return;
+    }
+
+    setIsImporting(true);
+
+    try {
+      if (importFile && !csvContent) {
+        if (importFile.name.endsWith(".xlsx") || importFile.name.endsWith(".xls")) {
+          const buffer = await importFile.arrayBuffer();
+          const wb = XLSX.read(buffer, { type: "array" });
+          const firstSheet = wb.Sheets[wb.SheetNames[0]];
+          csvContent = XLSX.utils.sheet_to_csv(firstSheet, { FS: ";" });
+        } else {
+          csvContent = await importFile.text();
+        }
+      }
+
+      if (!csvContent.trim()) {
+        throw new Error("O arquivo ou texto fornecido está vazio.");
+      }
+
+      const endpoint = activeTab === "recurso_revisao"
+        ? "/api/recurso-revisao/import-csv"
+        : "/api/ouvidoria/import-csv";
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          csvText: csvContent,
+          createMissing: activeTab === "recurso_revisao" ? createMissingTasks : false
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Erro ao processar planilha no servidor.");
+      }
+
+      setImportResult(data);
+    } catch (err: any) {
+      console.error("Erro na importação:", err);
+      setImportError(err.message || "Falha na comunicação com o servidor.");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleDownloadNotFoundJson = () => {
+    if (!importResult?.notFoundRecords) return;
+    const filename = activeTab === "recurso_revisao"
+      ? "relatorio_nao_localizados_recurso_revisao.json"
+      : "relatorio_nao_localizados_ouvidoria.json";
+    const blob = new Blob([JSON.stringify(importResult.notFoundRecords, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   // TOTALLY INDEPENDENT FILTERS STATE
   const [recursoFilters, setRecursoFilters] = useState<PanelFilters>(INITIAL_RECURSO_FILTERS);
@@ -158,6 +253,7 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
       const apuracao = data?.apuracao?.trim() || data?.categoria?.trim() || "Não Informada";
       return {
         numeroSei: data?.numeroSei || t.seiProcess || `REC-${t.id}`,
+        numeroDocumentoSei: data?.numeroDocumentoSei || "",
         nomeUsuario: data?.nomeUsuario || t.assignedTo || "Usuário Não Informado",
         regiaoAdministrativa: data?.regiaoAdministrativa || "Não Informada",
         servico: data?.servico || "Água",
@@ -381,8 +477,9 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
         const matchesTitle = t.title.toLowerCase().includes(term);
         const matchesUser = data.nomeUsuario?.toLowerCase().includes(term) || false;
         const matchesSei = data.numeroSei?.toLowerCase().includes(term) || false;
+        const matchesDoc = data.numeroDocumentoSei?.toLowerCase().includes(term) || false;
         const matchesCat = data.categoria?.toLowerCase().includes(term) || false;
-        if (!matchesTitle && !matchesUser && !matchesSei && !matchesCat) return false;
+        if (!matchesTitle && !matchesUser && !matchesSei && !matchesDoc && !matchesCat) return false;
       }
       return true;
     });
@@ -1130,8 +1227,31 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
           </p>
         </div>
 
-        {/* TABS SELECTOR */}
-        <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80 w-full sm:w-auto self-start sm:self-auto gap-1">
+        {/* ACTIONS & TABS SELECTOR */}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto self-start sm:self-auto">
+          <button
+            onClick={() => {
+              setImportResult(null);
+              setImportError(null);
+              setImportFile(null);
+              setImportText("");
+              setCreateMissingTasks(false);
+              setIsImportModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+            title={
+              activeTab === "recurso_revisao"
+                ? "Importar ou atualizar tarefas com a planilha de recursos de revisão"
+                : "Importar ou atualizar tarefas com a planilha de demandas de ouvidoria"
+            }
+          >
+            <Upload size={14} />
+            <span>
+              {activeTab === "recurso_revisao" ? "Sincronizar Recursos" : "Sincronizar Ouvidoria"}
+            </span>
+          </button>
+
+          <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80 w-full sm:w-auto self-start sm:self-auto gap-1">
           <button
             onClick={() => setActiveTab("recurso_revisao")}
             className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
@@ -1166,6 +1286,7 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
           </button>
         </div>
       </div>
+    </div>
 
       {/* FILTERS CONTAINER (100% ISOLATED PER TAB) */}
       <div className="bg-white border border-slate-200/80 rounded-[2rem] p-6 shadow-sm space-y-4 relative text-left">
@@ -2419,7 +2540,12 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
 
                   return (
                     <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 font-bold text-slate-900 whitespace-nowrap">{data.numeroSei}</td>
+                      <td className="px-4 py-3 font-bold text-slate-900 whitespace-nowrap">
+                        <div>{data.numeroSei}</div>
+                        {data.numeroDocumentoSei && (
+                          <div className="text-[10px] text-slate-500 font-normal">Doc: {data.numeroDocumentoSei}</div>
+                        )}
+                      </td>
                       <td className="px-4 py-3 whitespace-nowrap">{data.nomeUsuario}</td>
                       <td className="px-4 py-3 whitespace-nowrap">{data.regiaoAdministrativa}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -2451,6 +2577,235 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
           </table>
         </div>
       </div>
+
+      {/* MODAL DE IMPORTAÇÃO / SINCRONIZAÇÃO */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-2xl w-full p-6 sm:p-7 space-y-5 my-8 text-left animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100">
+                  <FileSpreadsheet size={24} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-800 tracking-tight">
+                    {activeTab === "recurso_revisao"
+                      ? "Sincronizar Planilha de Recursos de Revisão"
+                      : "Sincronizar Planilha de Demanda Ouvidoria"}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {activeTab === "recurso_revisao"
+                      ? "Importe o arquivo CSV ou Excel de Recursos de Revisão para cruzar dados cadastrais, penalidades e etapas."
+                      : "Importe o arquivo CSV ou Excel (351 registros) para cruzar com o banco de dados."}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsImportModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {!importResult ? (
+              <div className="space-y-4">
+                <div className="bg-blue-50/70 border border-blue-100 rounded-2xl p-4 text-xs text-blue-900 space-y-1.5">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <Info size={14} className="text-blue-600 shrink-0" />
+                    Como funciona o cruzamento automático:
+                  </p>
+                  {activeTab === "recurso_revisao" ? (
+                    <ul className="list-disc list-inside space-y-1 text-slate-600 text-[11px] pl-1">
+                      <li>Compara o <strong>Nº do Processo SEI Adasa</strong> da planilha com as tarefas cadastradas.</li>
+                      <li>Atualiza <strong>Recorrente/Interessado</strong>, <strong>Processo Caesb</strong>, <strong>Nota Técnica</strong>, <strong>Inscrição Caesb</strong>, <strong>Região Administrativa</strong>, <strong>Lat/Long</strong>, <strong>Serviço</strong> e <strong>Infração/Irregularidade</strong>.</li>
+                      <li>Registra o histórico nas etapas: <em>Recebido, Em Análise Técnica, Encaminhado à Diretoria, Notificação do Usuário e Finalizado</em>.</li>
+                      <li>Atualiza os valores de penalidade (<em>Multa Prestador, Multa Após Recurso, Diferença</em>), posicionamento da Diretoria e reunião pública.</li>
+                      <li>Gera relatório em tempo real com o total processado, atualizado e não localizado.</li>
+                    </ul>
+                  ) : (
+                    <ul className="list-disc list-inside space-y-1 text-slate-600 text-[11px] pl-1">
+                      <li>Compara o <strong>Nº do Processo SEI</strong> da planilha com as tarefas cadastradas.</li>
+                      <li>Preenche o campo <strong>Nº Documento SEI</strong> e dados cadastrais.</li>
+                      <li>Registra o tempo e histórico nas etapas: <em>Recebido, Em Análise Técnica, Tramitado para a Ouvidoria e Finalizado</em>.</li>
+                      <li>Gera relatório em tempo real com o número de tarefas atualizadas e as não localizadas.</li>
+                    </ul>
+                  )}
+                </div>
+
+                {importError && (
+                  <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold p-3.5 rounded-xl flex items-center gap-2">
+                    <AlertCircle size={16} className="shrink-0" />
+                    <span>{importError}</span>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                    Selecione o arquivo da planilha (.csv ou .xlsx)
+                  </label>
+                  <input
+                    type="file"
+                    accept=".csv,.xlsx,.xls,.txt"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setImportFile(e.target.files[0]);
+                      }
+                    }}
+                    className="w-full border-2 border-dashed border-slate-200 hover:border-indigo-300 rounded-2xl p-4 text-xs font-semibold text-slate-700 bg-slate-50/50 cursor-pointer transition-colors"
+                  />
+                  {importFile && (
+                    <p className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                      <CheckCircle2 size={13} /> Arquivo selecionado: {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                    Ou cole o conteúdo CSV diretamente
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    placeholder="Cole aqui o texto CSV com cabeçalhos separados por ';' ou ','..."
+                    className="w-full border border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                  />
+                </div>
+
+                {activeTab === "recurso_revisao" && (
+                  <label className="flex items-center gap-2.5 p-3 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200/80 cursor-pointer transition-colors text-xs font-semibold text-slate-700 select-none">
+                    <input
+                      type="checkbox"
+                      checked={createMissingTasks}
+                      onChange={(e) => setCreateMissingTasks(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 rounded-md border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span>Cadastrar automaticamente tarefas para os registros não localizados no banco</span>
+                  </label>
+                )}
+
+                <div className="flex justify-end items-center gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsImportModalOpen(false)}
+                    disabled={isImporting}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold text-xs transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRunImport}
+                    disabled={isImporting || (!importFile && !importText.trim())}
+                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+                  >
+                    {isImporting ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Processando tarefas...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={14} />
+                        <span>Executar Cruzamento e Atualizar</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-emerald-900 flex items-start gap-3">
+                  <CheckCircle2 size={22} className="text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-black text-sm">Cruzamento e Atualização Concluídos!</h4>
+                    <p className="text-xs text-emerald-700 mt-0.5">
+                      Os registros foram processados e as tarefas no banco foram atualizadas com sucesso.
+                    </p>
+                  </div>
+                </div>
+
+                <div className={`grid ${importResult.createdCount ? 'grid-cols-4' : 'grid-cols-3'} gap-3 text-center`}>
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Total na Planilha</span>
+                    <span className="text-xl font-black text-slate-800 mt-1 block">{importResult.totalRecords}</span>
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Atualizadas no Banco</span>
+                    <span className="text-xl font-black text-emerald-700 mt-1 block">{importResult.updatedCount}</span>
+                  </div>
+                  {Boolean(importResult.createdCount) && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3">
+                      <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">Cadastradas</span>
+                      <span className="text-xl font-black text-blue-700 mt-1 block">{importResult.createdCount}</span>
+                    </div>
+                  )}
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3">
+                    <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block">Não Localizadas</span>
+                    <span className="text-xl font-black text-amber-700 mt-1 block">{importResult.notFoundCount}</span>
+                  </div>
+                </div>
+
+                {importResult.notFoundCount > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-700">
+                        Registros não localizados no banco ({importResult.notFoundCount}):
+                      </span>
+                      <button
+                        onClick={handleDownloadNotFoundJson}
+                        className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 hover:underline cursor-pointer"
+                      >
+                        <Download size={12} /> Baixar Relatório (JSON)
+                      </button>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl bg-slate-50 text-[11px]">
+                      <table className="w-full text-left">
+                        <thead className="bg-slate-100 text-slate-500 font-bold border-b border-slate-200 sticky top-0">
+                          <tr>
+                            <th className="p-2">ID</th>
+                            <th className="p-2">Processo SEI</th>
+                            <th className="p-2">{activeTab === "recurso_revisao" ? "Recorrente" : "Usuário"}</th>
+                            <th className="p-2">Etapa</th>
+                            {activeTab === "recurso_revisao" && <th className="p-2">Situação</th>}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {importResult.notFoundRecords.map((r: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-white">
+                              <td className="p-2 font-mono font-bold text-slate-600">{r.idCsv || idx + 1}</td>
+                              <td className="p-2 font-mono text-slate-800">{r.processoSei || "Não informado"}</td>
+                              <td className="p-2 text-slate-700 truncate max-w-[140px]">{r.recorrente || r.nomeUsuario || "-"}</td>
+                              <td className="p-2 text-slate-600">{r.etapa || "-"}</td>
+                              {activeTab === "recurso_revisao" && (
+                                <td className="p-2 text-slate-600">{r.situacao || "-"}</td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button
+                    onClick={() => {
+                      setIsImportModalOpen(false);
+                      window.location.reload();
+                    }}
+                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider shadow-sm transition-all cursor-pointer"
+                  >
+                    Concluir e Atualizar Painel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );

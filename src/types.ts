@@ -378,6 +378,7 @@ export interface RecursoData {
   servico?: 'Água' | 'Esgoto' | 'Comercial' | string;
   categoria?: string;
   numeroSei?: string;
+  numeroDocumentoSei?: string;
   posicionamentoOuvidoria?: string;
   posicionamentoSAE?: string;
   posicionamentoJuridico?: string;
@@ -396,6 +397,7 @@ export interface RecursoRevisaoData {
   recorrente?: string;
   cpfCnpj?: string;
   inscricaoCaesb?: string;
+  numeroProcessoCaesb?: string;
   autoInfracaoOrigem?: string;
   regiaoAdministrativa?: string;
   latitude?: string;
@@ -411,12 +413,16 @@ export interface RecursoRevisaoData {
   resultado?: string;
   dataProtocolo?: string;
   dataDistribuicao?: string;
+  dataExtratoDiretoria?: string;
+  dataNotificacaoUsuario?: string;
   relator?: string;
   valorMultaQuestionada?: number | string;
   valorMultaMantida?: number | string;
+  diferencaFavorUsuario?: number | string;
   resumoRecurso?: string;
   parecerTecnico?: string;
   parecerJuridico?: string;
+  posicionamentoDiretoria?: string;
   decisaoDiretoria?: string;
   reuniaoPublicaDiretoria?: string;
   observacao?: string;

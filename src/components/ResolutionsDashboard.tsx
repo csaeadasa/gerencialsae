@@ -887,11 +887,14 @@ export function ResolutionsDashboard({ showToast }: ResolutionsDashboardProps) {
                     <tr key={res.id} className="hover:bg-slate-50/40 transition-colors group align-top">
                       <td className="px-5 py-4 font-semibold text-slate-700">
                         <div className="flex items-start gap-4">
-                          {res.imagem_capa && (
-                            <div className="w-20 h-28 rounded shadow-sm border border-slate-200 overflow-hidden shrink-0 bg-white">
-                              <img src={res.imagem_capa} alt={`Capa da ${res.especie} ${res.numero}`} className="w-full h-full object-cover" />
-                            </div>
-                          )}
+                          <div className="w-20 h-28 rounded shadow-sm border border-slate-200 overflow-hidden shrink-0 bg-white">
+                            <img 
+                              src={res.imagem_capa || "/adasa-resolucoes.png"} 
+                              alt={`Capa da ${res.especie} ${res.numero}`} 
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover" 
+                            />
+                          </div>
                           <div className="flex flex-col">
                             <span className="text-xs text-indigo-600 font-bold uppercase tracking-widest">{res.especie}</span>
                           <span className="text-sm font-bold text-slate-800">Nº {res.numero} / {res.ano}</span>

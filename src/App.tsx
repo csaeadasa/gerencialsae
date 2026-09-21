@@ -643,29 +643,31 @@ export default function App() {
   
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [expandedSidebarSections, setExpandedSidebarSections] = useState<Record<string, boolean>>(() => {
-    try {
-      const saved = localStorage.getItem("adasa_sidebar_sections_v2");
-      return saved ? JSON.parse(saved) : {
-        planning: false,
-        regulation: false,
-        fiscalization: false,
-        publications: false,
-        userManagement: false,
-      };
-    } catch {
-      return {
-        planning: false,
-        regulation: false,
-        fiscalization: false,
-        publications: false,
-        userManagement: false,
-      };
-    }
+    // Ao abrir a página inicial, mostrar o menu Plano de atividades de forma expandida e os demais recolhidos
+    return {
+      planning: true,
+      regulation: false,
+      fiscalization: false,
+      publications: false,
+      userManagement: false,
+    };
   });
 
   useEffect(() => {
     localStorage.setItem("adasa_sidebar_sections_v2", JSON.stringify(expandedSidebarSections));
   }, [expandedSidebarSections]);
+
+  useEffect(() => {
+    if (activeTab === "home") {
+      setExpandedSidebarSections({
+        planning: true,
+        regulation: false,
+        fiscalization: false,
+        publications: false,
+        userManagement: false,
+      });
+    }
+  }, [activeTab]);
 
   const toggleSidebarSection = (section: string) => {
     setExpandedSidebarSections(prev => ({
@@ -1382,6 +1384,15 @@ export default function App() {
   const handleTabChange = (newTab: typeof activeTab) => {
     setActiveTab(newTab);
     setIsMobileMenuOpen(false);
+    if (newTab === "home") {
+      setExpandedSidebarSections({
+        planning: true,
+        regulation: false,
+        fiscalization: false,
+        publications: false,
+        userManagement: false,
+      });
+    }
   };
 
   const handleAddSystem = () => {
