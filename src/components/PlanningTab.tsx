@@ -63,13 +63,20 @@ import {
   Download,
   UserPlus,
   UserCheck,
-  Shield
+  Shield,
+  Lock,
+  Unlock,
+  ShieldCheck,
+  ArrowRightLeft,
+  Eye,
+  Archive,
+  Check
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { FiscalizacaoEditor } from './FiscalizacaoEditor';
 import { RecursoEditor } from './RecursoEditor';
 import { RecursoRevisaoEditor } from './RecursoRevisaoEditor';
-import { Task, Plan, Area, Category, Responsible, AppUser } from "../types";
+import { Task, Plan, PlanSnapshot, Area, Category, Responsible, AppUser } from "../types";
 import { cn } from "../lib/utils";
 import { useAuth } from "../lib/auth";
 import { createFiscalizacaoChecklist, ensureFiscalizacaoChecklist, FISCALIZACAO_ETAPAS, FISCALIZACAO_ETAPA_INICIAL } from "../lib/fiscalizacao";
@@ -160,6 +167,92 @@ const getDeadlineStatus = (endDate: string | null | undefined, status: string | 
   } catch (e) {
     return "No Prazo";
   }
+};
+
+const MONTH_NAMES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
+
+const QUARTER_DEFINITIONS = [
+  { q: 1, label: "1º Trimestre", range: "Jan - Mar" },
+  { q: 2, label: "2º Trimestre", range: "Abr - Jun" },
+  { q: 3, label: "3º Trimestre", range: "Jul - Set" },
+  { q: 4, label: "4º Trimestre", range: "Out - Dez" },
+];
+
+const SEMESTER_DEFINITIONS = [
+  { s: 1, label: "1º Semestre", range: "Jan - Jun" },
+  { s: 2, label: "2º Semestre", range: "Jul - Dez" },
+];
+
+const getTaskDateInfo = (tk: Task): { year: number; month: number } | null => {
+  const dateStr = tk.endDate || tk.startDate;
+  if (!dateStr) return null;
+  if (typeof dateStr === "string" && dateStr.includes("-")) {
+    const parts = dateStr.split("T")[0].split("-");
+    if (parts.length >= 2) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(y) && !isNaN(m)) {
+        return { year: y, month: m };
+      }
+    }
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
+  }
+  return null;
+};
+
+const parsePeriodFilterValue = (val: string, type: "all" | "month" | "quarter" | "semester") => {
+  if (!val || val === "all") return null;
+  if (val.includes("-")) {
+    const [yrStr, periodStr] = val.split("-");
+    const year = parseInt(yrStr, 10);
+    let periodNum = 0;
+    if (type === "month") {
+      periodNum = parseInt(periodStr, 10);
+    } else if (type === "quarter") {
+      periodNum = parseInt(periodStr.replace("Q", ""), 10);
+    } else if (type === "semester") {
+      periodNum = parseInt(periodStr.replace("S", ""), 10);
+    }
+    return { year: isNaN(year) ? null : year, period: isNaN(periodNum) ? null : periodNum };
+  } else {
+    const periodNum = parseInt(val, 10);
+    return { year: null, period: isNaN(periodNum) ? null : periodNum };
+  }
+};
+
+const taskMatchesPeriodFilter = (
+  tk: Task,
+  periodType: "all" | "month" | "quarter" | "semester",
+  periodVal: string
+): boolean => {
+  if (periodType === "all" || !periodVal || periodVal === "all") return true;
+  const parsed = parsePeriodFilterValue(periodVal, periodType);
+  if (!parsed || parsed.period === null) return true;
+
+  const dateInfo = getTaskDateInfo(tk);
+  if (!dateInfo) return false;
+
+  // If year is specified in the filter, enforce year match
+  if (parsed.year !== null && dateInfo.year !== parsed.year) {
+    return false;
+  }
+
+  if (periodType === "month") {
+    return dateInfo.month === parsed.period;
+  } else if (periodType === "quarter") {
+    const taskQuarter = Math.ceil(dateInfo.month / 3);
+    return taskQuarter === parsed.period;
+  } else if (periodType === "semester") {
+    const taskSemester = dateInfo.month <= 6 ? 1 : 2;
+    return taskSemester === parsed.period;
+  }
+  return true;
 };
 
 // Custom Tooltips for Charts
@@ -505,7 +598,8 @@ export function PlanningTab({
       (planFilter !== "all" && planFilter !== "") ||
       selectedAreaIds.length > 0 ||
       selectedResponsibleIds.length > 0 ||
-      periodTypeFilter !== "all"
+      periodTypeFilter !== "all" ||
+      periodValueFilter !== "all"
     );
   }, [
     statusFilter,
@@ -519,7 +613,8 @@ export function PlanningTab({
     planFilter,
     selectedAreaIds,
     selectedResponsibleIds,
-    periodTypeFilter
+    periodTypeFilter,
+    periodValueFilter
   ]);
 
   // Registry lists loaded from the server
@@ -551,6 +646,58 @@ export function PlanningTab({
       setResponsibles(responsiblesProp);
     }
   }, [responsiblesProp]);
+
+  // Extract all distinct years available in tasks (prioritizing selected plan if any, otherwise all tasks)
+  const availableYears = useMemo(() => {
+    const yearsSet = new Set<number>();
+    
+    // Check tasks for currently selected plan, or all tasks if planFilter is "all"
+    const targetTasks = (planFilter !== "all" && planFilter !== "")
+      ? tasks.filter(t => Number(t.planId) === Number(planFilter))
+      : tasks;
+
+    targetTasks.forEach(t => {
+      const dParts = getTaskDateInfo(t);
+      if (dParts && dParts.year >= 2000 && dParts.year <= 2100) {
+        yearsSet.add(dParts.year);
+      }
+    });
+
+    // If targetTasks didn't have any dated tasks, fall back to all tasks
+    if (yearsSet.size === 0) {
+      tasks.forEach(t => {
+        const dParts = getTaskDateInfo(t);
+        if (dParts && dParts.year >= 2000 && dParts.year <= 2100) {
+          yearsSet.add(dParts.year);
+        }
+      });
+    }
+
+    // Also check plan name for a year (e.g. "Plano de Atividades 2026")
+    if (planFilter !== "all" && planFilter !== "") {
+      const p = plans.find(x => x.id.toString() === planFilter);
+      if (p?.name) {
+        const m = p.name.match(/\b(20\d\d)\b/);
+        if (m) yearsSet.add(parseInt(m[1], 10));
+      }
+    }
+
+    if (yearsSet.size === 0) {
+      yearsSet.add(new Date().getFullYear());
+    }
+
+    return Array.from(yearsSet).sort((a, b) => a - b);
+  }, [tasks, planFilter, plans]);
+
+  // Reset periodValueFilter if its year is no longer available
+  React.useEffect(() => {
+    if (periodValueFilter !== "all") {
+      const parsed = parsePeriodFilterValue(periodValueFilter, periodTypeFilter);
+      if (parsed?.year && !availableYears.includes(parsed.year)) {
+        setPeriodValueFilter("all");
+      }
+    }
+  }, [availableYears, periodTypeFilter]);
 
   // States for generating tasks from a model
   const [isModelGenModalOpen, setIsModelGenModalOpen] = useState(false);
@@ -810,6 +957,16 @@ export function PlanningTab({
   const [newLinkUrl, setNewLinkUrl] = useState("");
   const [newLinkTitle, setNewLinkTitle] = useState("");
   const [isRegModalOpen, setIsRegModalOpen] = useState(false);
+  
+  // Snapshot de Fechamento (Opção 4) State
+  const [closePlanModalPlan, setClosePlanModalPlan] = useState<Plan | null>(null);
+  const [closePlanNotes, setClosePlanNotes] = useState("");
+  const [isClosingPlan, setIsClosingPlan] = useState(false);
+  const [viewSnapshotPlan, setViewSnapshotPlan] = useState<Plan | null>(null);
+  const [migratePlanModalPlan, setMigratePlanModalPlan] = useState<Plan | null>(null);
+  const [migrateTargetPlanId, setMigrateTargetPlanId] = useState<number | null>(null);
+  const [isMigratingTasks, setIsMigratingTasks] = useState(false);
+  const [snapshotActiveTab, setSnapshotActiveTab] = useState<"summary" | "quarters" | "areas" | "tasks">("summary");
   const [promptCreateUserForResp, setPromptCreateUserForResp] = useState<{ name: string; email: string; role?: string } | null>(null);
   const [isCreatingUserForResp, setIsCreatingUserForResp] = useState<Partial<AppUser & { password?: string }> | null>(null);
   const [isSavingUserFromModal, setIsSavingUserFromModal] = useState(false);
@@ -1200,6 +1357,109 @@ export function PlanningTab({
         }
       }
     });
+  };
+
+  // Handle plan close / homologation snapshot (Option 4)
+  const handleClosePlan = async (plan: Plan, notes: string) => {
+    setIsClosingPlan(true);
+    try {
+      const res = await fetch(`/api/plans/${plan.id}/close`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          closedBy: currentUser?.name || currentUser?.email || "SGI Pro",
+          notes
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        showToast("Sucesso", "Plano homologado e fechado com sucesso! O Snapshot oficial foi congelado.", "success");
+        setPlans(prev => prev.map(p => p.id === plan.id ? data.data : p));
+        if (setPlansProp) setPlansProp(prev => prev.map(p => p.id === plan.id ? data.data : p));
+        setClosePlanModalPlan(null);
+        setClosePlanNotes("");
+        await loadRegistriesOnly();
+        await reloadTasks();
+      } else {
+        showToast("Erro", data.error || "Erro ao homologar plano.", "error");
+      }
+    } catch (err: any) {
+      showToast("Erro", "Erro ao homologar plano: " + (err.message || ""), "error");
+    } finally {
+      setIsClosingPlan(false);
+    }
+  };
+
+  // Handle plan reopen (unfreeze)
+  const handleReopenPlan = async (plan: Plan) => {
+    const doReopen = async () => {
+      try {
+        const res = await fetch(`/api/plans/${plan.id}/reopen`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reopenedBy: currentUser?.name || currentUser?.email || "SGI Pro"
+          })
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+          showToast("Sucesso", `Plano "${plan.name}" reaberto com sucesso.`, "success");
+          setPlans(prev => prev.map(p => p.id === plan.id ? data.data : p));
+          if (setPlansProp) setPlansProp(prev => prev.map(p => p.id === plan.id ? data.data : p));
+          if (viewSnapshotPlan?.id === plan.id) setViewSnapshotPlan(null);
+          await loadRegistriesOnly();
+          await reloadTasks();
+        } else {
+          showToast("Erro", data.error || "Erro ao reabrir plano.", "error");
+        }
+      } catch (err: any) {
+        showToast("Erro", "Erro ao reabrir plano: " + (err.message || ""), "error");
+      }
+    };
+
+    if (setConfirmState) {
+      setConfirmState({
+        type: "confirm",
+        title: "Reabrir Exercício do Plano",
+        message: `Ao reabrir o plano "${plan.name}", o status de homologação oficial será suspenso e o plano voltará ao modo de edição contínua.\n\nDeseja confirmar a reabertura?`,
+        onConfirm: doReopen
+      });
+    } else {
+      await doReopen();
+    }
+  };
+
+  // Handle migration of pending tasks from closed plan to another plan
+  const handleMigratePendingTasks = async (sourcePlan: Plan, targetPlanId: number) => {
+    if (!targetPlanId) {
+      showToast("Atenção", "Selecione o plano de destino.", "warning");
+      return;
+    }
+    setIsMigratingTasks(true);
+    try {
+      const res = await fetch(`/api/plans/${sourcePlan.id}/migrate-pending-tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetPlanId,
+          updatedBy: currentUser?.name || currentUser?.email || "SGI Pro"
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("Sucesso", data.message || "Tarefas pendentes migradas com sucesso.", "success");
+        setMigratePlanModalPlan(null);
+        setMigrateTargetPlanId(null);
+        await reloadTasks();
+        await loadRegistriesOnly();
+      } else {
+        showToast("Erro", data.error || "Erro ao migrar tarefas.", "error");
+      }
+    } catch (err: any) {
+      showToast("Erro", "Erro ao migrar tarefas: " + (err.message || ""), "error");
+    } finally {
+      setIsMigratingTasks(false);
+    }
   };
 
   // Handle area submit
@@ -1701,51 +1961,8 @@ export function PlanningTab({
     }
 
     // Check Period (Month / Quarter / Semester)
-    if (periodTypeFilter !== "all" && periodValueFilter !== "all") {
-      const valNum = parseInt(periodValueFilter, 10);
-      if (!isNaN(valNum)) {
-        if (periodTypeFilter === "month") {
-          const taskInMonth = (tk: Task, m: number): boolean => {
-            if (!tk.endDate) return false;
-            const padM = m.toString().padStart(2, "0");
-            if (tk.endDate.includes(`-${padM}-`)) return true;
-            const d = new Date(tk.endDate);
-            if (!isNaN(d.getTime()) && (d.getUTCMonth() + 1 === m)) return true;
-            return false;
-          };
-          if (!taskInMonth(t, valNum)) return false;
-        } else if (periodTypeFilter === "quarter") {
-          const taskInQuarter = (tk: Task, q: number): boolean => {
-            if (!tk.endDate) return false;
-            const startMonth = (q - 1) * 3 + 1;
-            const padM1 = startMonth.toString().padStart(2, "0");
-            const padM2 = (startMonth + 1).toString().padStart(2, "0");
-            const padM3 = (startMonth + 2).toString().padStart(2, "0");
-            if (tk.endDate.includes(`-${padM1}-`) || tk.endDate.includes(`-${padM2}-`) || tk.endDate.includes(`-${padM3}-`)) return true;
-            const d = new Date(tk.endDate);
-            if (!isNaN(d.getTime())) {
-              const m = d.getUTCMonth() + 1;
-              if (m >= startMonth && m <= startMonth + 2) return true;
-            }
-            return false;
-          };
-          if (!taskInQuarter(t, valNum)) return false;
-        } else if (periodTypeFilter === "semester") {
-          const taskInSemester = (tk: Task, s: number): boolean => {
-            if (!tk.endDate) return false;
-            const startMonth = (s - 1) * 6 + 1;
-            const padMs = Array.from({ length: 6 }, (_, idx) => (startMonth + idx).toString().padStart(2, "0"));
-            if (padMs.some(padM => tk.endDate!.includes(`-${padM}-`))) return true;
-            const d = new Date(tk.endDate);
-            if (!isNaN(d.getTime())) {
-              const m = d.getUTCMonth() + 1;
-              if (m >= startMonth && m <= startMonth + 5) return true;
-            }
-            return false;
-          };
-          if (!taskInSemester(t, valNum)) return false;
-        }
-      }
+    if (!taskMatchesPeriodFilter(t, periodTypeFilter, periodValueFilter)) {
+      return false;
     }
 
     return true;
@@ -2045,57 +2262,8 @@ export function PlanningTab({
     }
 
     // Check Period (Month / Quarter / Semester)
-    if (periodTypeFilter !== "all" && periodValueFilter !== "all") {
-      const valNum = parseInt(periodValueFilter, 10);
-      if (!isNaN(valNum)) {
-        if (periodTypeFilter === "month") {
-          // Check if task date falls in a given month (1 to 12)
-          const taskInMonth = (tk: Task, m: number): boolean => {
-            if (!tk.endDate) return false;
-            const padM = m.toString().padStart(2, "0");
-            if (tk.endDate.includes(`-${padM}-`)) return true;
-            
-            const d = new Date(tk.endDate);
-            if (!isNaN(d.getTime()) && (d.getUTCMonth() + 1 === m)) return true;
-            return false;
-          };
-          if (!taskInMonth(t, valNum)) return false;
-        } else if (periodTypeFilter === "quarter") {
-          // Check if task date falls in a given quarter (1 to 4)
-          const taskInQuarter = (tk: Task, q: number): boolean => {
-            if (!tk.endDate) return false;
-            const startMonth = (q - 1) * 3 + 1;
-            const padM1 = startMonth.toString().padStart(2, "0");
-            const padM2 = (startMonth + 1).toString().padStart(2, "0");
-            const padM3 = (startMonth + 2).toString().padStart(2, "0");
-            if (tk.endDate.includes(`-${padM1}-`) || tk.endDate.includes(`-${padM2}-`) || tk.endDate.includes(`-${padM3}-`)) return true;
-
-            const d = new Date(tk.endDate);
-            if (!isNaN(d.getTime())) {
-              const m = d.getUTCMonth() + 1;
-              if (m >= startMonth && m <= startMonth + 2) return true;
-            }
-            return false;
-          };
-          if (!taskInQuarter(t, valNum)) return false;
-        } else if (periodTypeFilter === "semester") {
-          // Check if task date falls in a given semester (1 to 2)
-          const taskInSemester = (tk: Task, s: number): boolean => {
-            if (!tk.endDate) return false;
-            const startMonth = (s - 1) * 6 + 1;
-            const padMs = Array.from({ length: 6 }, (_, idx) => (startMonth + idx).toString().padStart(2, "0"));
-            if (padMs.some(padM => tk.endDate!.includes(`-${padM}-`))) return true;
-
-            const d = new Date(tk.endDate);
-            if (!isNaN(d.getTime())) {
-              const m = d.getUTCMonth() + 1;
-              if (m >= startMonth && m <= startMonth + 5) return true;
-            }
-            return false;
-          };
-          if (!taskInSemester(t, valNum)) return false;
-        }
-      }
+    if (!taskMatchesPeriodFilter(t, periodTypeFilter, periodValueFilter)) {
+      return false;
     }
 
     return true;
@@ -3058,6 +3226,53 @@ export function PlanningTab({
     Object.keys(planMap).forEach(pKey => {
       const pId = Number(pKey);
       const planEntry = planMap[pId];
+
+      // If plan is closed with official snapshot, use frozen data to preserve historical accuracy
+      const isPlanClosedWithSnapshot = !!(planEntry.plan?.isClosed && planEntry.plan?.snapshotData);
+      if (isPlanClosedWithSnapshot) {
+        const snap = planEntry.plan.snapshotData!;
+        const areaNodes: any[] = [];
+
+        if (snap.areas && snap.areas.length > 0) {
+          snap.areas.forEach(sa => {
+            if (selectedAreaIds.length > 0 && !selectedAreaIds.includes(sa.areaId)) return;
+            areaNodes.push({
+              id: `pt-p${pId}-a${sa.areaId}`,
+              type: "area",
+              name: sa.areaName,
+              startDate: sa.startDate,
+              endDate: sa.endDate,
+              quarters: sa.quarters,
+              progress: sa.progress,
+              totalTasks: sa.totalTasks,
+              completedTasks: sa.completedTasks,
+              isClosed: true,
+              isSnapshot: true,
+              children: []
+            });
+          });
+        }
+        areaNodes.sort((a, b) => a.name.localeCompare(b.name));
+
+        tree.push({
+          id: `pt-p-${pId}`,
+          type: "plan",
+          name: planEntry.plan.name,
+          startDate: snap.startDate,
+          endDate: snap.endDate,
+          quarters: snap.quarters,
+          progress: snap.progress,
+          totalTasks: snap.totalTasks,
+          completedTasks: snap.completedTasks,
+          isClosed: true,
+          closedAt: planEntry.plan.closedAt,
+          closedBy: planEntry.plan.closedBy,
+          isSnapshot: true,
+          children: areaNodes
+        });
+        return;
+      }
+
       if (planEntry.tasks.length === 0) return;
 
       const planDates = getMinMaxDates(planEntry.tasks);
@@ -4162,6 +4377,523 @@ export function PlanningTab({
           </button>
         </div>
 
+        {/* Modais de Fechamento / Snapshot do Plano (Opção 4) */}
+        {closePlanModalPlan && (() => {
+          const planTasks = tasks.filter(t => t.planId === closePlanModalPlan.id);
+          const total = planTasks.length;
+          let completed = 0;
+          let inProgress = 0;
+          let pending = 0;
+          let sumProg = 0;
+
+          planTasks.forEach(t => {
+            const s = normalizeStatus(t.status);
+            if (s === "Concluída") completed++;
+            else if (s === "Em andamento") inProgress++;
+            else pending++;
+            sumProg += (t.progress || 0);
+          });
+          const avgProg = total > 0 ? Math.round(sumProg / total) : 0;
+
+          return (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-[2rem] w-full max-w-xl p-6 shadow-2xl relative border border-slate-100 max-h-[90vh] flex flex-col">
+                <button 
+                  onClick={() => setClosePlanModalPlan(null)}
+                  className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200 shrink-0">
+                    <ShieldCheck size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800 tracking-tight">
+                      Homologar e Fechar Plano (Snapshot)
+                    </h3>
+                    <p className="text-xs font-semibold text-slate-500">
+                      {closePlanModalPlan.name}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+                  <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-4 text-xs text-amber-900 leading-relaxed">
+                    <p className="font-bold flex items-center gap-1.5 mb-1 text-amber-950">
+                      <Lock size={14} className="text-amber-700" /> Congelamento Oficial do Exercício (Opção 4)
+                    </p>
+                    Esta ação cria uma fotografia matemática definitiva (Snapshot) das entregas deste plano. Mesmo que tarefas não concluídas sejam migradas para planos de anos futuros, este plano manterá seus indicadores históricos fiéis e auditáveis, <strong>sem inflar artificialmente para 100%</strong>.
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Prévia dos Resultados a Congelar</span>
+                    <div className="grid grid-cols-4 gap-2 text-center">
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
+                        <span className="text-[10px] font-black text-slate-400 uppercase block">Total</span>
+                        <span className="text-lg font-black text-slate-800">{total}</span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
+                        <span className="text-[10px] font-black text-emerald-600 uppercase block">Concluídas</span>
+                        <span className="text-lg font-black text-emerald-600">{completed}</span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
+                        <span className="text-[10px] font-black text-sky-600 uppercase block">Em Curso</span>
+                        <span className="text-lg font-black text-sky-600">{inProgress}</span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
+                        <span className="text-[10px] font-black text-slate-400 uppercase block">Pendentes</span>
+                        <span className="text-lg font-black text-slate-600">{pending}</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2">
+                      <div className="flex justify-between items-center text-xs font-bold text-slate-600 mb-1.5">
+                        <span>Progresso Oficial Consolidado</span>
+                        <span className="text-sm font-black text-indigo-600">{avgProg}%</span>
+                      </div>
+                      <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden">
+                        <div 
+                          className={cn(
+                            "h-full transition-all duration-500",
+                            avgProg === 100 ? "bg-emerald-500" : avgProg >= 50 ? "bg-indigo-600" : "bg-amber-500"
+                          )} 
+                          style={{ width: `${avgProg}%` }} 
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                      Observações / Portaria de Homologação (Opcional)
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={closePlanNotes}
+                      onChange={(e) => setClosePlanNotes(e.target.value)}
+                      placeholder="Ex: Homologado pelo Comitê de Gestão Estratégica conforme Relatório Anual 2024..."
+                      className="w-full border-2 border-slate-200 rounded-xl p-3 text-xs font-medium text-slate-700 focus:border-indigo-600 outline-none transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setClosePlanModalPlan(null)}
+                    className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isClosingPlan}
+                    onClick={() => handleClosePlan(closePlanModalPlan, closePlanNotes)}
+                    className="px-5 py-2.5 text-xs font-black uppercase tracking-wider bg-amber-600 text-white hover:bg-amber-700 rounded-xl transition shadow-md flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {isClosingPlan ? <RefreshCw size={14} className="animate-spin" /> : <Lock size={14} />}
+                    Confirmar Homologação
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {viewSnapshotPlan && viewSnapshotPlan.snapshotData && (() => {
+          const snap = viewSnapshotPlan.snapshotData!;
+          return (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-[2rem] w-full max-w-3xl p-6 shadow-2xl relative border border-slate-100 max-h-[90vh] flex flex-col">
+                <button 
+                  onClick={() => setViewSnapshotPlan(null)}
+                  className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+
+                {/* Header */}
+                <div className="flex items-center gap-3.5 mb-4">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center border border-amber-300 shrink-0">
+                    <Lock size={24} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-black text-slate-800 tracking-tight">
+                        Snapshot Oficial de Fechamento
+                      </h3>
+                      <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider bg-amber-200/80 text-amber-900 border border-amber-300 rounded-md">
+                        Congelado
+                      </span>
+                    </div>
+                    <p className="text-xs font-semibold text-slate-500">
+                      {viewSnapshotPlan.name} • Homologado em {formatDateTime(viewSnapshotPlan.closedAt)} por {viewSnapshotPlan.closedBy || 'Sistema'}
+                    </p>
+                  </div>
+                </div>
+
+                {snap.notes && (
+                  <div className="mb-4 bg-slate-50 border-l-4 border-l-amber-500 p-3 rounded-r-xl text-xs text-slate-700 italic">
+                    "{snap.notes}"
+                  </div>
+                )}
+
+                {/* Tabs */}
+                <div className="flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setSnapshotActiveTab("summary")}
+                    className={cn(
+                      "px-3.5 py-1.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all",
+                      snapshotActiveTab === "summary" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
+                    )}
+                  >
+                    Resumo Geral
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSnapshotActiveTab("quarters")}
+                    className={cn(
+                      "px-3.5 py-1.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all",
+                      snapshotActiveTab === "quarters" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
+                    )}
+                  >
+                    Trimestres
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSnapshotActiveTab("areas")}
+                    className={cn(
+                      "px-3.5 py-1.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all",
+                      snapshotActiveTab === "areas" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
+                    )}
+                  >
+                    Áreas ({snap.areas?.length || 0})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSnapshotActiveTab("tasks")}
+                    className={cn(
+                      "px-3.5 py-1.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all",
+                      snapshotActiveTab === "tasks" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
+                    )}
+                  >
+                    Tarefas Registradas ({snap.tasks?.length || 0})
+                  </button>
+                </div>
+
+                {/* Tab contents */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+                  {snapshotActiveTab === "summary" && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 text-center">
+                          <span className="text-[10px] font-black uppercase text-slate-400 block tracking-wider">Total de Tarefas</span>
+                          <span className="text-2xl font-black text-slate-800 mt-1 block">{snap.totalTasks}</span>
+                        </div>
+                        <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-100 text-center">
+                          <span className="text-[10px] font-black uppercase text-emerald-600 block tracking-wider">Concluídas</span>
+                          <span className="text-2xl font-black text-emerald-700 mt-1 block">{snap.completedTasks}</span>
+                        </div>
+                        <div className="bg-sky-50/60 p-4 rounded-2xl border border-sky-100 text-center">
+                          <span className="text-[10px] font-black uppercase text-sky-600 block tracking-wider">Em Andamento</span>
+                          <span className="text-2xl font-black text-sky-700 mt-1 block">{snap.inProgressTasks}</span>
+                        </div>
+                        <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-100 text-center">
+                          <span className="text-[10px] font-black uppercase text-amber-600 block tracking-wider">Não Iniciadas</span>
+                          <span className="text-2xl font-black text-amber-700 mt-1 block">{snap.pendingTasks}</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/80">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-black uppercase tracking-wider text-slate-600">Conclusão Oficial Homologada</span>
+                          <span className="text-xl font-black text-indigo-700">{snap.progress}%</span>
+                        </div>
+                        <div className="w-full h-4 bg-slate-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-indigo-600 transition-all duration-500 rounded-full" 
+                            style={{ width: `${snap.progress}%` }} 
+                          />
+                        </div>
+                        <p className="text-[11px] font-medium text-slate-400 mt-2">
+                          Este percentual é definitivo. Caso as {snap.pendingTasks + snap.inProgressTasks} tarefas pendentes sejam transferidas para novos planos, o valor de {snap.progress}% continuará congelado neste plano.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {snapshotActiveTab === "quarters" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {[1, 2, 3, 4].map(q => {
+                        const qStats = snap.quarters ? (snap.quarters as any)[q] : null;
+                        const progress = qStats?.progress || 0;
+                        const total = qStats?.total || 0;
+                        const completed = qStats?.completed || 0;
+                        const inProgress = qStats?.inProgress || 0;
+                        const pending = qStats?.pending || 0;
+
+                        return (
+                          <div key={q} className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col justify-between">
+                            <div>
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="font-black text-xs uppercase tracking-wider text-slate-700">{q}º Trimestre</span>
+                                <span className="text-xs font-black px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700">{progress}%</span>
+                              </div>
+                              <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden mb-3">
+                                <div 
+                                  className="h-full bg-indigo-600 transition-all duration-500" 
+                                  style={{ width: `${progress}%` }} 
+                                />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-4 gap-1 text-center text-[10px] pt-2 border-t border-slate-200/60">
+                              <div><span className="text-slate-400 block font-bold">Total</span><span className="font-black text-slate-700">{total}</span></div>
+                              <div><span className="text-emerald-600 block font-bold">Conc</span><span className="font-black text-emerald-600">{completed}</span></div>
+                              <div><span className="text-sky-600 block font-bold">Curso</span><span className="font-black text-sky-600">{inProgress}</span></div>
+                              <div><span className="text-slate-400 block font-bold">Pend</span><span className="font-black text-slate-600">{pending}</span></div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {snapshotActiveTab === "areas" && (
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black uppercase text-[10px]">
+                          <tr>
+                            <th className="px-4 py-3">Área Temática</th>
+                            <th className="px-4 py-3 text-center">Total Tarefas</th>
+                            <th className="px-4 py-3 text-center">Concluídas</th>
+                            <th className="px-4 py-3 text-center">Progresso Oficial</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {snap.areas && snap.areas.length > 0 ? (
+                            snap.areas.map(a => (
+                              <tr key={a.areaId} className="hover:bg-slate-50/50">
+                                <td className="px-4 py-2.5 font-bold text-slate-700">{a.areaName}</td>
+                                <td className="px-4 py-2.5 text-center font-semibold text-slate-600">{a.totalTasks}</td>
+                                <td className="px-4 py-2.5 text-center font-semibold text-emerald-600">{a.completedTasks}</td>
+                                <td className="px-4 py-2.5 text-center">
+                                  <div className="inline-flex items-center gap-2">
+                                    <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                      <div className="h-full bg-indigo-600" style={{ width: `${a.progress}%` }} />
+                                    </div>
+                                    <span className="font-black text-[11px] text-indigo-700">{a.progress}%</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={4} className="px-4 py-6 text-center text-slate-400">Nenhuma área registrada.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {snapshotActiveTab === "tasks" && (
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black uppercase text-[10px]">
+                          <tr>
+                            <th className="px-4 py-3">Tarefa Congelada</th>
+                            <th className="px-4 py-3">Área</th>
+                            <th className="px-4 py-3">Responsável</th>
+                            <th className="px-4 py-3 text-center">Status</th>
+                            <th className="px-4 py-3 text-center">Progresso</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {snap.tasks && snap.tasks.length > 0 ? (
+                            snap.tasks.map(t => (
+                              <tr key={t.id} className="hover:bg-slate-50/50">
+                                <td className="px-4 py-2.5 font-bold text-slate-700 max-w-[200px] truncate" title={t.title}>
+                                  {t.title}
+                                </td>
+                                <td className="px-4 py-2.5 text-slate-500">{t.areaName || '-'}</td>
+                                <td className="px-4 py-2.5 text-slate-500">{t.responsibleName || '-'}</td>
+                                <td className="px-4 py-2.5 text-center">
+                                  <span className={cn(
+                                    "px-2 py-0.5 rounded-full text-[10px] font-bold",
+                                    normalizeStatus(t.status) === "Concluída" ? "bg-emerald-100 text-emerald-700" :
+                                    normalizeStatus(t.status) === "Em andamento" ? "bg-sky-100 text-sky-700" :
+                                    "bg-slate-100 text-slate-600"
+                                  )}>
+                                    {t.status}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2.5 text-center font-black text-slate-700">{t.progress || 0}%</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={5} className="px-4 py-6 text-center text-slate-400">Nenhuma tarefa detalhada no snapshot.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const planToMigrate = viewSnapshotPlan;
+                        setViewSnapshotPlan(null);
+                        setMigratePlanModalPlan(planToMigrate);
+                        setMigrateTargetPlanId(null);
+                      }}
+                      className="px-3.5 py-2 text-xs font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 rounded-xl transition flex items-center gap-1.5"
+                    >
+                      <ArrowRightLeft size={14} /> Migrar Pendentes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleReopenPlan(viewSnapshotPlan)}
+                      className="px-3.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition flex items-center gap-1.5"
+                    >
+                      <Unlock size={14} /> Reabrir Exercício
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setViewSnapshotPlan(null)}
+                    className="px-5 py-2 text-xs font-black uppercase tracking-wider bg-slate-800 text-white hover:bg-slate-900 rounded-xl transition"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {migratePlanModalPlan && (() => {
+          const pendingTasks = tasks.filter(t => 
+            t.planId === migratePlanModalPlan.id && 
+            !["concluída", "concluida", "completed"].includes((t.status || "").toLowerCase().trim())
+          );
+          const eligibleTargetPlans = plans.filter(p => p.id !== migratePlanModalPlan.id && !p.isClosed);
+
+          return (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-[2rem] w-full max-w-xl p-6 shadow-2xl relative border border-slate-100 max-h-[90vh] flex flex-col">
+                <button 
+                  onClick={() => setMigratePlanModalPlan(null)}
+                  className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-200 shrink-0">
+                    <ArrowRightLeft size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800 tracking-tight">
+                      Migrar Tarefas Pendentes para Novo Plano
+                    </h3>
+                    <p className="text-xs font-semibold text-slate-500">
+                      Origem: {migratePlanModalPlan.name} (Homologado)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+                  <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-2xl p-4 text-xs text-indigo-900 leading-relaxed">
+                    <p className="font-bold flex items-center gap-1.5 mb-1 text-indigo-950">
+                      <ShieldCheck size={14} className="text-indigo-600" /> Histórico Protegido via Snapshot
+                    </p>
+                    As tarefas em andamento e não iniciadas serão vinculadas ao plano de destino escolhido para continuidade no novo ano. O plano de origem <strong>{migratePlanModalPlan.name}</strong> manterá seus números, gráficos e relatórios 100% intactos e fiéis ao fechamento.
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+                    <div className="flex justify-between items-center text-xs font-black text-slate-700">
+                      <span>Tarefas Pendentes a Migrar</span>
+                      <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 border border-amber-200 text-xs">
+                        {pendingTasks.length} tarefas
+                      </span>
+                    </div>
+                    {pendingTasks.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic py-2">
+                        Não há tarefas pendentes neste plano. Todas as tarefas vinculadas já constam como Concluídas.
+                      </p>
+                    ) : (
+                      <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1.5 pt-1">
+                        {pendingTasks.slice(0, 8).map(t => (
+                          <div key={t.id} className="text-xs text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-slate-200/60 flex items-center justify-between">
+                            <span className="truncate pr-2 font-medium">{t.title}</span>
+                            <span className="text-[10px] font-bold text-slate-400 shrink-0">{t.status} ({t.progress || 0}%)</span>
+                          </div>
+                        ))}
+                        {pendingTasks.length > 8 && (
+                          <div className="text-[10px] text-slate-400 text-center italic">
+                            + {pendingTasks.length - 8} outras tarefas...
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                      Plano de Destino (Novo Exercício)
+                    </label>
+                    <select
+                      value={migrateTargetPlanId || ""}
+                      onChange={(e) => setMigrateTargetPlanId(Number(e.target.value) || null)}
+                      className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-3 text-xs font-bold text-slate-700 focus:border-indigo-600 outline-none bg-white transition-all"
+                    >
+                      <option value="">Selecione o plano de destino...</option>
+                      {eligibleTargetPlans.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} {p.isActive ? "(Ativo)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {eligibleTargetPlans.length === 0 && (
+                      <p className="text-[11px] text-rose-500 font-medium">
+                        Nenhum outro plano aberto disponível. Crie um novo plano primeiro (ex: "Plano de Atividades 2025").
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setMigratePlanModalPlan(null)}
+                    className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!migrateTargetPlanId || pendingTasks.length === 0 || isMigratingTasks}
+                    onClick={() => handleMigratePendingTasks(migratePlanModalPlan, migrateTargetPlanId!)}
+                    className="px-5 py-2.5 text-xs font-black uppercase tracking-wider bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition shadow-md flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {isMigratingTasks ? <RefreshCw size={14} className="animate-spin" /> : <ArrowRightLeft size={14} />}
+                    Confirmar Migração ({pendingTasks.length})
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Modal Overlay for Forms */}
         {isRegModalOpen && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -4571,18 +5303,30 @@ export function PlanningTab({
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase tracking-widest font-black">
                       <th className="px-5 py-4">Plano</th>
-                      <th className="px-5 py-4 w-36 text-center">Tarefas</th>
-                      <th className="px-5 py-4 w-52 hidden sm:table-cell">Histórico</th>
-                      <th className="px-5 py-4 w-28 text-right">Ações</th>
+                      <th className="px-5 py-4 w-56 text-center">Exercício / Snapshot</th>
+                      <th className="px-5 py-4 w-40 text-center">Tarefas Atuais</th>
+                      <th className="px-5 py-4 w-48 hidden sm:table-cell">Histórico</th>
+                      <th className="px-5 py-4 w-48 text-right">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
-                    {[...plans].sort((a,b) => a.name.localeCompare(b.name)).map(p => (
+                    {[...plans].sort((a,b) => a.name.localeCompare(b.name)).map(p => {
+                      const currentTasks = tasks.filter(t => t.planId === p.id);
+                      const pendingInDb = currentTasks.filter(t => 
+                        !["concluída", "concluida", "completed"].includes((t.status || "").toLowerCase().trim())
+                      ).length;
+
+                      return (
                       <tr key={p.id} className="hover:bg-slate-50/50 transition-colors group">
-                        <td className="px-5 py-3 align-middle">
+                        <td className="px-5 py-3.5 align-middle">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center shrink-0 border border-indigo-100 group-hover:bg-indigo-100 group-hover:border-indigo-200 transition-colors">
-                              <LayoutGrid size={14} />
+                            <div className={cn(
+                              "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border transition-colors",
+                              p.isClosed 
+                                ? "bg-amber-50 text-amber-700 border-amber-200" 
+                                : "bg-indigo-50 text-indigo-600 border-indigo-100 group-hover:bg-indigo-100"
+                            )}>
+                              {p.isClosed ? <Lock size={16} /> : <LayoutGrid size={16} />}
                             </div>
                             <div className="flex flex-col">
                               <span className="font-extrabold text-slate-700 flex items-center gap-1.5">
@@ -4592,17 +5336,54 @@ export function PlanningTab({
                                     ATIVO
                                   </span>
                                 )}
+                                {p.isClosed && (
+                                  <span className="px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-900 bg-amber-200/80 border border-amber-300 rounded-md shadow-sm flex items-center gap-1">
+                                    <Lock size={10} /> HOMOLOGADO
+                                  </span>
+                                )}
                               </span>
                               {p.description && <span className="text-xs text-slate-400 mt-0.5 line-clamp-1 font-medium">{p.description}</span>}
                             </div>
                           </div>
                         </td>
-                        <td className="px-5 py-3 align-middle text-center">
-                          <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 text-[10px] font-black text-slate-600 uppercase w-fit mx-auto">
-                            <ListTodo size={12} /> {tasks.filter(t => t.planId === p.id).length} Tarefas
+                        <td className="px-5 py-3.5 align-middle text-center">
+                          {p.isClosed ? (
+                            <div className="flex flex-col items-center justify-center gap-1">
+                              <span className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-100 border border-amber-300 rounded-lg inline-flex items-center gap-1">
+                                <ShieldCheck size={12} className="text-amber-700" />
+                                {p.snapshotData ? `${p.snapshotData.progress}% CONCLUÍDO (OFICIAL)` : "FECHADO"}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-medium">
+                                Homologado {p.closedAt ? formatDate(p.closedAt) : ""}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center gap-0.5">
+                              <span className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg inline-flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Em Aberto
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-medium">Edição contínua</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 align-middle text-center">
+                          <div className="flex flex-col items-center justify-center gap-1">
+                            <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 text-[10px] font-black text-slate-600 uppercase w-fit mx-auto">
+                              <ListTodo size={12} /> {currentTasks.length} Tarefas
+                            </div>
+                            {p.isClosed && pendingInDb > 0 && (
+                              <button
+                                onClick={() => { setMigratePlanModalPlan(p); setMigrateTargetPlanId(null); }}
+                                className="text-[10px] font-black text-amber-700 hover:text-amber-900 flex items-center gap-1 hover:underline"
+                                title="Clique para migrar tarefas pendentes para outro plano"
+                              >
+                                <ArrowRightLeft size={10} /> {pendingInDb} a migrar
+                              </button>
+                            )}
                           </div>
                         </td>
-                        <td className="px-5 py-3 align-middle hidden sm:table-cell">
+                        <td className="px-5 py-3.5 align-middle hidden sm:table-cell">
                           <div className="flex flex-col gap-1 justify-center">
                             {p.createdAt ? (
                               <div className="text-[10px] text-slate-500 font-semibold">
@@ -4621,17 +5402,51 @@ export function PlanningTab({
                             )}
                           </div>
                         </td>
-                        <td className="px-5 py-3 align-middle text-right">
-                          <div className="flex gap-1 justify-end">
+                        <td className="px-5 py-3.5 align-middle text-right">
+                          <div className="flex gap-1 justify-end items-center">
+                             {p.isClosed ? (
+                               <>
+                                 <button 
+                                   onClick={() => setViewSnapshotPlan(p)} 
+                                   className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors" 
+                                   title="Visualizar Snapshot Oficial de Fechamento"
+                                 >
+                                   <Eye size={16} />
+                                 </button>
+                                 <button 
+                                   onClick={() => { setMigratePlanModalPlan(p); setMigrateTargetPlanId(null); }} 
+                                   className="p-2 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-colors" 
+                                   title="Migrar tarefas pendentes para outro plano"
+                                 >
+                                   <ArrowRightLeft size={16} />
+                                 </button>
+                                 <button 
+                                   onClick={() => handleReopenPlan(p)} 
+                                   className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors" 
+                                   title="Reabrir Plano (Suspender Homologação)"
+                                 >
+                                   <Unlock size={16} />
+                                 </button>
+                               </>
+                             ) : (
+                               <button 
+                                 onClick={() => { setClosePlanModalPlan(p); setClosePlanNotes(""); }} 
+                                 className="px-2.5 py-1.5 text-xs font-black uppercase text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg transition shadow-sm flex items-center gap-1 shrink-0" 
+                                 title="Homologar e congelar Snapshot de Fechamento (Opção 4)"
+                               >
+                                 <Lock size={12} /> Homologar
+                               </button>
+                             )}
                              <button onClick={() => { setEditingRegId(p.id); setRegName(p.name); setRegDesc(p.description || ""); setRegIsActive(!!p.isActive); setRegUpdatedBy(p.updatedBy || currentUser?.name || currentUser?.email || ""); setIsRegModalOpen(true); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Editar"><Edit2 size={16} /></button>
                              <button onClick={() => handlePlanDelete(p.id)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Excluir"><Trash2 size={16} /></button>
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                     {plans.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-5 py-8 text-center text-slate-400 text-sm font-medium">
+                        <td colSpan={5} className="px-5 py-8 text-center text-slate-400 text-sm font-medium">
                           Nenhum Plano cadastrado no Distrito Federal.
                         </td>
                       </tr>
@@ -5181,34 +5996,61 @@ export function PlanningTab({
                   >
                     <option value="all">Selecione o período...</option>
                     {periodTypeFilter === "month" && (
-                      <>
-                        <option value="1">Janeiro</option>
-                        <option value="2">Fevereiro</option>
-                        <option value="3">Março</option>
-                        <option value="4">Abril</option>
-                        <option value="5">Maio</option>
-                        <option value="6">Junho</option>
-                        <option value="7">Julho</option>
-                        <option value="8">Agosto</option>
-                        <option value="9">Setembro</option>
-                        <option value="10">Outubro</option>
-                        <option value="11">Novembro</option>
-                        <option value="12">Dezembro</option>
-                      </>
+                      availableYears.map((yr) => (
+                        availableYears.length > 1 ? (
+                          <optgroup key={`optg-m-${yr}`} label={`Ano ${yr}`}>
+                            {MONTH_NAMES.map((name, idx) => (
+                              <option key={`m-${yr}-${idx + 1}`} value={`${yr}-${idx + 1}`}>
+                                {name}/{yr}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : (
+                          MONTH_NAMES.map((name, idx) => (
+                            <option key={`m-${yr}-${idx + 1}`} value={`${yr}-${idx + 1}`}>
+                              {name}/{yr}
+                            </option>
+                          ))
+                        )
+                      ))
                     )}
                     {periodTypeFilter === "quarter" && (
-                      <>
-                        <option value="1">1º Trimestre (Jan - Mar)</option>
-                        <option value="2">2º Trimestre (Abr - Jun)</option>
-                        <option value="3">3º Trimestre (Jul - Set)</option>
-                        <option value="4">4º Trimestre (Out - Dez)</option>
-                      </>
+                      availableYears.map((yr) => (
+                        availableYears.length > 1 ? (
+                          <optgroup key={`optg-q-${yr}`} label={`Ano ${yr}`}>
+                            {QUARTER_DEFINITIONS.map((q) => (
+                              <option key={`q-${yr}-${q.q}`} value={`${yr}-Q${q.q}`}>
+                                {q.label}/{yr} ({q.range})
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : (
+                          QUARTER_DEFINITIONS.map((q) => (
+                            <option key={`q-${yr}-${q.q}`} value={`${yr}-Q${q.q}`}>
+                              {q.label}/{yr} ({q.range})
+                            </option>
+                          ))
+                        )
+                      ))
                     )}
                     {periodTypeFilter === "semester" && (
-                      <>
-                        <option value="1">1º Semestre (Jan - Jun)</option>
-                        <option value="2">2º Semestre (Jul - Dez)</option>
-                      </>
+                      availableYears.map((yr) => (
+                        availableYears.length > 1 ? (
+                          <optgroup key={`optg-s-${yr}`} label={`Ano ${yr}`}>
+                            {SEMESTER_DEFINITIONS.map((s) => (
+                              <option key={`s-${yr}-${s.s}`} value={`${yr}-S${s.s}`}>
+                                {s.label}/{yr} ({s.range})
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : (
+                          SEMESTER_DEFINITIONS.map((s) => (
+                            <option key={`s-${yr}-${s.s}`} value={`${yr}-S${s.s}`}>
+                              {s.label}/{yr} ({s.range})
+                            </option>
+                          ))
+                        )
+                      ))
                     )}
                   </select>
                 )}
@@ -5216,7 +6058,7 @@ export function PlanningTab({
             </div>
 
             {/* Clear Filters Button if any is changed */}
-            {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || periodTypeFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all") && (
+            {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || periodTypeFilter !== "all" || periodValueFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all") && (
               <div className="pt-2 flex justify-end">
                 <button
                   onClick={() => {
@@ -5934,6 +6776,11 @@ export function PlanningTab({
                                <span className={cn("truncate", isPlan ? "font-black text-sm" : "font-semibold text-[13px]")} title={row.name}>
                                  {row.name}
                                </span>
+                               {isPlan && row.isClosed && (
+                                 <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 ml-1.5 shrink-0" title={`Homologado em ${formatDateTime(row.closedAt)} por ${row.closedBy || 'Sistema'}`}>
+                                   <Lock size={10} className="text-amber-800" /> HOMOLOGADO
+                                 </span>
+                               )}
                             </div>
                             
                             <div className="text-center font-medium text-xs text-slate-500 z-10">

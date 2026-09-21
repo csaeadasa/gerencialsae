@@ -894,6 +894,10 @@ async function runStartupMigration() {
       await client.query(`ALTER TABLE pl_plans ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP, ADD COLUMN IF NOT EXISTS updated_by VARCHAR(255);`);
       await client.query(`ALTER TABLE pl_plans ADD COLUMN IF NOT EXISTS created_at TIMESTAMP, ADD COLUMN IF NOT EXISTS created_by VARCHAR(255);`);
       await client.query(`ALTER TABLE pl_plans ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT FALSE;`);
+      await client.query(`ALTER TABLE pl_plans ADD COLUMN IF NOT EXISTS is_closed BOOLEAN DEFAULT FALSE;`);
+      await client.query(`ALTER TABLE pl_plans ADD COLUMN IF NOT EXISTS closed_at TIMESTAMP;`);
+      await client.query(`ALTER TABLE pl_plans ADD COLUMN IF NOT EXISTS closed_by VARCHAR(255);`);
+      await client.query(`ALTER TABLE pl_plans ADD COLUMN IF NOT EXISTS snapshot_data JSONB;`);
       await client.query(`ALTER TABLE pl_areas ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP, ADD COLUMN IF NOT EXISTS updated_by VARCHAR(255);`);
       await client.query(`ALTER TABLE pl_areas ADD COLUMN IF NOT EXISTS created_at TIMESTAMP, ADD COLUMN IF NOT EXISTS created_by VARCHAR(255);`);
       await client.query(`ALTER TABLE pl_responsibles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP, ADD COLUMN IF NOT EXISTS updated_by VARCHAR(255);`);
@@ -2217,6 +2221,10 @@ export async function startServer(isVercel = false) {
             title: p.title || p.name || "Plano Sem Nome",
             description: p.description,
             isActive: p.is_active || false,
+            isClosed: p.is_closed || false,
+            closedAt: p.closed_at,
+            closedBy: p.closed_by,
+            snapshotData: p.snapshot_data || null,
             createdAt: p.created_at,
             createdBy: p.created_by,
             updatedAt: p.updated_at,
@@ -3120,6 +3128,281 @@ export async function startServer(isVercel = false) {
       res.json({ success: true, deletedId: planId });
     } catch (error: any) {
       console.error("Erro ao deletar plano:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Snapshot de Fechamento (Opção 4) - Homologar/Fechar Plano
+  app.post("/api/plans/:id/close", async (req, res) => {
+    try {
+      const planId = parseInt(req.params.id);
+      const { closedBy, snapshotData, notes } = req.body;
+      const pool = getDbPool();
+
+      // Check plan existence
+      const planRes = await pool.query("SELECT * FROM pl_plans WHERE id = $1", [planId]);
+      if (planRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: "Plano não encontrado" });
+      }
+
+      let finalSnapshot = snapshotData;
+
+      // If snapshotData wasn't pre-computed, calculate it from DB
+      if (!finalSnapshot) {
+        const tasksRes = await pool.query(`
+          SELECT t.*, 
+            COALESCE(array_agg(DISTINCT ta.area_id) FILTER (WHERE ta.area_id IS NOT NULL), '{}') as area_ids
+          FROM pl_tasks t
+          LEFT JOIN pl_task_areas ta ON t.id = ta.task_id
+          WHERE t.plan_id = $1
+          GROUP BY t.id
+        `, [planId]);
+
+        const areasRes = await pool.query("SELECT * FROM pl_areas ORDER BY id ASC");
+        const areaMap: Record<number, string> = {};
+        areasRes.rows.forEach(a => { areaMap[Number(a.id)] = a.name; });
+
+        const tasks = tasksRes.rows;
+        const totalTasks = tasks.length;
+        const completedTasks = tasks.filter(t => {
+          const s = (t.status || "").toLowerCase().trim();
+          return s === "concluída" || s === "concluida" || s === "completed";
+        }).length;
+        const inProgressTasks = tasks.filter(t => {
+          const s = (t.status || "").toLowerCase().trim();
+          return s === "em andamento" || s === "in progress";
+        }).length;
+        const pendingTasks = totalTasks - completedTasks - inProgressTasks;
+
+        const sumProgress = tasks.reduce((acc, t) => acc + (Number(t.progress) || 0), 0);
+        const overallProgress = totalTasks > 0 ? Math.round(sumProgress / totalTasks) : 0;
+
+        // Quarters calculation (1: Jan-Mar, 2: Apr-Jun, 3: Jul-Sep, 4: Oct-Dec)
+        const quarters: Record<number, any> = {
+          1: { total: 0, pending: 0, inProgress: 0, completed: 0, sumProgress: 0, progress: 0 },
+          2: { total: 0, pending: 0, inProgress: 0, completed: 0, sumProgress: 0, progress: 0 },
+          3: { total: 0, pending: 0, inProgress: 0, completed: 0, sumProgress: 0, progress: 0 },
+          4: { total: 0, pending: 0, inProgress: 0, completed: 0, sumProgress: 0, progress: 0 },
+        };
+
+        const areaStats: Record<number, any> = {};
+        areasRes.rows.forEach(a => {
+          const aid = Number(a.id);
+          areaStats[aid] = {
+            areaId: aid,
+            areaName: a.name,
+            totalTasks: 0,
+            completedTasks: 0,
+            inProgressTasks: 0,
+            pendingTasks: 0,
+            sumProgress: 0,
+            progress: 0,
+            startDate: null,
+            endDate: null,
+            quarters: {
+              1: { total: 0, pending: 0, inProgress: 0, completed: 0, sumProgress: 0, progress: 0 },
+              2: { total: 0, pending: 0, inProgress: 0, completed: 0, sumProgress: 0, progress: 0 },
+              3: { total: 0, pending: 0, inProgress: 0, completed: 0, sumProgress: 0, progress: 0 },
+              4: { total: 0, pending: 0, inProgress: 0, completed: 0, sumProgress: 0, progress: 0 },
+            }
+          };
+        });
+
+        tasks.forEach(t => {
+          const prog = Number(t.progress) || 0;
+          const s = (t.status || "").toLowerCase().trim();
+          const isComp = s === "concluída" || s === "concluida" || s === "completed";
+          const isInProg = s === "em andamento" || s === "in progress";
+
+          // determine quarter by end_date
+          let q = 4;
+          if (t.end_date) {
+            const m = new Date(t.end_date).getUTCMonth() + 1;
+            q = m <= 3 ? 1 : m <= 6 ? 2 : m <= 9 ? 3 : 4;
+          }
+          quarters[q].total++;
+          quarters[q].sumProgress += prog;
+          if (isComp) quarters[q].completed++;
+          else if (isInProg) quarters[q].inProgress++;
+          else quarters[q].pending++;
+
+          const aids: number[] = Array.isArray(t.area_ids) ? t.area_ids : [];
+          aids.forEach(aid => {
+            if (areaStats[aid]) {
+              areaStats[aid].totalTasks++;
+              areaStats[aid].sumProgress += prog;
+              if (isComp) areaStats[aid].completedTasks++;
+              else if (isInProg) areaStats[aid].inProgressTasks++;
+              else areaStats[aid].pendingTasks++;
+
+              areaStats[aid].quarters[q].total++;
+              areaStats[aid].quarters[q].sumProgress += prog;
+              if (isComp) areaStats[aid].quarters[q].completed++;
+              else if (isInProg) areaStats[aid].quarters[q].inProgress++;
+              else areaStats[aid].quarters[q].pending++;
+            }
+          });
+        });
+
+        // Compute averages
+        for (let q = 1; q <= 4; q++) {
+          quarters[q].progress = quarters[q].total > 0 ? Math.round(quarters[q].sumProgress / quarters[q].total) : 0;
+        }
+
+        const areasList = Object.values(areaStats).map((a: any) => {
+          a.progress = a.totalTasks > 0 ? Math.round(a.sumProgress / a.totalTasks) : 0;
+          for (let q = 1; q <= 4; q++) {
+            a.quarters[q].progress = a.quarters[q].total > 0 ? Math.round(a.quarters[q].sumProgress / a.quarters[q].total) : 0;
+          }
+          return a;
+        });
+
+        finalSnapshot = {
+          closedAt: new Date().toISOString(),
+          closedBy: closedBy || "SGI Pro",
+          notes: notes || "",
+          totalTasks,
+          completedTasks,
+          inProgressTasks,
+          pendingTasks,
+          progress: overallProgress,
+          startDate: tasks.length > 0 ? tasks.reduce((min, t) => !min || (t.start_date && t.start_date < min) ? t.start_date : min, null as any) : null,
+          endDate: tasks.length > 0 ? tasks.reduce((max, t) => !max || (t.end_date && t.end_date > max) ? t.end_date : max, null as any) : null,
+          quarters,
+          areas: areasList,
+          tasks: tasks.map(t => ({
+            id: Number(t.id),
+            title: t.title,
+            status: t.status,
+            progress: Number(t.progress) || 0,
+            startDate: t.start_date,
+            endDate: t.end_date,
+            seiProcess: t.sei_process,
+            areaNames: (Array.isArray(t.area_ids) ? t.area_ids : []).map(id => areaMap[Number(id)]).filter(Boolean)
+          }))
+        };
+      }
+
+      // Save snapshot and mark as closed
+      const result = await pool.query(
+        `UPDATE pl_plans 
+         SET is_closed = TRUE, 
+             closed_at = NOW(), 
+             closed_by = $1, 
+             snapshot_data = $2, 
+             updated_at = NOW(), 
+             updated_by = $1
+         WHERE id = $3
+         RETURNING *`,
+        [closedBy || "SGI Pro", JSON.stringify(finalSnapshot), planId]
+      );
+
+      const p = result.rows[0];
+      res.json({
+        success: true,
+        message: "Plano homologado e fechado com sucesso. Snapshot congelado.",
+        data: {
+          id: Number(p.id),
+          name: p.name || p.title,
+          title: p.title || p.name,
+          description: p.description,
+          isActive: p.is_active,
+          isClosed: p.is_closed,
+          closedAt: p.closed_at,
+          closedBy: p.closed_by,
+          snapshotData: p.snapshot_data,
+          updatedAt: p.updated_at,
+          updatedBy: p.updated_by
+        }
+      });
+    } catch (error: any) {
+      console.error("Erro ao fechar plano e gerar snapshot:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Reabrir plano (descongelar para edições)
+  app.post("/api/plans/:id/reopen", async (req, res) => {
+    try {
+      const planId = parseInt(req.params.id);
+      const { reopenedBy } = req.body;
+      const pool = getDbPool();
+
+      const result = await pool.query(
+        `UPDATE pl_plans 
+         SET is_closed = FALSE, 
+             updated_at = NOW(), 
+             updated_by = $1
+         WHERE id = $2
+         RETURNING *`,
+        [reopenedBy || "SGI Pro", planId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, error: "Plano não encontrado" });
+      }
+
+      const p = result.rows[0];
+      res.json({
+        success: true,
+        message: "Plano reaberto com sucesso.",
+        data: {
+          id: Number(p.id),
+          name: p.name || p.title,
+          title: p.title || p.name,
+          description: p.description,
+          isActive: p.is_active,
+          isClosed: p.is_closed,
+          closedAt: p.closed_at,
+          closedBy: p.closed_by,
+          snapshotData: p.snapshot_data,
+          updatedAt: p.updated_at,
+          updatedBy: p.updated_by
+        }
+      });
+    } catch (error: any) {
+      console.error("Erro ao reabrir plano:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Migrar tarefas pendentes de um plano homologado para outro plano
+  app.post("/api/plans/:id/migrate-pending-tasks", async (req, res) => {
+    try {
+      const sourcePlanId = parseInt(req.params.id);
+      const { targetPlanId, updatedBy } = req.body;
+      const pool = getDbPool();
+
+      if (!targetPlanId || Number(targetPlanId) === sourcePlanId) {
+        return res.status(400).json({ success: false, error: "Plano de destino inválido ou igual ao de origem." });
+      }
+
+      // Check target plan
+      const targetRes = await pool.query("SELECT * FROM pl_plans WHERE id = $1", [targetPlanId]);
+      if (targetRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: "Plano de destino não encontrado" });
+      }
+
+      // Move tasks where status is NOT completed
+      const updateRes = await pool.query(
+        `UPDATE pl_tasks 
+         SET plan_id = $1, 
+             updated_at = NOW(), 
+             updated_by = $2 
+         WHERE plan_id = $3 
+           AND LOWER(TRIM(COALESCE(status, ''))) NOT IN ('concluída', 'concluida', 'completed')
+         RETURNING id, title, status`,
+        [targetPlanId, updatedBy || "SGI Pro", sourcePlanId]
+      );
+
+      res.json({
+        success: true,
+        count: updateRes.rowCount,
+        migratedTasks: updateRes.rows,
+        message: `${updateRes.rowCount} tarefa(s) pendente(s) migrada(s) para o plano "${targetRes.rows[0].name || targetRes.rows[0].title}". O snapshot do plano anterior continua 100% preservado.`
+      });
+    } catch (error: any) {
+      console.error("Erro ao migrar tarefas pendentes:", error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
@@ -4629,6 +4912,10 @@ export async function startServer(isVercel = false) {
             title: p.title || p.name || "Plano Sem Nome",
             description: p.description,
             isActive: p.is_active || false,
+            isClosed: p.is_closed || false,
+            closedAt: p.closed_at,
+            closedBy: p.closed_by,
+            snapshotData: p.snapshot_data || null,
             createdAt: p.created_at,
             createdBy: p.created_by,
             updatedAt: p.updated_at,

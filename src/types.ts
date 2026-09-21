@@ -322,11 +322,64 @@ export interface Task {
   recursoRevData?: RecursoRevisaoData;
 }
 
+export interface PlanQuarterStats {
+  total: number;
+  pending: number;
+  inProgress: number;
+  completed: number;
+  sumProgress?: number;
+  progress: number;
+}
+
+export interface PlanAreaSnapshot {
+  areaId: number;
+  areaName: string;
+  totalTasks: number;
+  completedTasks: number;
+  inProgressTasks: number;
+  pendingTasks: number;
+  progress: number;
+  startDate: string | null;
+  endDate: string | null;
+  quarters: Record<number, PlanQuarterStats>;
+}
+
+export interface PlanTaskSnapshotItem {
+  id: number;
+  title: string;
+  status: string;
+  progress: number;
+  startDate?: string | null;
+  endDate?: string | null;
+  seiProcess?: string | null;
+  areaNames?: string[];
+}
+
+export interface PlanSnapshot {
+  closedAt: string;
+  closedBy: string;
+  notes?: string;
+  totalTasks: number;
+  completedTasks: number;
+  inProgressTasks: number;
+  pendingTasks: number;
+  progress: number;
+  startDate: string | null;
+  endDate: string | null;
+  quarters: Record<number, PlanQuarterStats>;
+  areas: PlanAreaSnapshot[];
+  tasks?: PlanTaskSnapshotItem[];
+}
+
 export interface Plan {
   id: number;
   name: string;
   description: string;
   isActive?: boolean;
+  isClosed?: boolean;
+  closedAt?: string | null;
+  closedBy?: string | null;
+  snapshotData?: PlanSnapshot | null;
   createdAt?: string | null;
   createdBy?: string | null;
   updatedAt?: string | null;
