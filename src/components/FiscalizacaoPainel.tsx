@@ -175,7 +175,7 @@ export function FiscalizacaoPainel({ tasks, plans = [], onEditTaskClick }: Fisca
         
         // Match either t.fiscalizacaoData?.programacao or t.isProgrammed boolean
         const matchesProgrammedStr = t.fiscalizacaoData?.programacao === programacaoFilter;
-        const matchesProgrammedBool = isProgrammedString ? (t.isProgrammed === true) : (t.isProgrammed === false);
+        const matchesProgrammedBool = isProgrammedString ? (t.isProgrammed !== false) : (t.isProgrammed === false);
 
         if (!matchesProgrammedStr && !matchesProgrammedBool) {
           return false;

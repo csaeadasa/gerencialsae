@@ -3531,8 +3531,19 @@ export function PlanningTab({
         setNewLinkTitle("");
       }
 
+      const finalIsProgrammed = editingTask.isProgrammed !== false;
+      let cleanFiscalizacaoData = editingTask.fiscalizacaoData;
+      if (cleanFiscalizacaoData) {
+        cleanFiscalizacaoData = {
+          ...cleanFiscalizacaoData,
+          programacao: finalIsProgrammed ? 'Programada' : 'Não Programada'
+        };
+      }
+
       const payload = {
         ...editingTask,
+        isProgrammed: finalIsProgrammed,
+        fiscalizacaoData: cleanFiscalizacaoData,
         links: currentLinks,
         comments: editingTask.comments || [],
         startDate: cleanStartDate,
@@ -3686,8 +3697,13 @@ export function PlanningTab({
     setFormMode("edit");
     setEditTaskParentSearch("");
 
+    const isProgrammedValue = task.fiscalizacaoData?.programacao
+      ? task.fiscalizacaoData.programacao !== "Não Programada"
+      : task.isProgrammed !== false;
+
     setEditingTask({
       ...task,
+      isProgrammed: isProgrammedValue,
       startDate: fmtDate(task.startDate),
       endDate: fmtDate(task.endDate),
       planId: task.planId || null,
@@ -8971,7 +8987,7 @@ export function PlanningTab({
                   </div>
 
                   {/* Consultar / Limpar Buttons */}
-                  <div className="flex justify-center items-center gap-4 pt-2">
+                  <div className="flex flex-wrap justify-center items-center gap-3 pt-2">
                     {(planFilter !== "all" || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || situationFilter !== "all" || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
                       <button
                         onClick={() => {
@@ -8984,7 +9000,7 @@ export function PlanningTab({
                           const userRespId = getUserResponsibleId();
                           if (userRespId) setSelectedResponsibleIds([userRespId]);
                         }}
-                        className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center gap-2 font-black uppercase tracking-widest px-8 py-3 rounded-xl text-xs transition-all shadow-sm hover:-translate-y-0.5"
+                        className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center gap-2 font-black uppercase tracking-widest px-6 py-2.5 rounded-xl text-xs transition-all shadow-sm hover:-translate-y-0.5 cursor-pointer"
                         title="Limpar filtros ativos"
                       >
                         <X size={16} /> Limpar Filtros
@@ -8997,9 +9013,15 @@ export function PlanningTab({
                           setAgrupamentoTaskType(taskTypeFilter as any);
                         }
                       }}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2 font-black uppercase tracking-widest px-8 py-3 rounded-xl text-xs transition-all shadow-md hover:-translate-y-0.5"
+                      className="bg-adasa-mid hover:bg-adasa-dark text-white flex items-center gap-2 font-black uppercase tracking-widest px-8 py-2.5 rounded-xl text-xs transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
                     >
                       <Search size={16} /> Consultar
+                    </button>
+                    <button
+                      onClick={() => handleAddNewTask(null)}
+                      className="flex items-center justify-center gap-2 px-6 py-2.5 whitespace-nowrap bg-adasa-mid text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-adasa-dark transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+                    >
+                      <Plus size={18} /> Nova Tarefa
                     </button>
                   </div>
                 </div>
@@ -9264,7 +9286,7 @@ export function PlanningTab({
               </div>
 
               {/* Consultar / Limpar Buttons */}
-              <div className="flex justify-center items-center gap-4 pt-2">
+              <div className="flex flex-wrap justify-center items-center gap-3 pt-2">
                   {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
                     <button
                       onClick={() => {
@@ -9280,7 +9302,7 @@ export function PlanningTab({
                         setTaskTypeFilter("all");
                         setHasSubtasksFilter(false);
                       }}
-                      className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center gap-2 font-black uppercase tracking-widest px-8 py-3 rounded-xl text-xs transition-all shadow-sm hover:-translate-y-0.5"
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center gap-2 font-black uppercase tracking-widest px-6 py-2.5 rounded-xl text-xs transition-all shadow-sm hover:-translate-y-0.5 cursor-pointer"
                       title="Limpar todos os filtros ativos"
                     >
                       <X size={16} /> Limpar Filtros
@@ -9293,9 +9315,15 @@ export function PlanningTab({
                        setAgrupamentoTaskType(taskTypeFilter as any);
                      }
                    }}
-                   className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2 font-black uppercase tracking-widest px-8 py-3 rounded-xl text-xs transition-all shadow-md hover:-translate-y-0.5"
+                   className="bg-adasa-mid hover:bg-adasa-dark text-white flex items-center gap-2 font-black uppercase tracking-widest px-8 py-2.5 rounded-xl text-xs transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
                  >
                    <Search size={16} /> Consultar
+                 </button>
+                 <button
+                   onClick={() => handleAddNewTask(null)}
+                   className="flex items-center justify-center gap-2 px-6 py-2.5 whitespace-nowrap bg-adasa-mid text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-adasa-dark transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+                 >
+                   <Plus size={18} /> Nova Tarefa
                  </button>
               </div>
 
@@ -9515,14 +9543,7 @@ export function PlanningTab({
                     className="flex items-center justify-center gap-2 px-5 py-2.5 whitespace-nowrap bg-adasa-mid text-white text-xs sm:text-sm font-black uppercase tracking-wider rounded-xl hover:bg-adasa-dark transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 cursor-pointer w-full sm:w-auto"
                     title="Criar fluxo estruturado de atividades a partir de um modelo de processo"
                   >
-                    <Copy size={16} /> Criar via Modelo
-                  </button>
-
-                  <button
-                    onClick={() => handleAddNewTask(null)}
-                    className="flex items-center justify-center gap-2 px-6 py-2.5 whitespace-nowrap bg-adasa-mid text-white text-xs sm:text-sm font-black uppercase tracking-wider rounded-xl hover:bg-adasa-dark transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 cursor-pointer w-full sm:w-auto"
-                  >
-                    <Plus size={18} /> Nova Tarefa
+                    <Copy size={16} /> Criar Tarefa Via Modelo
                   </button>
                 </div>
               </div>
@@ -10530,17 +10551,6 @@ export function PlanningTab({
                                             </div>
                                           </div>
                                         </div>
-
-                                        {/* Description */}
-                                        {task.description ? (
-                                          <p className="text-[10px] text-slate-500 font-semibold leading-relaxed line-clamp-2">
-                                            {task.description}
-                                          </p>
-                                        ) : (
-                                          <p className="text-[10px] text-slate-350 italic font-semibold">
-                                            S/ descrição definida
-                                          </p>
-                                        )}
 
                                         {/* Subtasks Progress */}
                                         {(() => {
@@ -13076,7 +13086,19 @@ export function PlanningTab({
                     </label>
                     <select
                       value={editingTask.isProgrammed === false ? "false" : "true"}
-                      onChange={(e) => setEditingTask(prev => ({ ...prev, isProgrammed: e.target.value === "true" }))}
+                      onChange={(e) => {
+                        const isProg = e.target.value === "true";
+                        setEditingTask(prev => {
+                          const updated = { ...prev, isProgrammed: isProg };
+                          if (updated.fiscalizacaoData) {
+                            updated.fiscalizacaoData = {
+                              ...updated.fiscalizacaoData,
+                              programacao: isProg ? "Programada" : "Não Programada"
+                            };
+                          }
+                          return updated;
+                        });
+                      }}
                       className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none"
                     >
                       <option value="true">Programada</option>
@@ -13628,7 +13650,11 @@ export function PlanningTab({
                 <div className="space-y-4">
                   <FiscalizacaoEditor 
                     data={editingTask.fiscalizacaoData} 
-                    onChange={(data) => setEditingTask(prev => ({ ...prev, fiscalizacaoData: data }))}
+                    onChange={(data) => setEditingTask(prev => ({ 
+                      ...prev, 
+                      fiscalizacaoData: data,
+                      isProgrammed: data.programacao === "Não Programada" ? false : true
+                    }))}
                   />
                   <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
                     <button
