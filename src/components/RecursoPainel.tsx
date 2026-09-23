@@ -2699,7 +2699,7 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
                     type="button"
                     onClick={handleRunImport}
                     disabled={isImporting || (!importFile && !importText.trim())}
-                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+                    className="px-5 py-2.5 rounded-xl bg-adasa-mid hover:bg-adasa-hover disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all cursor-pointer"
                   >
                     {isImporting ? (
                       <>
@@ -2796,7 +2796,7 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
                       setIsImportModalOpen(false);
                       window.location.reload();
                     }}
-                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider shadow-sm transition-all cursor-pointer"
+                    className="px-5 py-2.5 rounded-xl bg-adasa-mid hover:bg-adasa-hover text-white font-bold text-xs uppercase tracking-wider shadow-sm transition-all cursor-pointer"
                   >
                     Concluir e Atualizar Painel
                   </button>

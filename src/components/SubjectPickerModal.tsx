@@ -413,7 +413,7 @@ export const SubjectPickerModal: React.FC<SubjectPickerModalProps> = ({
         {/* Modal Header */}
         <div className="p-4 sm:p-5 border-b border-slate-200 bg-gradient-to-r from-slate-50 via-indigo-50/30 to-slate-50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20 shrink-0">
+            <div className="w-11 h-11 rounded-2xl bg-adasa-mid text-white flex items-center justify-center shadow-md shadow-adasa-dark/20 shrink-0">
               <Tag size={22} />
             </div>
             <div>
@@ -495,7 +495,7 @@ export const SubjectPickerModal: React.FC<SubjectPickerModalProps> = ({
                   setNewSubjectName("");
                   setIsAdding(true);
                 }}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-all shadow-sm active:scale-95 shrink-0"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-adasa-mid hover:bg-adasa-hover text-white font-bold rounded-xl text-xs transition-all shadow-sm active:scale-95 shrink-0"
               >
                 <Plus size={15} /> Novo Item / Assunto
               </button>
@@ -635,7 +635,7 @@ export const SubjectPickerModal: React.FC<SubjectPickerModalProps> = ({
                 <button 
                   type="button" 
                   onClick={handleAdd} 
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+                  className="px-4 py-1.5 bg-adasa-mid hover:bg-adasa-hover text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5"
                 >
                   <Check size={14} /> Salvar e Vincular
                 </button>
@@ -692,7 +692,7 @@ export const SubjectPickerModal: React.FC<SubjectPickerModalProps> = ({
                     setNewSubjectName("");
                     setIsAdding(true);
                   }}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-2"
+                  className="px-4 py-2 bg-adasa-mid hover:bg-adasa-hover text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-2"
                 >
                   <Plus size={15} /> Cadastrar Primeiro Assunto
                 </button>
@@ -991,7 +991,7 @@ export const SubjectPickerModal: React.FC<SubjectPickerModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-indigo-600/20 active:scale-95 flex items-center gap-1.5"
+              className="px-5 py-2.5 bg-adasa-mid hover:bg-adasa-hover text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-adasa-dark/20 active:scale-95 flex items-center gap-1.5"
             >
               <Check size={16} /> Concluir e Salvar
             </button>

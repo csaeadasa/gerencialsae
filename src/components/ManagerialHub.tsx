@@ -175,7 +175,7 @@ export function ManagerialHub({
             {!showOnlyPublic && onStartPresentation && (
               <button
                 onClick={() => setIsPresentationModalOpen(true)}
-                className="inline-flex items-center gap-2.5 px-5 py-3 bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-400/30 text-white active:scale-95 transition-all rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg cursor-pointer backdrop-blur-md"
+                className="inline-flex items-center gap-2.5 px-5 py-3 bg-adasa-mid/30 hover:bg-adasa-mid/50 border border-indigo-400/30 text-white active:scale-95 transition-all rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg cursor-pointer backdrop-blur-md"
               >
                 <MonitorPlay size={16} className="text-indigo-300" />
                 <span>Modo Apresentação (TV)</span>
@@ -839,7 +839,7 @@ export function ManagerialHub({
                       onStartPresentation(selectedPanels, presentationInterval);
                     }
                   }}
-                  className="px-6 py-2 bg-indigo-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/30 flex items-center gap-2"
+                  className="px-6 py-2 bg-adasa-mid text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-adasa-hover transition-colors shadow-lg shadow-indigo-600/30 flex items-center gap-2"
                 >
                   <Play size={14} className="fill-current" />
                   Iniciar

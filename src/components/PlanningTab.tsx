@@ -488,7 +488,7 @@ const ImportPanel = ({ areas, showToast, onSuccess }: { areas: any[], showToast:
         <button 
           onClick={handleImport}
           disabled={isImporting}
-          className="w-full mt-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-4 rounded-xl font-black uppercase text-sm tracking-wider transition-colors shadow-lg shadow-indigo-600/20"
+          className="w-full mt-4 bg-adasa-mid hover:bg-adasa-hover disabled:opacity-50 text-white py-4 rounded-xl font-black uppercase text-sm tracking-wider transition-colors shadow-lg shadow-adasa-dark/20"
         >
           {isImporting ? "Importando..." : "Realizar Importação"}
         </button>
@@ -4387,7 +4387,7 @@ export function PlanningTab({
               setIsRegModalOpen(true);
               setRegUpdatedBy(currentUser?.name || currentUser?.email || "");
             }}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/20"
+            className="flex items-center gap-2 bg-adasa-mid hover:bg-adasa-hover text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-adasa-dark/20"
           >
             <Plus size={16} /> NOVO {activeSubTab === 'plans' ? 'PLANO' : (activeSubTab === 'areas' ? 'ÁREA' : activeSubTab === 'categories' ? 'CATEGORIA' : 'RESPONSÁVEL')}
           </button>
@@ -4899,7 +4899,7 @@ export function PlanningTab({
                     type="button"
                     disabled={!migrateTargetPlanId || pendingTasks.length === 0 || isMigratingTasks}
                     onClick={() => handleMigratePendingTasks(migratePlanModalPlan, migrateTargetPlanId!)}
-                    className="px-5 py-2.5 text-xs font-black uppercase tracking-wider bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition shadow-md flex items-center gap-2 disabled:opacity-50"
+                    className="px-5 py-2.5 text-xs font-black uppercase tracking-wider bg-adasa-mid text-white hover:bg-adasa-hover rounded-xl transition shadow-md flex items-center gap-2 disabled:opacity-50"
                   >
                     {isMigratingTasks ? <RefreshCw size={14} className="animate-spin" /> : <ArrowRightLeft size={14} />}
                     Confirmar Migração ({pendingTasks.length})
@@ -5170,7 +5170,7 @@ export function PlanningTab({
                 <button
                   type="button"
                   onClick={handleOpenUserCreationFromPrompt}
-                  className="px-5 py-2.5 text-xs font-black uppercase tracking-wider bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition shadow-md shadow-indigo-600/20 flex items-center gap-2"
+                  className="px-5 py-2.5 text-xs font-black uppercase tracking-wider bg-adasa-mid hover:bg-adasa-hover text-white rounded-xl transition shadow-md shadow-adasa-dark/20 flex items-center gap-2"
                 >
                   <UserPlus size={15} /> Sim, Criar Usuário
                 </button>
@@ -5297,7 +5297,7 @@ export function PlanningTab({
                   type="button"
                   disabled={isSavingUserFromModal}
                   onClick={handleSaveUserFromModal}
-                  className="px-5 py-2 text-xs font-black uppercase tracking-wider bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                  className="px-5 py-2 text-xs font-black uppercase tracking-wider bg-adasa-mid text-white hover:bg-adasa-hover rounded-xl transition shadow-sm flex items-center gap-1.5 disabled:opacity-50"
                 >
                   {isSavingUserFromModal ? (
                     <RefreshCw size={14} className="animate-spin" />
@@ -9013,13 +9013,13 @@ export function PlanningTab({
                           setAgrupamentoTaskType(taskTypeFilter as any);
                         }
                       }}
-                      className="bg-adasa-mid hover:bg-adasa-dark text-white flex items-center gap-2 font-black uppercase tracking-widest px-8 py-2.5 rounded-xl text-xs transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+                      className="bg-adasa-mid hover:bg-adasa-hover text-white flex items-center gap-2 font-black uppercase tracking-widest px-8 py-2.5 rounded-xl text-xs transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
                     >
                       <Search size={16} /> Consultar
                     </button>
                     <button
                       onClick={() => handleAddNewTask(null)}
-                      className="flex items-center justify-center gap-2 px-6 py-2.5 whitespace-nowrap bg-adasa-mid text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-adasa-dark transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+                      className="flex items-center justify-center gap-2 px-6 py-2.5 whitespace-nowrap bg-adasa-mid text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-adasa-hover transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
                     >
                       <Plus size={18} /> Nova Tarefa
                     </button>
@@ -9315,13 +9315,13 @@ export function PlanningTab({
                        setAgrupamentoTaskType(taskTypeFilter as any);
                      }
                    }}
-                   className="bg-adasa-mid hover:bg-adasa-dark text-white flex items-center gap-2 font-black uppercase tracking-widest px-8 py-2.5 rounded-xl text-xs transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+                   className="bg-adasa-mid hover:bg-adasa-hover text-white flex items-center gap-2 font-black uppercase tracking-widest px-8 py-2.5 rounded-xl text-xs transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
                  >
                    <Search size={16} /> Consultar
                  </button>
                  <button
                    onClick={() => handleAddNewTask(null)}
-                   className="flex items-center justify-center gap-2 px-6 py-2.5 whitespace-nowrap bg-adasa-mid text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-adasa-dark transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+                   className="flex items-center justify-center gap-2 px-6 py-2.5 whitespace-nowrap bg-adasa-mid text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-adasa-hover transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
                  >
                    <Plus size={18} /> Nova Tarefa
                  </button>
@@ -9629,14 +9629,14 @@ export function PlanningTab({
                         <div key={group.id} className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm">
                            <div 
                              onClick={() => toggleGroupContainer("recent", group.id)}
-                             className="bg-slate-50 hover:bg-slate-100/70 border-b border-slate-200/60 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
+                             className="bg-adasa-mid hover:bg-adasa-dark border-b border-adasa-dark/20 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
                            >
-                             <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                {expandedGroupContainers[`recent-${group.id}`] !== false ? <ChevronDown size={14} className="text-slate-400 stroke-[2.5]" /> : <ChevronRight size={14} className="text-slate-400 stroke-[2.5]" />}
-                                <Clock size={14} className="text-slate-400" />
+                             <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                                {expandedGroupContainers[`recent-${group.id}`] !== false ? <ChevronDown size={14} className="text-white/80 stroke-[2.5]" /> : <ChevronRight size={14} className="text-white/80 stroke-[2.5]" />}
+                                <Clock size={14} className="text-white/80" />
                                 {group.name}
                              </h3>
-                             <span className="bg-white border border-slate-200 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{group.tasks.length} tarefas</span>
+                             <span className="bg-white/20 border border-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{group.tasks.length} tarefas</span>
                            </div>
                            {expandedGroupContainers[`recent-${group.id}`] !== false && (
                              <div className="divide-y divide-slate-100 flex flex-col items-stretch justify-start min-h-0 w-full overflow-hidden">
@@ -9994,14 +9994,14 @@ export function PlanningTab({
                          <div key={status} className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm">
                             <div 
                               onClick={() => toggleGroupContainer("status", status)}
-                              className="bg-slate-50 hover:bg-slate-100/70 border-b border-slate-200/60 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
+                              className="bg-adasa-mid hover:bg-adasa-dark border-b border-adasa-dark/20 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
                             >
-                              <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                 {expandedGroupContainers[`status-${status}`] !== false ? <ChevronDown size={14} className="text-slate-400 stroke-[2.5]" /> : <ChevronRight size={14} className="text-slate-400 stroke-[2.5]" />}
-                                 {status === "Concluída" ? <CheckCircle2 size={14} className="text-emerald-500" /> : status === "Em andamento" ? <Activity size={14} className="text-blue-500" /> : <Clock size={14} className="text-slate-400" />}
+                              <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                                 {expandedGroupContainers[`status-${status}`] !== false ? <ChevronDown size={14} className="text-white/80 stroke-[2.5]" /> : <ChevronRight size={14} className="text-white/80 stroke-[2.5]" />}
+                                 {status === "Concluída" ? <CheckCircle2 size={14} className="text-emerald-300" /> : status === "Em andamento" ? <Activity size={14} className="text-blue-200" /> : <Clock size={14} className="text-white/80" />}
                                  {status}
                               </h3>
-                              <span className="bg-white border border-slate-200 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{groupRootTasks.length} tarefas</span>
+                              <span className="bg-white/20 border border-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{groupRootTasks.length} tarefas</span>
                             </div>
                             {expandedGroupContainers[`status-${status}`] !== false && (
                               <div>
@@ -10026,14 +10026,14 @@ export function PlanningTab({
                          <div key={cat.id} className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm">
                             <div 
                               onClick={() => toggleGroupContainer("category", cat.id)}
-                              className="bg-slate-50 hover:bg-slate-100/70 border-b border-slate-200/60 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
+                              className="bg-adasa-mid hover:bg-adasa-dark border-b border-adasa-dark/20 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
                             >
-                              <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                 {expandedGroupContainers[`category-${cat.id}`] !== false ? <ChevronDown size={14} className="text-slate-400 stroke-[2.5]" /> : <ChevronRight size={14} className="text-slate-400 stroke-[2.5]" />}
-                                 <Tag size={14} className="text-slate-400" />
+                              <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                                 {expandedGroupContainers[`category-${cat.id}`] !== false ? <ChevronDown size={14} className="text-white/80 stroke-[2.5]" /> : <ChevronRight size={14} className="text-white/80 stroke-[2.5]" />}
+                                 <Tag size={14} className="text-white/80" />
                                  {cat.name}
                               </h3>
-                              <span className="bg-white border border-slate-200 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{groupRootTasks.length} tarefas</span>
+                              <span className="bg-white/20 border border-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{groupRootTasks.length} tarefas</span>
                             </div>
                             {expandedGroupContainers[`category-${cat.id}`] !== false && (
                               <div>
@@ -10058,14 +10058,14 @@ export function PlanningTab({
                          <div key={ar.id} className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm">
                             <div 
                               onClick={() => toggleGroupContainer("area", ar.id)}
-                              className="bg-slate-50 hover:bg-slate-100/70 border-b border-slate-200/60 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
+                              className="bg-adasa-mid hover:bg-adasa-dark border-b border-adasa-dark/20 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
                             >
-                              <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                 {expandedGroupContainers[`area-${ar.id}`] !== false ? <ChevronDown size={14} className="text-slate-400 stroke-[2.5]" /> : <ChevronRight size={14} className="text-slate-400 stroke-[2.5]" />}
-                                 <Briefcase size={14} className="text-slate-400" />
+                              <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                                 {expandedGroupContainers[`area-${ar.id}`] !== false ? <ChevronDown size={14} className="text-white/80 stroke-[2.5]" /> : <ChevronRight size={14} className="text-white/80 stroke-[2.5]" />}
+                                 <Briefcase size={14} className="text-white/80" />
                                  {ar.name}
                               </h3>
-                              <span className="bg-white border border-slate-200 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{groupRootTasks.length} tarefas</span>
+                              <span className="bg-white/20 border border-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{groupRootTasks.length} tarefas</span>
                             </div>
                             {expandedGroupContainers[`area-${ar.id}`] !== false && (
                               <div>
@@ -10230,14 +10230,14 @@ export function PlanningTab({
                                <div key={stage} className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm">
                                  <div 
                                    onClick={() => toggleGroupContainer(`recurso-${currentType}`, stage)}
-                                   className="bg-slate-50 hover:bg-slate-100/70 border-b border-slate-200/60 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
+                                   className="bg-adasa-mid hover:bg-adasa-dark border-b border-adasa-dark/20 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
                                  >
-                                   <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                      {expandedGroupContainers[key] !== false && expandedGroupContainers[`recurso-${stage}`] !== false ? <ChevronDown size={14} className="text-slate-400 stroke-[2.5]" /> : <ChevronRight size={14} className="text-slate-400 stroke-[2.5]" />}
-                                      {(currentType === "demanda_ouvidoria" || currentType === "recurso") ? <Scale size={14} className="text-[#1A3E8A]" /> : currentType === "fiscalizacao" ? <ClipboardList size={14} className="text-[#1A3E8A]" /> : <FileText size={14} className="text-[#1A3E8A]" />}
+                                   <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                                      {expandedGroupContainers[key] !== false && expandedGroupContainers[`recurso-${stage}`] !== false ? <ChevronDown size={14} className="text-white/80 stroke-[2.5]" /> : <ChevronRight size={14} className="text-white/80 stroke-[2.5]" />}
+                                      {(currentType === "demanda_ouvidoria" || currentType === "recurso") ? <Scale size={14} className="text-white" /> : currentType === "fiscalizacao" ? <ClipboardList size={14} className="text-white" /> : <FileText size={14} className="text-white" />}
                                       {stage}
                                    </h3>
-                                   <span className="bg-white border border-slate-200 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                   <span className="bg-white/20 border border-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
                                      {groupRootTasks.length} {groupRootTasks.length === 1 ? "tarefa" : "tarefas"}
                                    </span>
                                  </div>
@@ -10748,14 +10748,14 @@ export function PlanningTab({
                          <div key={resp.id} className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm">
                             <div 
                               onClick={() => toggleGroupContainer("responsible", resp.id)}
-                              className="bg-slate-50 hover:bg-slate-100/70 border-b border-slate-200/60 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
+                              className="bg-adasa-mid hover:bg-adasa-dark border-b border-adasa-dark/20 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
                             >
-                              <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                 {expandedGroupContainers[`responsible-${resp.id}`] !== false ? <ChevronDown size={14} className="text-slate-400 stroke-[2.5]" /> : <ChevronRight size={14} className="text-slate-400 stroke-[2.5]" />}
-                                 <Users size={14} className="text-slate-400" />
+                              <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                                 {expandedGroupContainers[`responsible-${resp.id}`] !== false ? <ChevronDown size={14} className="text-white/80 stroke-[2.5]" /> : <ChevronRight size={14} className="text-white/80 stroke-[2.5]" />}
+                                 <Users size={14} className="text-white/80" />
                                  {resp.name}
                               </h3>
-                              <span className="bg-white border border-slate-200 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{groupRootTasks.length} tarefas</span>
+                              <span className="bg-white/20 border border-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{groupRootTasks.length} tarefas</span>
                             </div>
                             {expandedGroupContainers[`responsible-${resp.id}`] !== false && (
                               <div>
@@ -13462,7 +13462,7 @@ export function PlanningTab({
                       <span className="text-[10px] font-bold text-slate-400">Pressione Adicionar para salvar antes de aplicar as alterações na tarefa.</span>
                       <button 
                         onClick={handleAddComment}
-                        className="px-4 py-1.5 text-[10px] font-bold text-white bg-indigo-500 hover:bg-indigo-600 rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                        className="px-4 py-1.5 text-[10px] font-bold text-white bg-adasa-mid hover:bg-adasa-hover rounded-lg transition-colors flex items-center gap-1 shadow-sm"
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
                         Adicionar
@@ -13606,7 +13606,7 @@ export function PlanningTab({
                       <button 
                         type="button"
                         onClick={handleAddLink}
-                        className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
+                        className="px-4 py-2 text-xs font-bold text-white bg-adasa-mid hover:bg-adasa-hover rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
                       >
                         <Plus size={14} />
                         Adicionar à Lista

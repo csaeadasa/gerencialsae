@@ -348,7 +348,7 @@ export function ResolutionsTab({ showToast, currentUser }: ResolutionsTabProps) 
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-100">
         <div>
           <h3 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-            <FileSpreadsheet className="text-indigo-600" size={28} />
+            <FileSpreadsheet className="text-adasa-mid" size={28} />
             Cadastro de Resoluções Regulatórias
           </h3>
           <p className="text-sm text-slate-500 font-medium mt-1">
@@ -364,7 +364,7 @@ export function ResolutionsTab({ showToast, currentUser }: ResolutionsTabProps) 
           </button>
           <button
             onClick={handleOpenNew}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/20"
+            className="flex items-center gap-2 bg-adasa-mid hover:bg-adasa-hover text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-adasa-dark/20"
           >
             <Plus size={16} /> Nova Resolução
           </button>
@@ -817,7 +817,7 @@ export function ResolutionsTab({ showToast, currentUser }: ResolutionsTabProps) 
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-3 text-xs font-black text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl uppercase tracking-wider transition shadow-md shadow-indigo-600/10"
+                  className="flex-1 py-3 text-xs font-black text-white bg-adasa-mid hover:bg-adasa-hover rounded-xl uppercase tracking-wider transition shadow-md shadow-adasa-dark/10"
                 >
                   {editingId !== null ? "Salvar Alterações" : "Cadastrar Ator"}
                 </button>
@@ -839,7 +839,7 @@ export function ResolutionsTab({ showToast, currentUser }: ResolutionsTabProps) 
             </button>
 
             <h3 className="text-xl font-black text-slate-800 mb-2 uppercase tracking-tight flex items-center gap-2">
-              <Upload className="text-indigo-600" size={22} />
+              <Upload className="text-adasa-mid" size={22} />
               Importar Carga de Resoluções CSV
             </h3>
             <p className="text-xs text-slate-400 font-medium mb-6">
@@ -894,7 +894,7 @@ export function ResolutionsTab({ showToast, currentUser }: ResolutionsTabProps) 
                 <button
                   type="submit"
                   disabled={isImporting}
-                  className="flex-1 py-3 text-xs font-black text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl uppercase tracking-wider transition shadow-md flex items-center justify-center gap-2"
+                  className="flex-1 py-3 text-xs font-black text-white bg-adasa-mid hover:bg-adasa-hover rounded-xl uppercase tracking-wider transition shadow-md flex items-center justify-center gap-2"
                 >
                   {isImporting ? (
                     <>

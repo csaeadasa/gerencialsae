@@ -4776,7 +4776,7 @@ const renderSupplyTable = () => {
       >
         <button
           onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          className="absolute -right-3 top-10 bg-gradient-to-r from-[#1A3E8A] to-[#0091DA] text-white rounded-full p-1.5 shadow-xl border border-white/20 hover:scale-110 active:scale-95 transition-all z-50 cursor-pointer"
+          className="absolute -right-3 top-10 bg-[#1A3E8A] hover:bg-[#122C66] text-white rounded-full p-1.5 shadow-xl border border-white/20 hover:scale-110 active:scale-95 transition-all z-50 cursor-pointer"
           title={isSidebarCollapsed ? "Expandir Menu" : "Recolher Menu"}
         >
           {isSidebarCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}

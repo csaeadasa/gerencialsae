@@ -256,7 +256,7 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-100">
         <div>
           <h3 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-            <BookOpen className="text-indigo-600" size={28} />
+            <BookOpen className="text-adasa-mid" size={28} />
             Agenda Regulatória
           </h3>
           <p className="text-sm text-slate-500 font-medium mt-1">
@@ -266,7 +266,7 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
         <div className="flex items-center gap-2">
           <button
             onClick={handleOpenNew}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/20"
+            className="flex items-center gap-2 bg-adasa-mid hover:bg-adasa-hover text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-adasa-dark/20"
           >
             <Plus size={16} /> Nova Agenda
           </button>
@@ -511,7 +511,7 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
             </button>
 
             <h3 className="text-lg font-black text-slate-800 tracking-tight gap-2 flex items-center mb-6">
-              <BookOpen className="text-indigo-600" size={20} />
+              <BookOpen className="text-adasa-mid" size={20} />
               {editingId !== null ? "Editar Agenda Regulatória" : "Cadastrar Nova Agenda Regulatória"}
             </h3>
 
@@ -688,7 +688,7 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/10 cursor-pointer"
+                  className="px-6 py-3 bg-adasa-mid hover:bg-adasa-hover text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-adasa-dark/10 cursor-pointer"
                 >
                   {editingId !== null ? "Salvar Alterações" : "Criar Agenda"}
                 </button>

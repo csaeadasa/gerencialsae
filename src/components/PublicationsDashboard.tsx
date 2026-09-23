@@ -765,7 +765,7 @@ export function PublicationsDashboard({ showToast }: PublicationsDashboardProps)
                           href={pub.link_acesso}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="px-4 py-2 sm:px-5 sm:py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition-all shadow-sm shadow-indigo-200 flex items-center gap-1.5 text-xs font-bold"
+                          className="px-4 py-2 sm:px-5 sm:py-2.5 bg-adasa-mid text-white hover:bg-adasa-hover rounded-xl transition-all shadow-sm shadow-indigo-200 flex items-center gap-1.5 text-xs font-bold"
                           title="Acessar Relatório Completo"
                         >
                           <ExternalLink size={14} />

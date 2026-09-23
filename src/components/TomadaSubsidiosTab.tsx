@@ -556,7 +556,7 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <button onClick={handleSuggestAI} disabled={isGeneratingAI} className="p-1.5 text-indigo-500 hover:text-white hover:bg-indigo-600 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider disabled:opacity-50" title="Sugerir Análise com IA">
+              <button onClick={handleSuggestAI} disabled={isGeneratingAI} className="p-1.5 text-indigo-500 hover:text-white hover:bg-adasa-mid rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider disabled:opacity-50" title="Sugerir Análise com IA">
                 <Sparkles size={14} className={isGeneratingAI ? "animate-pulse" : ""} /> {isGeneratingAI ? "Gerando..." : "IA"}
               </button>
               <button onClick={() => setIsEditingAnalysis(true)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider" title="Editar Análise">
@@ -700,7 +700,7 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
                   handleUpdateAnalysis(c.id, decision, complexity, technicalJustification, notes);
                   setIsNotesModalOpen(false);
                 }} 
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors shadow-sm flex items-center gap-2"
+                className="px-4 py-2 bg-adasa-mid hover:bg-adasa-hover text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors shadow-sm flex items-center gap-2"
               >
                 <Check size={16} /> Salvar Anotações
               </button>
@@ -990,7 +990,7 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
           </div>
           {!isEditing && (
             <div className="flex items-center gap-2">
-              <button onClick={handleSuggestAI} disabled={isGeneratingAI} className="p-1 text-[10px] font-bold uppercase tracking-wider text-indigo-50 hover:text-white bg-indigo-500 rounded hover:bg-indigo-600 transition-colors flex items-center gap-1 disabled:opacity-50">
+              <button onClick={handleSuggestAI} disabled={isGeneratingAI} className="p-1 text-[10px] font-bold uppercase tracking-wider text-indigo-50 hover:text-white bg-indigo-500 rounded hover:bg-adasa-mid transition-colors flex items-center gap-1 disabled:opacity-50">
                 <Sparkles size={12} className={isGeneratingAI ? "animate-pulse" : ""} /> {isGeneratingAI ? "Gerando..." : "IA"}
               </button>
               <button onClick={() => setIsEditing(true)} className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded hover:bg-indigo-100 transition-colors">
@@ -1085,7 +1085,7 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
               <button onClick={() => { setIsEditing(false); setFinalText(article.finalText || ""); setFinalJustification(article.finalJustification || ""); }} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800">
                 Cancelar
               </button>
-              <button onClick={onSave} className="px-4 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg shadow-sm hover:bg-indigo-700 flex items-center gap-2">
+              <button onClick={onSave} className="px-4 py-1.5 bg-adasa-mid text-white text-xs font-bold rounded-lg shadow-sm hover:bg-indigo-700 flex items-center gap-2">
                 <Save size={14} /> Salvar Parecer
               </button>
             </div>
@@ -3292,7 +3292,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           <button 
                             onClick={handleLoadSelectedArticles}
                             disabled={!selectedExtractedArticles.some(Boolean)}
-                            className="px-4 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="px-4 py-1.5 bg-adasa-mid text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
                             Carregar Selecionados
                           </button>
@@ -3337,7 +3337,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
         </div>
 
         <div className="flex justify-end gap-3">
-          <button onClick={() => handleProcessText()} className="px-6 py-3 bg-indigo-600 text-white text-sm font-bold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-700 transition-all flex items-center gap-2">
+          <button onClick={() => handleProcessText()} className="px-6 py-3 bg-adasa-mid text-white text-sm font-bold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-700 transition-all flex items-center gap-2">
             Processar Minuta <ArrowRight size={18} />
           </button>
         </div>
@@ -3420,7 +3420,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       isMissingOriginal ? "bg-amber-50/30 border-amber-300 ring-1 ring-amber-200" : "bg-slate-50 border-slate-200"
                     )}
                   >
-                    <div className="absolute -left-3 top-4 bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full z-10 shadow-sm">
+                    <div className="absolute -left-3 top-4 bg-adasa-mid text-white text-[10px] font-black px-2 py-0.5 rounded-full z-10 shadow-sm">
                       #{i+1}
                     </div>
                     <div className="mb-3 pl-3 pr-20 flex items-center gap-2 flex-wrap">
@@ -3507,7 +3507,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             className={cn(
                               "px-2.5 py-1 text-[11px] font-bold rounded-md transition-all flex items-center gap-1.5",
                               art.contentType === 'table'
-                                ? "bg-indigo-600 text-white shadow-xs"
+                                ? "bg-adasa-mid text-white shadow-xs"
                                 : "text-slate-600 hover:text-slate-900"
                             )}
                           >
@@ -3642,7 +3642,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   
           <div className="flex justify-between items-center gap-3">
 
-            <button onClick={handleSaveTomada} className="ml-auto px-6 py-3 bg-indigo-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-indigo-600/20 hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-700 transition-all flex items-center gap-2">
+            <button onClick={handleSaveTomada} className="ml-auto px-6 py-3 bg-adasa-mid text-white text-sm font-bold rounded-xl shadow-lg shadow-adasa-dark/20 hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-700 transition-all flex items-center gap-2">
               Confirmar e Publicar <Check size={18} />
             </button>
           </div>
@@ -4424,7 +4424,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         <div className="mb-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl p-4 shadow-2xs">
                           <div className="flex items-center justify-between gap-3 flex-wrap">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-base shadow-xs shrink-0">
+                              <div className="w-10 h-10 rounded-xl bg-adasa-mid text-white flex items-center justify-center font-black text-base shadow-xs shrink-0">
                                 💻
                               </div>
                               <div>
@@ -5047,7 +5047,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           <Columns size={13} className={Object.values(contributionsHiddenCols).filter(Boolean).length > 0 ? "text-indigo-600" : "text-slate-500"} />
                           <span>Colunas</span>
                           {Object.values(contributionsHiddenCols).filter(Boolean).length > 0 && (
-                            <span className="ml-0.5 px-1.5 py-0.5 bg-indigo-600 text-white rounded-full text-[10px] font-black leading-none">
+                            <span className="ml-0.5 px-1.5 py-0.5 bg-adasa-mid text-white rounded-full text-[10px] font-black leading-none">
                               {Object.values(contributionsHiddenCols).filter(Boolean).length} oculta{Object.values(contributionsHiddenCols).filter(Boolean).length > 1 ? "s" : ""}
                             </span>
                           )}
@@ -5133,7 +5133,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                       </button>
                       <button
                         onClick={handleExportContributionsPDF}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm hover:shadow transition-all group"
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-adasa-mid hover:bg-adasa-hover text-white text-xs font-bold shadow-sm hover:shadow transition-all group"
                         title="Exportar para PDF"
                       >
                         <Printer size={14} className="group-hover:scale-110 transition-transform" />
@@ -6644,7 +6644,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         </button>
                         <button
                           onClick={handleExportConsolidadoPDF}
-                          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold shadow-sm hover:shadow transition-all group shrink-0"
+                          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-adasa-mid hover:bg-adasa-hover active:bg-indigo-800 text-white text-xs font-bold shadow-sm hover:shadow transition-all group shrink-0"
                           title="Imprimir ou Exportar para PDF"
                         >
                           <Printer size={15} className="group-hover:scale-110 transition-transform" />
@@ -8145,7 +8145,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                         </button>
                         <button
                           onClick={handlePrintMinuta}
-                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-md shadow-indigo-600/20 active:scale-95"
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-adasa-mid hover:bg-adasa-hover text-white text-xs font-bold transition-all shadow-md shadow-adasa-dark/20 active:scale-95"
                           title="Imprimir ou Salvar em PDF"
                         >
                           <Printer size={16} />
@@ -8887,7 +8887,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           {canCreateSubsidios && (
             <button
               onClick={() => handleOpenCreate()}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/20"
+              className="flex items-center gap-2 bg-adasa-mid hover:bg-adasa-hover text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-adasa-dark/20"
             >
               <Plus size={16} /> Nova Participação
             </button>
@@ -9274,7 +9274,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                             }
                           ]);
                         }}
-                        className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-sm"
+                        className="px-3.5 py-2 bg-adasa-mid hover:bg-adasa-hover text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-sm"
                       >
                         <PlusCircle size={15} /> Adicionar Artigo
                       </button>
@@ -9830,7 +9830,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
               <button
                 onClick={handleConfirmDuplicate}
                 disabled={isDuplicating}
-                className="px-5 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center gap-2"
+                className="px-5 py-2 bg-adasa-mid text-white text-sm font-bold rounded-lg shadow-sm hover:bg-adasa-hover transition-colors flex items-center gap-2"
               >
                 {isDuplicating ? (
                   <>

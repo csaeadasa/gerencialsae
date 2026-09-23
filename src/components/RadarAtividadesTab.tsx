@@ -560,7 +560,7 @@ export function RadarAtividadesTab({ showToast, currentUser }: RadarAtividadesTa
           </button>
           <button
             onClick={handleOpenNew}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/20"
+            className="flex items-center gap-2 bg-adasa-mid hover:bg-adasa-hover text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-adasa-dark/20"
           >
             <Plus size={16} /> Nova Proposta
           </button>
@@ -694,7 +694,7 @@ export function RadarAtividadesTab({ showToast, currentUser }: RadarAtividadesTa
           </p>
           <button
             onClick={handleOpenNew}
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm"
+            className="inline-flex items-center gap-2 bg-adasa-mid hover:bg-adasa-hover text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm"
           >
             <Plus size={14} /> Cadastrar Primeira Proposta
           </button>
@@ -1106,7 +1106,7 @@ export function RadarAtividadesTab({ showToast, currentUser }: RadarAtividadesTa
                       type="button"
                       onClick={handleAddCommentToForm}
                       disabled={!newCommentText.trim()}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-adasa-mid hover:bg-adasa-hover disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
                     >
                       <Send size={12} />
                       Adicionar Comentário
@@ -1167,7 +1167,7 @@ export function RadarAtividadesTab({ showToast, currentUser }: RadarAtividadesTa
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50"
+                  className="px-6 py-2.5 bg-adasa-mid hover:bg-adasa-hover text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-adasa-dark/20 disabled:opacity-50"
                 >
                   {isSaving ? "Salvando..." : editingId ? "Salvar Alterações" : "Cadastrar no Radar"}
                 </button>
@@ -1267,7 +1267,7 @@ export function RadarAtividadesTab({ showToast, currentUser }: RadarAtividadesTa
                         type="button"
                         onClick={() => handleQuickAddCommentToView(viewingActivity.id)}
                         disabled={!viewCommentText.trim()}
-                        className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1 shrink-0"
+                        className="px-3.5 py-2 bg-adasa-mid hover:bg-adasa-hover disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1 shrink-0"
                       >
                         <Send size={12} />
                         Enviar
@@ -1421,7 +1421,7 @@ Revisão da Resolução n. 14/2011;Revisão da norma de condições gerais...;Re
                   type="button"
                   onClick={handleImportCsv}
                   disabled={isImporting || !csvText.trim()}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50"
+                  className="px-6 py-2.5 bg-adasa-mid hover:bg-adasa-hover text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-adasa-dark/20 disabled:opacity-50"
                 >
                   {isImporting ? "Importando..." : "Processar e Importar"}
                 </button>

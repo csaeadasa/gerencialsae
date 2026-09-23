@@ -431,7 +431,7 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
           </p>
           <button
             onClick={handleOpenNew}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs sm:text-sm rounded-xl transition-all"
+            className="px-4 py-2 bg-adasa-mid hover:bg-adasa-hover text-white font-extrabold text-xs sm:text-sm rounded-xl transition-all"
           >
             Cadastrar Primeira Publicação
           </button>
@@ -785,7 +785,7 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
                         onChange={handleImageUpload}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                       />
-                      <div className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors text-xs shadow-xs">
+                      <div className="px-4 py-2.5 bg-adasa-mid hover:bg-adasa-hover text-white font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors text-xs shadow-xs">
                         <Upload size={15} />
                         <span>Carregar Arquivo</span>
                       </div>
@@ -884,7 +884,7 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all"
+                  className="px-5 py-2 bg-adasa-mid hover:bg-adasa-hover text-white font-extrabold text-xs rounded-xl shadow-md transition-all"
                 >
                   {editingId ? "Salvar Alterações" : "Salvar Publicação"}
                 </button>
@@ -900,7 +900,7 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FileSpreadsheet className="text-indigo-600" size={18} />
+                <FileSpreadsheet className="text-adasa-mid" size={18} />
                 <div>
                   <h3 className="font-black text-slate-800 text-sm">Importar Publicações via CSV</h3>
                   <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Lote ou Arquivo</p>
@@ -943,7 +943,7 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
                 <button
                   type="submit"
                   disabled={isImporting}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-1"
+                  className="px-5 py-2 bg-adasa-mid hover:bg-adasa-hover text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-1"
                 >
                   {isImporting ? "Importando..." : "Enviar Registros"}
                 </button>

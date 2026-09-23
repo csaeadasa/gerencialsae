@@ -301,7 +301,7 @@ export const TaskModelManager: React.FC<TaskModelManagerProps> = ({
         </div>
         <button
           onClick={openCreateModal}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-600/20 cursor-pointer"
+          className="flex items-center gap-2 bg-adasa-mid hover:bg-adasa-hover text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-adasa-dark/20 cursor-pointer"
         >
           <Plus size={16} /> NOVO MODELO
         </button>
@@ -507,7 +507,7 @@ export const TaskModelManager: React.FC<TaskModelManagerProps> = ({
                     <button
                       type="button"
                       onClick={addModelItem}
-                      className="md:col-span-1 h-9 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl flex items-center justify-center cursor-pointer transition-all shrink-0 hover:shadow shadow-sm font-extrabold text-xs"
+                      className="md:col-span-1 h-9 bg-adasa-mid hover:bg-adasa-hover text-white rounded-xl flex items-center justify-center cursor-pointer transition-all shrink-0 hover:shadow shadow-sm font-extrabold text-xs"
                       title="Adicionar Etapa"
                     >
                       <Plus size={16} />
@@ -639,7 +639,7 @@ export const TaskModelManager: React.FC<TaskModelManagerProps> = ({
                 <button
                   type="button"
                   onClick={saveModel}
-                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm cursor-pointer"
+                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-adasa-mid hover:bg-adasa-hover transition-colors shadow-sm cursor-pointer"
                 >
                   Confirmar e Salvar
                 </button>

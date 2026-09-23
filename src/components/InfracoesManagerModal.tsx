@@ -583,7 +583,7 @@ export const InfracoesManagerModal: React.FC<InfracoesManagerModalProps> = ({
                           <button
                             type="button"
                             onClick={() => handleSaveEdit(item)}
-                            className="px-4 py-1 text-xs font-black bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
+                            className="px-4 py-1 text-xs font-black bg-adasa-mid hover:bg-adasa-hover text-white rounded-lg transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
                           >
                             <Check size={14} />
                             <span>Salvar Alterações</span>

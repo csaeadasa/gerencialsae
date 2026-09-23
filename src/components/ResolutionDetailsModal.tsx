@@ -147,7 +147,7 @@ export function ResolutionDetailsModal({ resolution, onClose }: { resolution: an
         
         <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-center items-center relative">
            {fullRes.link && (
-             <a href={fullRes.link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-sm transition-all">
+             <a href={fullRes.link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-8 py-3 bg-adasa-mid hover:bg-adasa-hover text-white rounded-xl text-sm font-bold shadow-sm transition-all">
                <ExternalLink size={18} /> Acessar Documento na Íntegra
              </a>
            )}

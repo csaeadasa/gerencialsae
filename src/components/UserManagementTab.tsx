@@ -636,7 +636,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
             </div>
             <div className="flex items-center gap-2">
               {canCreate && (
-                <button onClick={() => setIsEditingUser({ status: 'active', roleId: roles[0]?.id, departmentId: undefined })} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition shadow-sm shrink-0">
+                <button onClick={() => setIsEditingUser({ status: 'active', roleId: roles[0]?.id, departmentId: undefined })} className="flex items-center gap-1.5 px-4 py-2 bg-adasa-mid text-white rounded-xl text-xs font-bold hover:bg-adasa-hover transition shadow-sm shrink-0">
                   <Plus size={14} /> Novo Usuário
                 </button>
               )}
@@ -950,7 +950,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
             {canCreate && (
               <button 
                 onClick={() => setIsEditingDept({ sigla: "", nome: "" })} 
-                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition shadow-sm"
+                className="flex items-center gap-1.5 px-4 py-2 bg-adasa-mid text-white rounded-lg text-xs font-bold hover:bg-adasa-hover transition shadow-sm"
               >
                 <Plus size={14} /> Novo Departamento
               </button>
@@ -1082,7 +1082,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
                    <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider">{isEditingRole.id ? 'Editar Papel' : 'Novo Papel'}</h3>
                    <div className="flex gap-2">
                      <button onClick={() => setIsEditingRole(null)} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded-lg transition">Cancelar</button>
-                     <button onClick={handleSaveRole} disabled={isSavingRole} className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition disabled:opacity-50">
+                     <button onClick={handleSaveRole} disabled={isSavingRole} className="px-3 py-1.5 text-xs font-bold bg-adasa-mid text-white hover:bg-adasa-hover rounded-lg transition disabled:opacity-50">
                        {isSavingRole ? 'Salvando...' : 'Salvar'}
                      </button>
                    </div>
@@ -1226,7 +1226,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
              </div>
              <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
                 <button onClick={() => setIsEditingUser(null)} className="px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-200 rounded-xl transition">Cancelar</button>
-                <button onClick={handleSaveUser} className="px-4 py-2 text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition shadow-sm">Salvar Usuário</button>
+                <button onClick={handleSaveUser} className="px-4 py-2 text-sm font-bold bg-adasa-mid text-white hover:bg-adasa-hover rounded-xl transition shadow-sm">Salvar Usuário</button>
              </div>
           </div>
         </div>
@@ -1274,7 +1274,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
               <button
                 onClick={handleQuickCreateDepartment}
                 disabled={isSavingDept}
-                className="px-4 py-2 text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition shadow-sm"
+                className="px-4 py-2 text-xs font-bold bg-adasa-mid text-white hover:bg-adasa-hover rounded-xl transition shadow-sm"
               >
                 {isSavingDept ? "Salvando..." : "Salvar Departamento"}
               </button>
@@ -1324,7 +1324,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
               </button>
               <button
                 onClick={handleSaveDepartment}
-                className="px-4 py-2 text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition shadow-sm"
+                className="px-4 py-2 text-xs font-bold bg-adasa-mid text-white hover:bg-adasa-hover rounded-xl transition shadow-sm"
               >
                 Salvar Departamento
               </button>
@@ -1399,7 +1399,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 animate-in zoom-in-95">
             <div className="p-6 bg-gradient-to-br from-indigo-50/80 via-white to-slate-50 border-b border-slate-100">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mb-4 shadow-md shadow-indigo-600/20">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mb-4 shadow-md shadow-adasa-dark/20">
                 <UserPlus size={24} />
               </div>
               <h3 className="text-lg font-black text-slate-800 tracking-tight leading-snug">
@@ -1446,7 +1446,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
               <button
                 type="button"
                 onClick={() => handleOpenResponsibleModalForUser(responsiblePromptUser)}
-                className="w-full sm:w-auto px-5 py-2.5 text-xs font-black text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-5 py-2.5 text-xs font-black text-white bg-adasa-mid hover:bg-adasa-hover rounded-xl transition shadow-md shadow-adasa-dark/20 flex items-center justify-center gap-2"
               >
                 <UserCheck size={15} />
                 Cadastrar como Responsável
@@ -1462,7 +1462,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 animate-in zoom-in-95">
             <div className="p-6 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+                <div className="w-10 h-10 rounded-2xl bg-adasa-mid text-white flex items-center justify-center shadow-sm">
                   <Briefcase size={20} />
                 </div>
                 <div>
@@ -1573,7 +1573,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
                 <button
                   type="submit"
                   disabled={isSavingResp}
-                  className="px-5 py-2.5 text-xs font-black text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition shadow-md shadow-indigo-600/20 flex items-center gap-2"
+                  className="px-5 py-2.5 text-xs font-black text-white bg-adasa-mid hover:bg-adasa-hover disabled:opacity-50 rounded-xl transition shadow-md shadow-adasa-dark/20 flex items-center gap-2"
                 >
                   {isSavingResp ? (
                     "Cadastrando..."
