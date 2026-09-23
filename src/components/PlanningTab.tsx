@@ -10450,7 +10450,11 @@ export function PlanningTab({
                                       <motion.div
                                         key={task.id}
                                         whileHover={{ y: -2, scale: 1.01 }}
-                                        className={`bg-white border p-4 rounded-xl shadow-xs hover:shadow-sm transition-all flex flex-col gap-3 group relative cursor-default ${isTaskRecentlyModified(task.id) ? "border-indigo-500 ring-2 ring-indigo-500/20 shadow-md bg-indigo-50/20" : "border-slate-200"}`}
+                                        className={`bg-white border p-4 rounded-xl shadow-md hover:shadow-lg transition-all flex flex-col gap-3 group relative cursor-default ${
+                                          isTaskRecentlyModified(task.id)
+                                            ? "border-adasa-mid ring-2 ring-adasa-mid/20 shadow-lg shadow-adasa-mid/20 bg-indigo-50/20"
+                                            : "border-slate-400 hover:border-slate-600 shadow-slate-400/25 hover:shadow-slate-400/35"
+                                        }`}
                                       >
                                         {/* Top Priority and Title */}
                                         <div className="flex items-start justify-between gap-1.5">
@@ -10596,7 +10600,7 @@ export function PlanningTab({
 
                                         {/* SEI Process in Board */}
                                         {task.seiProcess && (
-                                          <div className="flex items-center self-start text-[9px] font-bold text-slate-500 bg-white border border-slate-200 px-1.5 py-0.5 rounded-md max-w-full">
+                                          <div className="flex items-center self-start text-[9px] font-bold text-slate-600 bg-slate-50/80 border border-slate-300 px-1.5 py-0.5 rounded-md max-w-full">
                                             <span className="truncate mr-1 font-mono flex items-center gap-1 text-slate-600"><FileDigit size={10} className="text-slate-400" /> {task.seiProcess}</span>
                                             <button 
                                               onClick={(e) => {
@@ -10604,7 +10608,7 @@ export function PlanningTab({
                                                 navigator.clipboard.writeText(task.seiProcess || "");
                                                 showToast("Sucesso", "Processo SEI copiado", "success");
                                               }}
-                                              className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600 transition-colors ml-auto flex-shrink-0"
+                                              className="p-1 hover:bg-slate-200/80 rounded text-slate-400 hover:text-adasa-mid transition-colors ml-auto flex-shrink-0"
                                               title="Copiar Processo SEI"
                                             >
                                               <Copy size={10} />
@@ -10613,7 +10617,7 @@ export function PlanningTab({
                                         )}
 
                                         {/* Tags/Users/Categories and Quick Actions */}
-                                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 mt-0.5">
+                                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200 mt-0.5">
                                           <div className="flex flex-wrap gap-1 max-w-[65%] items-center">
                                             {task.categoryIds?.slice(0, 2).map(catId => {
                                               const cat = categories.find(c => c.id === catId);
