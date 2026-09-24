@@ -6,7 +6,7 @@ import { useAuth } from "../lib/auth";
 interface ChangePasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
-  showToast: (msg: string, type: "success" | "error") => void;
+  showToast: (title: string, message: string, type: "success" | "error" | "warning" | "info") => void;
 }
 
 export function ChangePasswordModal({ isOpen, onClose, showToast }: ChangePasswordModalProps) {
@@ -17,42 +17,65 @@ export function ChangePasswordModal({ isOpen, onClose, showToast }: ChangePasswo
 
   if (!isOpen || !currentUser) return null;
 
+  const handleClose = () => {
+    setNewPassword("");
+    setConfirmPassword("");
+    onClose();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPassword || newPassword.length < 4) {
-      showToast("A senha deve ter pelo menos 4 caracteres.", "error");
+      showToast("Atenção", "A senha deve ter pelo menos 4 caracteres.", "warning");
       return;
     }
     if (newPassword !== confirmPassword) {
-      showToast("As senhas não coincidem.", "error");
+      showToast("Atenção", "As senhas não coincidem.", "warning");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await updateUser(currentUser.id, { password: newPassword } as any);
-      showToast("Senha alterada com sucesso!", "success");
-      onClose();
+      await updateUser(currentUser.id, { 
+        name: currentUser.name,
+        email: currentUser.email,
+        password: newPassword 
+      } as any);
+      showToast("Sucesso", "Senha alterada com sucesso!", "success");
+      handleClose();
     } catch (err: any) {
-      showToast("Erro ao alterar senha.", "error");
+      showToast("Erro", "Erro ao alterar senha.", "error");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+    <div 
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+      onClick={handleClose}
+    >
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-3xl shadow-xl border border-slate-200 w-full max-w-sm overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden"
       >
-        <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100 bg-slate-50">
-          <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-            <Key size={16} className="text-adasa-mid" /> Alterar Senha
-          </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-rose-500 transition-colors">
+        <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100 bg-slate-50/70">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-adasa-mid/10 flex items-center justify-center text-adasa-mid">
+              <Key size={16} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-slate-800">Alterar Senha</h3>
+              <p className="text-[10px] text-slate-400 font-semibold truncate max-w-[200px]">{currentUser.email}</p>
+            </div>
+          </div>
+          <button 
+            onClick={handleClose} 
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+          >
             <X size={18} />
           </button>
         </div>

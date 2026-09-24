@@ -5705,6 +5705,21 @@ const renderSupplyTable = () => {
             </div>
           )}
         </nav>
+
+        {/* User Quick Action at bottom of sidebar */}
+        <div className="pt-3 mt-auto border-t border-white/10 w-full">
+          <button
+            onClick={() => setIsChangePasswordModalOpen(true)}
+            title={isSidebarCollapsed ? "Alterar Senha" : undefined}
+            className={cn(
+              "w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-white/70 hover:text-white hover:bg-white/10 transition-all text-xs font-semibold cursor-pointer",
+              isSidebarCollapsed ? "justify-center px-2" : ""
+            )}
+          >
+            <Key size={16} className="text-white/60 shrink-0" />
+            {!isSidebarCollapsed && <span className="hidden md:inline">Alterar Senha</span>}
+          </button>
+        </div>
       </aside>
 
       {/* Main Content Area */}
@@ -9992,6 +10007,13 @@ const renderSupplyTable = () => {
           }} 
         />
       )}
+
+      {/* Modal para Alteração de Senha */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordModalOpen}
+        onClose={() => setIsChangePasswordModalOpen(false)}
+        showToast={showToast}
+      />
     </div>
   );
 }

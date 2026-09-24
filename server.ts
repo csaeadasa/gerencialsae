@@ -4009,21 +4009,25 @@ export async function startServer(isVercel = false) {
       const { name, email, password, roleId, status, departmentId } = req.body;
       const pool = getDbPool();
       
-      let finalDeptId = departmentId !== undefined ? (departmentId ? parseInt(departmentId) : null) : null;
-
-      let query;
-      let params;
-      if (password) {
-        query = "UPDATE au_users SET name = $1, email = $2, password = $3, role_id = $4, status = $5, department_id = $6 WHERE id = $7 RETURNING *";
-        params = [name, email, await hashPassword(password), roleId || "provider", status || "active", finalDeptId, userId];
-      } else {
-        query = "UPDATE au_users SET name = $1, email = $2, role_id = $3, status = $4, department_id = $5 WHERE id = $6 RETURNING *";
-        params = [name, email, roleId || "provider", status || "active", finalDeptId, userId];
-      }
-      const result = await pool.query(query, params);
-      if (result.rows.length === 0) {
+      const existingUserResult = await pool.query("SELECT * FROM au_users WHERE id = $1", [userId]);
+      if (existingUserResult.rows.length === 0) {
         return res.status(404).json({ success: false, error: "Usuário não encontrado" });
       }
+      const existing = existingUserResult.rows[0];
+
+      const updatedName = (name !== undefined && name !== null && String(name).trim() !== "") ? String(name).trim() : existing.name;
+      const updatedEmail = (email !== undefined && email !== null && String(email).trim() !== "") ? String(email).trim() : existing.email;
+      const updatedPassword = (password && String(password).trim() !== "") ? await hashPassword(password) : existing.password;
+      const updatedRoleId = roleId !== undefined ? roleId : existing.role_id;
+      const updatedStatus = status !== undefined ? status : existing.status;
+      const updatedDeptId = departmentId !== undefined 
+        ? (departmentId ? parseInt(departmentId) : null) 
+        : existing.department_id;
+
+      const result = await pool.query(
+        "UPDATE au_users SET name = $1, email = $2, password = $3, role_id = $4, status = $5, department_id = $6 WHERE id = $7 RETURNING *",
+        [updatedName, updatedEmail, updatedPassword, updatedRoleId, updatedStatus, updatedDeptId, userId]
+      );
       const user = result.rows[0] as any;
       let department = undefined;
       if (user.department_id) {
