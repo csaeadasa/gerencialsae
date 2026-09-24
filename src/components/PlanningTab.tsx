@@ -7890,12 +7890,19 @@ export function PlanningTab({
                                       } else if (normStatus === "Em andamento") {
                                         statusClasses = "bg-blue-500 text-white";
                                       }
-                                      
+
+                                      const dlStatus = getDeadlineStatus(t.endDate, t.status);
+                                      const calCardBorder = dlStatus === "Atrasada"
+                                        ? "border-2 border-rose-500 shadow-rose-500/10"
+                                        : dlStatus === "Crítica"
+                                        ? "border-2 border-amber-400 shadow-amber-400/10"
+                                        : "border-2 border-emerald-500 shadow-emerald-500/10";
+
                                       return (
                                         <div
                                           key={t.id}
                                           onClick={() => handleEditTask(t)}
-                                          className="border border-slate-100 hover:border-indigo-300 p-2.5 rounded-xl transition-all cursor-pointer bg-white hover:bg-slate-50/50 flex flex-col space-y-1"
+                                          className={`hover:border-indigo-300 p-2.5 rounded-xl transition-all cursor-pointer bg-white hover:bg-slate-50/50 flex flex-col space-y-1 ${calCardBorder}`}
                                         >
                                           <div className="flex items-start justify-between gap-1.5">
                                             <span className="text-[8px] text-slate-400 font-bold">ID: {t.id}</span>
@@ -8043,10 +8050,15 @@ export function PlanningTab({
 
                           const normStatus = normalizeStatus(t.status);
                           const dlStatus = getDeadlineStatus(t.endDate, t.status);
+                          const dlTimelineBorder = dlStatus === "Atrasada"
+                            ? "border-l-[5px] border-l-rose-500"
+                            : dlStatus === "Crítica"
+                            ? "border-l-[5px] border-l-amber-400"
+                            : "border-l-[5px] border-l-emerald-500";
 
                           rows.push(
-                            <tr key={`task-${areaName}-${categoryName}-${t.id}`} className="hover:bg-slate-50 transition-colors bg-white">
-                              <td className="px-4 py-3 font-semibold text-slate-700">
+                            <tr key={`task-${areaName}-${categoryName}-${t.id}`} className={`hover:bg-slate-50 transition-colors bg-white ${dlTimelineBorder}`}>
+                              <td className={`px-4 py-3 font-semibold text-slate-700 ${dlTimelineBorder}`}>
                                 <div className="flex items-center" style={{ paddingLeft: `${depth * 20}px` }}>
                                   {subTasksCount > 0 ? (
                                     <button
@@ -8080,38 +8092,45 @@ export function PlanningTab({
                               <td className="px-4 py-3 text-center text-slate-700 font-bold uppercase text-[10px]">
                                 {mLabel !== '-' ? mLabel : <span className="text-slate-300">-</span>}
                               </td>
-                              <td className="px-4 py-3 text-center">
+                              <td className="px-4 py-3 text-center whitespace-nowrap">
                                 {normStatus === "Concluída" ? (
-                                  <div className="inline-flex items-center justify-center text-emerald-500" title="Status: Concluída">
-                                    <CheckCircle2 size={16} />
-                                  </div>
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs" title="Status: Concluída">
+                                    <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                                    Concluída
+                                  </span>
                                 ) : normStatus === "Em andamento" ? (
-                                  <div className="inline-flex items-center justify-center text-blue-500 animate-pulse" title="Status: Em andamento">
-                                    <Clock size={16} />
-                                  </div>
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs" title="Status: Em andamento">
+                                    <Clock size={12} className="text-blue-600 shrink-0 animate-pulse" />
+                                    Em andamento
+                                  </span>
                                 ) : (
-                                  <div className="inline-flex items-center justify-center text-slate-300" title="Status: Não iniciada">
-                                    <Circle size={16} />
-                                  </div>
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title="Status: Não iniciada">
+                                    <Circle size={12} className="text-slate-400 shrink-0" />
+                                    Não iniciada
+                                  </span>
                                 )}
                               </td>
-                              <td className="px-4 py-3 text-center">
+                              <td className="px-4 py-3 text-center whitespace-nowrap">
                                 {normStatus === "Concluída" ? (
-                                  <div className="inline-flex items-center justify-center text-emerald-500" title="Situação: No Prazo (Concluída)">
-                                    <CheckCircle2 size={16} />
-                                  </div>
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title="Situação: No Prazo (Concluída)">
+                                    <CheckCircle2 size={12} className="text-slate-400 shrink-0" />
+                                    No Prazo
+                                  </span>
                                 ) : dlStatus === "Atrasada" ? (
-                                  <div className="inline-flex items-center justify-center text-rose-500" title="Situação: Atrasada">
-                                    <AlertCircle size={16} />
-                                  </div>
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-300 shadow-2xs" title="Situação: Atrasada">
+                                    <AlertCircle size={12} className="text-rose-600 shrink-0" />
+                                    Atrasada
+                                  </span>
                                 ) : dlStatus === "Crítica" ? (
-                                  <div className="inline-flex items-center justify-center text-amber-500" title="Situação: Crítica">
-                                    <AlertTriangle size={16} />
-                                  </div>
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs" title="Situação: Crítica">
+                                    <AlertTriangle size={12} className="text-amber-600 shrink-0" />
+                                    Crítica
+                                  </span>
                                 ) : (
-                                  <div className="inline-flex items-center justify-center text-emerald-500" title="Situação: No Prazo">
-                                    <CheckCircle2 size={16} />
-                                  </div>
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title="Situação: No Prazo">
+                                    <CheckCircle2 size={12} className="text-slate-400 shrink-0" />
+                                    No Prazo
+                                  </span>
                                 )}
                               </td>
                               <td className="px-4 py-3">
@@ -9203,14 +9222,14 @@ export function PlanningTab({
                         </div>
                       )}
                       <div ref={contentScrollTableRef} onScroll={handleContentTableScroll} className="overflow-x-auto rounded-xl border border-slate-200 mt-2 bg-white shadow-sm scrollbar-thin scrollbar-thumb-slate-300">
-                       <table className="w-full text-left text-xs border-collapse min-w-[1050px]">
+                       <table className="w-full text-left text-xs border-collapse min-w-[1250px]">
                          <thead>
                             <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-black">
                               <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none min-w-[500px]" onClick={() => handleSort("title")}>
                                 <div className="flex items-center gap-1.5">Tarefa <SortIcon field="title" /></div>
                               </th>
                               <th className="px-4 py-3 text-center w-24">Timeline</th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center" onClick={() => handleSort("situation")}>
+                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center whitespace-nowrap min-w-[110px]" onClick={() => handleSort("situation")}>
                                 <div className="flex items-center justify-center gap-1.5">Situação <SortIcon field="situation" /></div>
                               </th>
                               <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none min-w-[140px]" onClick={() => handleSort("progress")}>
@@ -9231,13 +9250,13 @@ export function PlanningTab({
                               <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none" onClick={() => handleSort("end")}>
                                 <div className="flex items-center gap-1.5">Prazo <SortIcon field="end" /></div>
                               </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center" onClick={() => handleSort("priority")}>
+                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center whitespace-nowrap min-w-[110px]" onClick={() => handleSort("priority")}>
                                 <div className="flex items-center justify-center gap-1.5">Prioridade <SortIcon field="priority" /></div>
                               </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center" onClick={() => handleSort("isProgrammed")}>
-                                <div className="flex items-center justify-center gap-1.5">Classificação <SortIcon field="isProgrammed" /></div>
+                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center whitespace-nowrap min-w-[125px]" onClick={() => handleSort("isProgrammed")}>
+                                <div className="flex items-center justify-center gap-1.5">Programação <SortIcon field="isProgrammed" /></div>
                               </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center" onClick={() => handleSort("status")}>
+                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center whitespace-nowrap min-w-[125px]" onClick={() => handleSort("status")}>
                                 <div className="flex items-center justify-center gap-1.5">Status <SortIcon field="status" /></div>
                               </th>
                               <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center" onClick={() => handleSort("createdBy")}>
@@ -9269,10 +9288,20 @@ export function PlanningTab({
                                const taskChildrenCount = childrenMap[task.id]?.length || 0;
                                const normStatus = normalizeStatus(task.status);
                                const dlStatus = getDeadlineStatus(task.endDate, task.status);
+                               const rowBorderColor = dlStatus === "Atrasada"
+                                 ? "!border-l-[5px] !border-l-rose-500"
+                                 : dlStatus === "Crítica"
+                                 ? "!border-l-[5px] !border-l-amber-400"
+                                 : "!border-l-[5px] !border-l-emerald-500";
+                               const rowBgClass = dlStatus === "Atrasada"
+                                 ? "bg-rose-50/10 hover:bg-rose-50/30"
+                                 : dlStatus === "Crítica"
+                                 ? "bg-amber-50/10 hover:bg-amber-50/30"
+                                 : "bg-white hover:bg-emerald-50/20";
 
                                return (
-                                 <tr key={task.id} className="hover:bg-slate-50/50 transition-colors group">
-                                   <td className="px-4 py-3 border-r border-slate-50 min-w-[500px] w-[500px] whitespace-normal">
+                                 <tr key={task.id} className={`transition-colors group ${rowBorderColor} ${rowBgClass}`}>
+                                   <td className={`px-4 py-3 border-r border-slate-50 min-w-[500px] w-[500px] whitespace-normal ${rowBorderColor}`}>
                                      <span className="font-bold text-slate-800 hover:text-indigo-600 block cursor-pointer transition-colors" onClick={() => handleEditTask(task)}>
                                        {getTaskDisplayName(task)} <span className="text-slate-400 font-normal">({taskChildrenCount})</span>
                                        {(task.type === "demanda_ouvidoria" || task.type === "recurso") && (
@@ -9327,23 +9356,27 @@ export function PlanningTab({
                                        <Activity size={12} className="text-indigo-600" />
                                      </button>
                                    </td>
-                                   <td className="px-4 py-3 border-r border-slate-50 text-center">
+                                   <td className="px-4 py-3 border-r border-slate-50 text-center whitespace-nowrap">
                                      {normStatus === "Concluída" ? (
-                                       <div className="inline-flex items-center justify-center text-emerald-500" title="Situação: No Prazo (Concluída)">
-                                         <CheckCircle2 size={16} />
-                                       </div>
+                                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title="Situação: No Prazo (Concluída)">
+                                         <CheckCircle2 size={12} className="text-slate-400 shrink-0" />
+                                         No Prazo
+                                       </span>
                                      ) : dlStatus === "Atrasada" ? (
-                                       <div className="inline-flex items-center justify-center text-rose-500" title="Situação: Atrasada">
-                                         <AlertCircle size={16} />
-                                       </div>
+                                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-300 shadow-2xs" title="Situação: Atrasada">
+                                         <AlertCircle size={12} className="text-rose-600 shrink-0" />
+                                         Atrasada
+                                       </span>
                                      ) : dlStatus === "Crítica" ? (
-                                       <div className="inline-flex items-center justify-center text-amber-500" title="Situação: Crítica">
-                                         <AlertTriangle size={16} />
-                                       </div>
+                                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs" title="Situação: Crítica">
+                                         <AlertTriangle size={12} className="text-amber-600 shrink-0" />
+                                         Crítica
+                                       </span>
                                      ) : (
-                                       <div className="inline-flex items-center justify-center text-emerald-500" title="Situação: No Prazo">
-                                         <CheckCircle2 size={16} />
-                                       </div>
+                                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title="Situação: No Prazo">
+                                         <CheckCircle2 size={12} className="text-slate-400 shrink-0" />
+                                         No Prazo
+                                       </span>
                                      )}
                                    </td>
                                    <td className="px-4 py-3 border-r border-slate-50 w-[140px] max-w-[140px] min-w-[140px]">
@@ -9387,33 +9420,48 @@ export function PlanningTab({
                                     <td className="px-4 py-3 border-r border-slate-50 font-semibold text-slate-600 whitespace-nowrap">
                                       {formatDate(task.endDate)}
                                     </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 text-center">
-                                      {task.priority && (
-                                        <div className={`inline-flex items-center gap-1 ${task.priority === "Alta" ? "text-rose-500" : task.priority === "Média" ? "text-amber-500" : "text-slate-500"}`} title={`Prioridade: ${task.priority}`}>
-                                          <Flag size={14} className={task.priority === "Alta" ? "fill-rose-100" : task.priority === "Média" ? "fill-amber-100" : ""} />
-                                        </div>
+                                    <td className="px-4 py-3 border-r border-slate-50 text-center whitespace-nowrap">
+                                      {task.priority ? (
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title={`Prioridade: ${task.priority}`}>
+                                          <Flag size={11} className="text-slate-400 shrink-0" />
+                                          {task.priority}
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-400 border border-slate-200 shadow-2xs" title="Prioridade não definida">
+                                          <Flag size={11} className="text-slate-300 shrink-0" />
+                                          Não definida
+                                        </span>
                                       )}
                                     </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 text-center text-[10px] whitespace-nowrap">
+                                    <td className="px-4 py-3 border-r border-slate-50 text-center whitespace-nowrap">
                                       {task.isProgrammed !== false ? (
-                                        <span className="font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-sm border border-indigo-100">Programada</span>
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title="Atividade Programada">
+                                          <CalendarCheck size={12} className="text-slate-400 shrink-0" />
+                                          Programada
+                                        </span>
                                       ) : (
-                                        <span className="font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-sm border border-rose-100">Não programada</span>
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title="Atividade Não Programada">
+                                          <CalendarX size={12} className="text-slate-400 shrink-0" />
+                                          Não programada
+                                        </span>
                                       )}
                                     </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 text-center">
+                                    <td className="px-4 py-3 border-r border-slate-50 text-center whitespace-nowrap">
                                       {normStatus === "Concluída" ? (
-                                        <div className="inline-flex items-center justify-center text-emerald-500" title="Status: Concluída">
-                                          <CheckCircle2 size={16} />
-                                        </div>
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs" title="Status: Concluída">
+                                          <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                                          Concluída
+                                        </span>
                                       ) : normStatus === "Em andamento" ? (
-                                        <div className="inline-flex items-center justify-center text-blue-500 animate-pulse" title="Status: Em andamento">
-                                          <Clock size={16} />
-                                        </div>
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs" title="Status: Em andamento">
+                                          <Clock size={12} className="text-blue-600 shrink-0 animate-pulse" />
+                                          Em andamento
+                                        </span>
                                       ) : (
-                                        <div className="inline-flex items-center justify-center text-slate-300" title="Status: Não iniciada">
-                                          <Circle size={16} />
-                                        </div>
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title="Status: Não iniciada">
+                                          <Circle size={12} className="text-slate-400 shrink-0" />
+                                          Não iniciada
+                                        </span>
                                       )}
                                     </td>
                                     <td className="px-4 py-3 border-r border-slate-50 text-center text-[10px] text-slate-500 font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
@@ -9910,14 +9958,21 @@ export function PlanningTab({
                                 ) : (
                                   colTasks.map(task => {
                                     const parentTask = task.parentId ? taskById[task.parentId] : null;
+                                    const dlStatus = getDeadlineStatus(task.endDate, task.status);
+                                    const cardBorderColor = dlStatus === "Atrasada"
+                                      ? "border-2 border-rose-500 hover:border-rose-600 shadow-rose-500/10"
+                                      : dlStatus === "Crítica"
+                                      ? "border-2 border-amber-400 hover:border-amber-500 shadow-amber-400/10"
+                                      : "border-2 border-emerald-500 hover:border-emerald-600 shadow-emerald-500/10";
+
                                     return (
                                       <motion.div
                                         key={task.id}
                                         whileHover={{ y: -2, scale: 1.01 }}
-                                        className={`bg-white border p-4 rounded-xl shadow-md hover:shadow-lg transition-all flex flex-col gap-3 group relative cursor-default ${
+                                        className={`bg-white p-4 rounded-xl shadow-md hover:shadow-lg transition-all flex flex-col gap-3 group relative cursor-default ${cardBorderColor} ${
                                           isTaskRecentlyModified(task.id)
-                                            ? "border-adasa-mid ring-2 ring-adasa-mid/20 shadow-lg shadow-adasa-mid/20 bg-indigo-50/20"
-                                            : "border-slate-400 hover:border-slate-600 shadow-slate-400/25 hover:shadow-slate-400/35"
+                                            ? "ring-2 ring-indigo-400/40 bg-indigo-50/10"
+                                            : ""
                                         }`}
                                       >
                                         {/* Top Priority and Title */}
@@ -9954,24 +10009,19 @@ export function PlanningTab({
                                                 </span>
                                               )}
                                               {task.priority && (
-                                                <span className={cn(
-                                                  "text-[8.5px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-sm border shadow-xs flex items-center gap-1",
-                                                  task.priority === "Alta" ? "bg-rose-50 text-rose-700 border-rose-250" :
-                                                  task.priority === "Média" ? "bg-amber-50 text-amber-700 border-amber-250" :
-                                                  "bg-slate-50 text-slate-600 border-slate-200"
-                                                )}>
-                                                  <Flag size={9} className={task.priority === "Alta" ? "fill-rose-100" : task.priority === "Média" ? "fill-amber-100" : ""} />
+                                                <span className="text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm border shadow-2xs flex items-center gap-1 bg-slate-100 text-slate-600 border-slate-200" title={`Prioridade: ${task.priority}`}>
+                                                  <Flag size={9} className="text-slate-400 shrink-0" />
                                                   {task.priority}
                                                 </span>
                                               )}
                                               {task.isProgrammed !== false ? (
-                                                <span className="text-[8.5px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-sm border flex items-center gap-1 bg-indigo-50 text-indigo-700 border-indigo-200" title="Classificação: Programada">
-                                                  <CalendarCheck size={9} />
+                                                <span className="text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm border shadow-2xs flex items-center gap-1 bg-slate-100 text-slate-600 border-slate-200" title="Classificação: Programada">
+                                                  <CalendarCheck size={9} className="text-slate-400 shrink-0" />
                                                   PROG
                                                 </span>
                                               ) : (
-                                                <span className="text-[8.5px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-sm border flex items-center gap-1 bg-rose-50 text-rose-700 border-rose-200" title="Classificação: Não Programada">
-                                                  <CalendarX size={9} />
+                                                <span className="text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm border shadow-2xs flex items-center gap-1 bg-slate-100 text-slate-600 border-slate-200" title="Classificação: Não Programada">
+                                                  <CalendarX size={9} className="text-slate-400 shrink-0" />
                                                   N. PROG
                                                 </span>
                                               )}
@@ -10533,10 +10583,16 @@ export function PlanningTab({
                                 }
 
                                 const hasSubs = (childrenMap[t.id] || []).length > 0;
+                                const dlStatus = getDeadlineStatus(t.endDate, t.status);
+                                const dlGanttBorder = dlStatus === "Atrasada"
+                                  ? "border-l-[5px] border-l-rose-500"
+                                  : dlStatus === "Crítica"
+                                  ? "border-l-[5px] border-l-amber-400"
+                                  : "border-l-[5px] border-l-emerald-500";
 
                                 return (
-                                  <div key={t.id} className="flex transition-colors hover:bg-slate-50/50 group items-stretch min-h-[52px]">
-                                    <div className="w-[450px] min-w-[450px] shrink-0 px-4 py-2 border-r border-slate-200 flex flex-col justify-center text-left bg-slate-50/10" style={{ paddingLeft: `${16 + depth * 24}px` }}>
+                                  <div key={t.id} className={`flex transition-colors hover:bg-slate-50/50 group items-stretch min-h-[52px] ${dlGanttBorder}`}>
+                                    <div className={`w-[450px] min-w-[450px] shrink-0 px-4 py-2 border-r border-slate-200 flex flex-col justify-center text-left bg-slate-50/10 ${dlGanttBorder}`} style={{ paddingLeft: `${16 + depth * 24}px` }}>
                                       <div className="flex items-center gap-1.5 mb-0.5">
                                         {hasSubs && (
                                            <div 
@@ -11044,6 +11100,12 @@ export function PlanningTab({
                           ) : (
                             activeDayTasks.map(t => {
                               const normStatus = normalizeStatus(t.status);
+                              const dlStatus = getDeadlineStatus(t.endDate, t.status);
+                              const calDayCardBorder = dlStatus === "Atrasada"
+                                ? "border-2 border-rose-500 hover:border-rose-600 shadow-rose-500/10"
+                                : dlStatus === "Crítica"
+                                ? "border-2 border-amber-400 hover:border-amber-500 shadow-amber-400/10"
+                                : "border-2 border-emerald-500 hover:border-emerald-600 shadow-emerald-500/10";
                               
                               let statusClasses = "bg-slate-100 text-slate-600 border-slate-200";
                               if (normStatus === "Concluída") {
@@ -11056,7 +11118,7 @@ export function PlanningTab({
                                 <div
                                   key={t.id}
                                   onClick={() => handleEditTask(t)}
-                                  className="border border-slate-200 hover:border-indigo-400 p-4 rounded-2xl hover:shadow-xs transition-all cursor-pointer bg-white group space-y-2.5"
+                                  className={`p-4 rounded-2xl hover:shadow-xs transition-all cursor-pointer bg-white group space-y-2.5 ${calDayCardBorder}`}
                                 >
                                   <div className="flex items-start justify-between gap-2">
                                     <span className="text-[8px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wider">
@@ -12900,12 +12962,19 @@ export function PlanningTab({
     // To respect the rule: Lucide React icons to differentiate root task from subtask
     const TaskIcon = depth === 0 ? FolderKanban : ListTodo;
     const isRecent = isTaskRecentlyModified(task.id);
+    const dlStatus = getDeadlineStatus(task.endDate, task.status);
+    const verticalBarBorder = dlStatus === "Atrasada"
+      ? "border-2 border-rose-500 text-rose-600 bg-rose-50/20 hover:bg-rose-50/50 shadow-xs"
+      : dlStatus === "Crítica"
+      ? "border-2 border-amber-400 text-amber-600 bg-amber-50/20 hover:bg-amber-50/50 shadow-xs"
+      : "border border-slate-200 text-slate-400 bg-slate-50/70 hover:bg-slate-100 hover:text-slate-600 shadow-2xs";
+    const nodeBgTint = depth > 0 ? "bg-slate-50/50" : "bg-white";
 
     return (
       <div 
         key={task.id} 
         id={`task-node-${task.id}`}
-        className={`w-full border-b border-indigo-100 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)_inset] last:border-none last:shadow-none ${depth > 0 ? "bg-indigo-50/40" : "bg-white"} ${hasSubs ? "border-l-[5px] border-l-adasa-dark" : "border-l-[5px] border-l-transparent"} ${isRecent ? "rounded-xl ring-2 ring-indigo-500 ring-inset bg-indigo-50/30 my-1 relative z-10" : ""}`}
+        className={`w-full border-b border-b-slate-100 last:border-b-0 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.03)_inset] ${nodeBgTint} ${isRecent ? "rounded-xl ring-2 ring-indigo-500 ring-inset my-1 relative z-10" : ""}`}
       >
         {/* Node Layout block */}
         <div 
@@ -12929,12 +12998,13 @@ export function PlanningTab({
               <div className="w-6 shrink-0" />
             )}
 
-            <div className="flex gap-2 flex-1 min-w-0">
+            <div className="flex gap-2.5 flex-1 min-w-0">
               <div 
                 onClick={() => handleEditTask(task)}
-                className="p-2 rounded-xl mt-0.5 cursor-pointer flex-shrink-0 bg-slate-100 text-slate-500 hover:bg-white hover:border hover:border-slate-200 hover:text-adasa-mid transition-all shadow-sm"
+                className={`w-7 sm:w-8 rounded-2xl mt-0.5 cursor-pointer flex-shrink-0 flex flex-col items-center justify-start pt-2.5 pb-2 px-1 transition-all ${verticalBarBorder}`}
+                title={`Situação: ${dlStatus} - Clique para abrir atividade`}
               >
-                <TaskIcon size={14} />
+                <TaskIcon size={14} className="stroke-[2.5]" />
               </div>
 
               <div className="min-w-0 flex-1">
@@ -12961,85 +13031,125 @@ export function PlanningTab({
                   {hasSubs && (
                     <span 
                       className="text-xs font-black px-2 py-1 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-lg flex items-center gap-1.5 hover:bg-indigo-100 transition-all cursor-pointer shadow-sm"
-                      title="Totais de Subtarefas"
+                      title="Totais de Subatividades"
                       onClick={(e) => {
                          e.stopPropagation();
                          toggleExpand(task.id);
                       }}
                     >
-                      Subtarefas ({taskChildren.length})
+                      Subatividades ({taskChildren.length})
                     </span>
                   )}
+                </div>
 
+                {/* Boxes de Prioridade, Programação, Status e Situação em linha abaixo do nome */}
+                <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                   {task.priority && (
                     <span 
-                      className={`text-[9px] font-bold uppercase p-1 rounded-md border flex items-center justify-center ${getPriorityBadgeClass(task.priority)}`}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
                       title={`Prioridade: ${task.priority}`}
                     >
-                      <Flag size={12} className={task.priority === "Alta" ? "fill-rose-100" : task.priority === "Média" ? "fill-amber-100" : ""} />
+                      <Flag size={10} className="text-slate-400 shrink-0" />
+                      Prioridade: {task.priority}
                     </span>
                   )}
 
                   {task.isProgrammed !== false ? (
                     <span 
-                      className="text-[9px] font-black uppercase tracking-wider p-1 rounded-md border flex items-center justify-center bg-indigo-50 text-indigo-700 border-indigo-200"
-                      title="PROGRAMADA"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
+                      title="Atividade Programada"
                     >
-                      <CalendarCheck size={12} />
+                      <CalendarCheck size={11} className="text-slate-400 shrink-0" />
+                      Programada
                     </span>
                   ) : (
                     <span 
-                      className="text-[9px] font-black uppercase tracking-wider p-1 rounded-md border flex items-center justify-center bg-rose-50 text-rose-700 border-rose-200"
-                      title="NÃO PROGRAMADA"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
+                      title="Atividade Não Programada"
                     >
-                      <CalendarX size={12} />
+                      <CalendarX size={11} className="text-slate-400 shrink-0" />
+                      Não programada
                     </span>
                   )}
 
                   {(() => {
                     const normStatus = normalizeStatus(task.status);
-                    let statusClasses = "bg-slate-100 text-slate-600 border-slate-200";
-                    let StatusIcon = Circle;
                     if (normStatus === "Concluída") {
-                      statusClasses = "bg-emerald-50 text-emerald-700 border-emerald-200";
-                      StatusIcon = CheckCircle2;
-                    } else if (normStatus === "Em andamento") {
-                      statusClasses = "bg-blue-50 text-blue-700 border-blue-200";
-                      StatusIcon = Clock;
+                      return (
+                        <span 
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs"
+                          title="Status: Concluída"
+                        >
+                          <CheckCircle2 size={11} className="text-emerald-600" />
+                          Concluída
+                        </span>
+                      );
                     }
-
+                    if (normStatus === "Em andamento") {
+                      return (
+                        <span 
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs"
+                          title="Status: Em andamento"
+                        >
+                          <Clock size={11} className="text-blue-600 animate-pulse" />
+                          Em andamento
+                        </span>
+                      );
+                    }
                     return (
                       <span 
-                        className={`text-[9px] font-black uppercase p-1 rounded-md border flex items-center justify-center ${statusClasses}`}
-                        title={`Status: ${normStatus}`}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
+                        title="Status: Não iniciada"
                       >
-                        <StatusIcon size={12} />
+                        <Circle size={11} className="text-slate-400" />
+                        Não iniciada
                       </span>
                     );
                   })()}
 
                   {(() => {
-                    if (normalizeStatus(task.status) === "Concluída") return null;
+                    const normStatus = normalizeStatus(task.status);
                     const dlStatus = getDeadlineStatus(task.endDate, task.status);
-                    let dlClasses = "bg-slate-550 text-slate-500 border-slate-200";
-                    let DlIcon = CheckCircle2;
-                    if (dlStatus === "Atrasada") {
-                      dlClasses = "bg-rose-500 text-white border-rose-500 shadow-xs";
-                      DlIcon = AlertCircle;
-                    } else if (dlStatus === "Crítica") {
-                      dlClasses = "bg-amber-500 text-white border-amber-500 shadow-xs";
-                      DlIcon = AlertTriangle;
-                    } else {
-                      dlClasses = "bg-emerald-50 text-emerald-800 border-emerald-200";
-                      DlIcon = CheckCircle2;
+                    if (normStatus === "Concluída") {
+                      return (
+                        <span 
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
+                          title="Situação: No Prazo (Concluída)"
+                        >
+                          <CheckCircle2 size={11} className="text-slate-400" />
+                          No Prazo
+                        </span>
+                      );
                     }
-
+                    if (dlStatus === "Atrasada") {
+                      return (
+                        <span 
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-300 shadow-2xs"
+                          title="Situação: Atrasada"
+                        >
+                          <AlertCircle size={11} className="text-rose-600" />
+                          Atrasada
+                        </span>
+                      );
+                    }
+                    if (dlStatus === "Crítica") {
+                      return (
+                        <span 
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs"
+                          title="Situação: Crítica"
+                        >
+                          <AlertTriangle size={11} className="text-amber-600" />
+                          Crítica
+                        </span>
+                      );
+                    }
                     return (
                       <span 
-                        className={`text-[9px] uppercase tracking-wider p-1 rounded-md border flex items-center justify-center ${dlClasses}`}
-                        title={`Situação: ${dlStatus}`}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
+                        title="Situação: No Prazo"
                       >
-                        <DlIcon size={12} />
+                        <CheckCircle2 size={11} className="text-slate-400" />
+                        No Prazo
                       </span>
                     );
                   })()}
@@ -13243,7 +13353,7 @@ export function PlanningTab({
                 className="p-1.5 px-2.5 bg-white border border-slate-200 text-slate-600 hover:text-adasa-mid hover:border-adasa-200 rounded-lg transition shadow-sm text-xs font-bold flex items-center gap-1.5"
                 title="Adicionar subatividade"
               >
-                <Plus size={13} /> Subtarefas
+                <Plus size={13} /> Subatividades
               </button>
               <button
                 onClick={(e) => {
