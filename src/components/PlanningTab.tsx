@@ -84,6 +84,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pi
 import { PlanningSkeleton } from "../modules/planning/PlanningSkeleton";
 import { TaskModelManager } from "./TaskModelManager";
 import { RadarAtividadesTab } from "./RadarAtividadesTab";
+import { TaskTimelineModal } from "./TaskTimelineModal";
  
 interface PlanningTabProps {
   tasks: Task[];
@@ -3115,13 +3116,20 @@ export function PlanningTab({
   }, [groupedPlanQuarterAreaData, expandedPlanQuarterAreaGroups, isAnyFilterActive]);
 
   const planAreaTimelineData = useMemo(() => {
+    const isPlanFilterActive = planFilter !== "all" && planFilter !== "";
     const planMap: Record<number, { plan: Plan; tasks: Task[]; areaMap: Record<number, { area: Pick<Area, "id"|"name">; tasks: Task[] }> }> = {};
     
-    plans.forEach(p => {
+    const candidatePlans = isPlanFilterActive
+      ? plans.filter(p => String(p.id) === String(planFilter))
+      : plans;
+
+    candidatePlans.forEach(p => {
       planMap[p.id] = { plan: p, tasks: [], areaMap: {} };
     });
     const NO_PLAN_ID = 0;
-    planMap[NO_PLAN_ID] = { plan: { id: 0, name: "Sem Plano Vinculado", description: "" }, tasks: [], areaMap: {} };
+    if (!isPlanFilterActive || String(planFilter) === "0") {
+      planMap[NO_PLAN_ID] = { plan: { id: 0, name: "Sem Plano Vinculado", description: "" }, tasks: [], areaMap: {} };
+    }
 
     // Group tasks
     filteredTasks.forEach(t => {
@@ -3226,6 +3234,7 @@ export function PlanningTab({
     Object.keys(planMap).forEach(pKey => {
       const pId = Number(pKey);
       const planEntry = planMap[pId];
+      if (isPlanFilterActive && String(pId) !== String(planFilter)) return;
 
       // If plan is closed with official snapshot, use frozen data to preserve historical accuracy
       const isPlanClosedWithSnapshot = !!(planEntry.plan?.isClosed && planEntry.plan?.snapshotData);
@@ -3253,6 +3262,9 @@ export function PlanningTab({
           });
         }
         areaNodes.sort((a, b) => a.name.localeCompare(b.name));
+
+        // If area filter is active, don't show plan if none of its areas match
+        if (selectedAreaIds.length > 0 && areaNodes.length === 0) return;
 
         tree.push({
           id: `pt-p-${pId}`,
@@ -3313,7 +3325,7 @@ export function PlanningTab({
 
     tree.sort((a, b) => a.name.localeCompare(b.name));
     return tree;
-  }, [filteredTasks, plans, areas, selectedAreaIds]);
+  }, [filteredTasks, plans, areas, selectedAreaIds, planFilter]);
 
   const [expandedTimelineGroups, setExpandedTimelineGroups] = useState<Record<string, boolean>>({});
 
@@ -6730,7 +6742,7 @@ export function PlanningTab({
 
               <div className="overflow-x-auto pb-6">
                 <div className="min-w-[1000px] py-4">
-                  <div className="grid grid-cols-[220px_90px_90px_1fr_1fr_1fr_1fr] gap-4 mb-3 border-b border-slate-100 pb-3">
+                  <div className="grid grid-cols-[280px_90px_90px_1fr_1fr_1fr_1fr] gap-4 mb-3 border-b border-slate-100 pb-3">
                     <div className="font-black text-[10px] uppercase text-slate-400 tracking-widest self-end pb-1 pl-2">Plano / Área</div>
                     <div className="font-black text-[10px] uppercase text-slate-400 tracking-widest self-end pb-1 text-center">Data Início</div>
                     <div className="font-black text-[10px] uppercase text-slate-400 tracking-widest self-end pb-1 text-center">Data Fim</div>
@@ -6764,9 +6776,9 @@ export function PlanningTab({
                           <div 
                             key={row.id} 
                             className={cn(
-                              "grid grid-cols-[220px_90px_90px_1fr_1fr_1fr_1fr] gap-4 items-center p-3 rounded-2xl transition-colors border shadow-sm relative group/row hover:z-50",
+                              "grid grid-cols-[280px_90px_90px_1fr_1fr_1fr_1fr] gap-4 items-center p-3 rounded-2xl transition-colors border shadow-sm relative group/row hover:z-50",
                               isPlan 
-                                ? "bg-slate-50 hover:bg-indigo-50/20 text-slate-800 border-l-[3px] border-l-indigo-500 border-t-slate-100 border-r-slate-100 border-b-slate-100 cursor-pointer" 
+                                ? "bg-slate-50 hover:bg-slate-100/70 text-slate-800 border-l-[4px] border-l-adasa-mid border-t-slate-100 border-r-slate-100 border-b-slate-100 cursor-pointer" 
                                 : "bg-white hover:bg-slate-50 text-slate-700 border-slate-100"
                             )}
                             onClick={() => {
@@ -6779,11 +6791,11 @@ export function PlanningTab({
                             }}
                           >
                             {/* Timeline connector visual line behind blocks */}
-                            <div className="absolute top-1/2 left-[440px] right-8 h-0.5 bg-slate-100 -translate-y-1/2 z-0 hidden sm:block pointer-events-none" />
+                            <div className="absolute top-1/2 left-[500px] right-8 h-0.5 bg-slate-100 -translate-y-1/2 z-0 hidden sm:block pointer-events-none" />
                             
                             <div className="flex items-center gap-1.5 z-10 pr-2 pl-2" style={{ paddingLeft: `${row.depth * 1.5 + 0.5}rem` }}>
                                {isPlan ? (
-                                <span className="text-slate-400 group-hover/row:text-indigo-600 transition-colors p-0.5">
+                                <span className="text-slate-400 group-hover/row:text-adasa-mid transition-colors p-0.5">
                                   {isExpanded ? <ChevronDown size={14} className="stroke-[2.5]" /> : <ChevronRight size={14} className="stroke-[2.5]" />}
                                 </span>
                                ) : (
@@ -6792,11 +6804,6 @@ export function PlanningTab({
                                <span className={cn("truncate", isPlan ? "font-black text-sm" : "font-semibold text-[13px]")} title={row.name}>
                                  {row.name}
                                </span>
-                               {isPlan && row.isClosed && (
-                                 <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 ml-1.5 shrink-0" title={`Homologado em ${formatDateTime(row.closedAt)} por ${row.closedBy || 'Sistema'}`}>
-                                   <Lock size={10} className="text-amber-800" /> HOMOLOGADO
-                                 </span>
-                               )}
                             </div>
                             
                             <div className="text-center font-medium text-xs text-slate-500 z-10">
@@ -8262,564 +8269,21 @@ export function PlanningTab({
 
         {/* Dashboard Timeline Modal Overlay */}
         {timelineTaskId !== null && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex flex-col p-4 sm:p-8 md:p-12 items-center justify-center overflow-hidden">
-            <div className="bg-white rounded-[2rem] w-full max-w-5xl h-full max-h-[90vh] shadow-2xl relative flex flex-col">
-              <div className="flex z-20 justify-between items-center p-6 border-b border-slate-100 shrink-0">
-                 <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
-                   <h3 className="text-xl font-black text-slate-800 tracking-tight">Evolução do Item</h3>
-                   <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-xs shrink-0 self-start sm:self-auto">
-                     <button
-                       type="button"
-                       onClick={() => setTimelineModalTab("timeline")}
-                       className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer ${timelineModalTab === "timeline" ? "bg-white text-slate-850 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-800"}`}
-                     >
-                       Linha do Tempo
-                     </button>
-                     <button
-                       type="button"
-                       onClick={() => setTimelineModalTab("gantt")}
-                       className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer ${timelineModalTab === "gantt" ? "bg-white text-slate-850 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-800"}`}
-                     >
-                       Gráfico de Gantt
-                     </button>
-                      <button
-                        type="button"
-                        onClick={() => setTimelineModalTab("calc")}
-                        className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer ${timelineModalTab === "calc" ? "bg-white text-slate-850 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-800"}`}
-                      >
-                        Cálculo do Progresso
-                      </button>
-                   </div>
-                 </div>
-                 <button onClick={() => setTimelineTaskId(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={24} className="text-slate-500 hover:text-slate-800" /></button>
-              </div>
-              <div className="p-6 sm:p-10 overflow-y-auto custom-scrollbar flex-1 relative">
-                {timelineModalTab === "timeline" ? (
-                  <>
-                    <div className="mb-8 border-b border-slate-100 pb-4">
-                      <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                        <Activity size={16} className="text-adasa-mid" /> 
-                        Linha do Tempo: {getTaskDisplayName(taskById[timelineTaskId]) || ""}
-                      </h4>
-                      <p className="text-[11px] font-semibold text-slate-500 mt-1 mb-4">
-                        Exibindo a hierarquia da tarefa (predecessores e subtarefas dependentes). As estatísticas referem-se à tarefa selecionada e suas filhas.
-                      </p>
-                      {(() => {
-                        const getDescendantsAndSelf = (id: number): number[] => {
-                          const res = [id];
-                          const children = childrenMap[id] || [];
-                          children.forEach(c => res.push(...getDescendantsAndSelf(c.id)));
-                          return res;
-                        };
-                        const descendantsIds = new Set(getDescendantsAndSelf(timelineTaskId));
-                        const childrenTasks = timelineTasks.filter(t => descendantsIds.has(t.task.id));
-                        const total = childrenTasks.length;
-                        if (total === 0) return null;
-                        
-                        const completed = childrenTasks.filter(t => normalizeStatus(t.task.status) === "Concluída").length;
-                        const inProgress = childrenTasks.filter(t => normalizeStatus(t.task.status) === "Em andamento").length;
-                        const pending = total - completed - inProgress;
-                        
-                        return (
-                          <div className="flex flex-wrap items-center justify-center gap-4 py-2">
-                            <div className="flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm">
-                              <span>TOTAIS <span className="border-l border-slate-300 ml-2 pl-2 text-sm font-extrabold">{total}</span></span>
-                            </div>
-                            <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm">
-                              <CheckCircle2 size={16} /> CONCLUÍDAS <span className="border-l border-emerald-200 ml-1 pl-2 text-sm font-extrabold">{completed}</span>
-                            </div>
-                            <div className="flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm">
-                              <Activity size={16} /> EM ANDAMENTO <span className="border-l border-blue-200 ml-1 pl-2 text-sm font-extrabold">{inProgress}</span>
-                            </div>
-                            <div className="flex items-center gap-2 bg-slate-50 text-slate-600 border border-slate-200 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm">
-                              <Clock size={16} /> NÃO INICIADAS <span className="border-l border-slate-200 ml-1 pl-2 text-sm font-extrabold">{pending}</span>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                    <div className="relative border-l-2 border-slate-200/80 ml-4 lg:ml-6 pl-6 lg:pl-10 space-y-12">
-                      {timelineTasks.map(({ task, depth, isTarget, isAncestor }, idx) => (
-                        <div key={task.id} className="relative group z-10">
-                          {depth > 0 && (
-                            <div 
-                              className="absolute top-4 border-t-2 border-slate-200/80 border-dashed -z-10"
-                              style={{ left: '-20px', width: `calc(20px + ${Math.min(depth * 1.5, 6)}rem)` }}
-                            />
-                          )}
-                          
-                          <div className={`absolute -left-[37px] lg:-left-[55px] top-1.5 z-10 w-6 h-6 lg:w-7 lg:h-7 rounded-full border-[3px] border-white flex items-center justify-center shadow-sm transition-transform duration-300 group-hover:scale-110 ${normalizeStatus(task.status) === "Concluída" ? "bg-emerald-500" : normalizeStatus(task.status) === "Em andamento" ? "bg-blue-500" : "bg-slate-400"}`}>
-                            {normalizeStatus(task.status) === "Concluída" ? <CheckCircle2 size={12} className="text-white" /> : normalizeStatus(task.status) === "Em andamento" ? <Activity size={12} className="text-white" /> : <Clock size={12} className="text-white" />}
-                          </div>
-                          
-                          <div 
-                            className={cn("border p-5 rounded-2xl hover:shadow-md transition-all cursor-pointer group-hover:-translate-y-0.5", isTarget ? "bg-indigo-50/50 border-indigo-300 shadow-md ring-2 ring-indigo-500/20" : isAncestor ? "bg-slate-50/50 border-slate-200 opacity-80 hover:opacity-100" : "bg-white border-slate-200/70 hover:border-adasa-mid/60")} 
-                            onClick={() => { setTimelineTaskId(null); handleEditTask(task); }}
-                            style={{ marginLeft: `${depth > 0 ? Math.min(depth * 1.5, 6) : 0}rem` }}
-                          >
-                            <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4 mb-4">
-                              <div className="space-y-1.5">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  {isTarget && <span className="text-[10px] font-black tracking-widest uppercase text-white bg-indigo-500 px-2.5 py-0.5 rounded-md flex items-center gap-1 shadow-sm"><Activity size={10} className="text-indigo-100" /> Selecionada</span>}
-                                  <span className="text-[10px] font-black tracking-widest uppercase text-slate-400 bg-slate-200/50 px-2 py-0.5 rounded-md">ID: {task.id}</span>
-                                  <span className={`text-[9px] font-bold uppercase py-0.5 px-2 rounded-md border flex items-center gap-1 ${getPriorityBadgeClass(task.priority)}`}>
-                                    <Flag size={10} className={task.priority === "Alta" ? "fill-rose-100" : task.priority === "Média" ? "fill-amber-100" : ""} />
-                                    {task.priority}
-                                  </span>
-
-                                  {(() => {
-                                    const normStatus = normalizeStatus(task.status);
-                                    let statusClasses = "bg-slate-100 text-slate-600 border-slate-200";
-                                    let StatusIcon = Circle;
-                                    if (normStatus === "Concluída") {
-                                      statusClasses = "bg-emerald-50 text-emerald-700 border-emerald-200";
-                                      StatusIcon = CheckCircle2;
-                                    } else if (normStatus === "Em andamento") {
-                                      statusClasses = "bg-blue-50 text-blue-700 border-blue-200";
-                                      StatusIcon = Clock;
-                                    }
-
-                                    return (
-                                      <span className={`text-[9px] font-black uppercase py-0.5 px-2 rounded-md border flex items-center gap-1 ${statusClasses}`}>
-                                        <StatusIcon size={10} />
-                                        {normStatus}
-                                      </span>
-                                    );
-                                  })()}
-
-                                  {(() => {
-                                    if (normalizeStatus(task.status) === "Concluída") return null;
-                                    const dlStatus = getDeadlineStatus(task.endDate, task.status);
-                                    let dlClasses = "bg-slate-550 text-slate-500 border-slate-200";
-                                    let DlIcon = CheckCircle2;
-                                    if (dlStatus === "Atrasada") {
-                                      dlClasses = "bg-rose-500 text-white border-rose-500 font-extrabold shadow-xs";
-                                      DlIcon = AlertCircle;
-                                    } else if (dlStatus === "Crítica") {
-                                      dlClasses = "bg-amber-500 text-white border-amber-500 font-extrabold shadow-xs";
-                                      DlIcon = AlertTriangle;
-                                    } else {
-                                      dlClasses = "bg-emerald-50 text-emerald-800 border-emerald-200 font-semibold";
-                                      DlIcon = CheckCircle2;
-                                    }
-
-                                    return (
-                                      <span className={`text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border flex items-center gap-1 ${dlClasses}`}>
-                                        <DlIcon size={10} />
-                                        {dlStatus}
-                                      </span>
-                                    );
-                                  })()}
-                                  {task.parentId && (
-                                    <span className="text-[10px] font-black tracking-widest uppercase text-indigo-500 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md flex items-center gap-1"><GitCommit size={10} /> Subatividade</span>
-                                  )}
-                                  {task.categoryIds?.map(cid => {
-                                    const cat = categories.find(c => c.id === cid);
-                                    return cat ? (
-                                      <span key={cid} className="text-[9px] font-bold uppercase text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                        <Tag size={10} /> {cat.name}
-                                      </span>
-                                    ) : null;
-                                  })}
-                                </div>
-                                <h4 className="text-base font-black text-slate-800 leading-tight group-hover:text-adasa-mid transition-colors">{getTaskDisplayName(task)}</h4>
-                              </div>
-                              <div className="flex items-center gap-3 shrink-0 bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex-wrap justify-end">
-                                <div className="flex flex-col items-start gap-1">
-                                  <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                                    <CalendarRange size={12} className="text-adasa-mid" /> Início
-                                  </div>
-                                  <div className="text-sm font-black text-slate-800">{formatDate(task.startDate) || "Não definido"}</div>
-                                </div>
-                                <div className="w-px h-8 bg-slate-100"></div>
-                                <div className="flex flex-col items-start gap-1">
-                                  <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                                    <CalendarRange size={12} className="text-adasa-mid" /> Prazo final
-                                  </div>
-                                  <div className="text-sm font-black text-slate-800">{formatDate(task.endDate) || "Não definido"}</div>
-                                </div>
-                              </div>
-                            </div>
-
-                            {task.description && (
-                              <p className="text-xs font-semibold text-slate-600 mb-4 leading-relaxed line-clamp-2">{task.description}</p>
-                            )}
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-200/70">
-                              <div className="space-y-4">
-                                {task.responsibleIds && task.responsibleIds.length > 0 && (
-                                  <div className="space-y-2">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Responsáveis</span>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {task.responsibleIds.map(rid => {
-                                        const resp = responsibles.find(r => r.id === rid);
-                                        if (!resp) return null;
-                                        const initials = resp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-                                        return (
-                                          <div key={rid} className="flex items-center justify-center w-7 h-7 text-[10px] font-bold text-slate-700 bg-slate-100 rounded-full border border-slate-200 shadow-sm" title={resp.name}>
-                                            {initials}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-                                
-                                {task.dependsOnTaskId && taskById[task.dependsOnTaskId] && (
-                                  <div className="space-y-2">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Depende de</span>
-                                    <div className="flex items-center gap-2 text-[11px] font-bold text-slate-700 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-sm w-max" title={getTaskDisplayName(taskById[task.dependsOnTaskId])}>
-                                      <Link2 size={14} className="text-slate-400" />
-                                      <span className="max-w-[200px] truncate">{getTaskDisplayName(taskById[task.dependsOnTaskId])}</span>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="space-y-2">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block flex justify-between">Progresso <span className="text-adasa-mid">{task.progress}%</span></span>
-                                <div className="h-2 bg-slate-200 rounded-full overflow-hidden border border-slate-200/50">
-                                  <div className={`h-full ${normalizeStatus(task.status) === "Concluída" ? "bg-emerald-500" : "bg-adasa-mid"} transition-all duration-500`} style={{ width: `${task.progress || 0}%` }} />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      
-                      {timelineTasks.length === 0 && (
-                        <div className="text-center py-10 text-slate-400 font-semibold italic text-sm">
-                          Nenhuma tarefa encontrada na linha do tempo.
-                        </div>
-                      )}
-                    </div>
-                  </>
-                ) : timelineModalTab === "calc" ? (
-                  <div className="mt-4">
-                    {renderProgressCalc(timelineTaskId, timelineTaskId ? (taskById[timelineTaskId]?.progress ?? 0) : 0)}
-                  </div>
-                ) : (() => {
-                  const parseSafeDate = (dateStr: string | null | undefined): Date | null => {
-                    if (!dateStr) return null;
-                    try {
-                      let d: Date;
-                      if (dateStr.includes("-")) {
-                        const parts = dateStr.split("T")[0].split("-");
-                        d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-                      } else {
-                        d = new Date(dateStr);
-                      }
-                      return isNaN(d.getTime()) ? null : d;
-                    } catch (e) {
-                      return null;
-                    }
-                  };
-
-                  const tasksWithDates = timelineTasks.map(t => t.task).filter(t => t.startDate && t.endDate);
-                  
-                  let startDateLimit = new Date();
-                  startDateLimit.setMonth(startDateLimit.getMonth() - 1);
-                  let endDateLimit = new Date();
-                  endDateLimit.setMonth(endDateLimit.getMonth() + 4);
-                  
-                  const parsedTasks = tasksWithDates.map(t => ({
-                    task: t,
-                    start: parseSafeDate(t.startDate)!,
-                    end: parseSafeDate(t.endDate)!
-                  })).filter(item => item.start !== null && item.end !== null && item.start <= item.end);
-                  
-                  if (parsedTasks.length > 0) {
-                    let minT = new Date(Math.min(...parsedTasks.map(t => t.start.getTime())));
-                    let maxT = new Date(Math.max(...parsedTasks.map(t => t.end.getTime())));
-                    
-                    minT.setDate(minT.getDate() - 7);
-                    maxT.setDate(maxT.getDate() + 15);
-                    
-                    startDateLimit = minT;
-                    endDateLimit = maxT;
-                  }
-                  
-                  startDateLimit.setHours(0,0,0,0);
-                  endDateLimit.setHours(23,59,59,999);
-                  
-                  const totalDays = Math.max(1, Math.round((endDateLimit.getTime() - startDateLimit.getTime()) / (1000 * 60 * 60 * 24)));
-                  const gridColumns: { label: string; widthPercent: number; key: string }[] = [];
-
-                  if (ganttScale === "mes") {
-                    let currentPointer = new Date(startDateLimit);
-                    currentPointer.setDate(1);
-                    
-                    const monthsList: { year: number; month: number }[] = [];
-                    const endPointer = new Date(endDateLimit);
-                    
-                    while (currentPointer <= endPointer) {
-                      monthsList.push({
-                        year: currentPointer.getFullYear(),
-                        month: currentPointer.getMonth()
-                      });
-                      currentPointer.setMonth(currentPointer.getMonth() + 1);
-                    }
-                    
-                    monthsList.forEach(({ year, month }) => {
-                      const monthStart = new Date(year, month, 1, 0, 0, 0, 0);
-                      const monthEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
-                      
-                      const startClamp = monthStart < startDateLimit ? startDateLimit : monthStart;
-                      const endClamp = monthEnd > endDateLimit ? endDateLimit : monthEnd;
-                      
-                      const clampDays = Math.max(0, Math.round((endClamp.getTime() - startClamp.getTime()) / (1000 * 60 * 60 * 24)));
-                      if (clampDays > 0) {
-                        const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-                        const pct = (clampDays / totalDays) * 100;
-                        gridColumns.push({
-                          label: `${monthNames[month]}/${year}`,
-                          widthPercent: pct,
-                          key: `${year}-${month}`
-                        });
-                      }
-                    });
-                  } else if (ganttScale === "trimestre") {
-                    let currentPointer = new Date(startDateLimit);
-                    const currentQ = Math.floor(currentPointer.getMonth() / 3);
-                    currentPointer.setMonth(currentQ * 3);
-                    currentPointer.setDate(1);
-
-                    const quartersList: { year: number; quarter: number }[] = [];
-                    const endPointer = new Date(endDateLimit);
-
-                    while (currentPointer <= endPointer) {
-                      const q = Math.floor(currentPointer.getMonth() / 3);
-                      quartersList.push({
-                        year: currentPointer.getFullYear(),
-                        quarter: q
-                      });
-                      currentPointer.setMonth((q + 1) * 3);
-                    }
-
-                    const uniqueQuarters = quartersList.filter((item, index, self) => 
-                      self.findIndex(t => t.year === item.year && t.quarter === item.quarter) === index
-                    );
-
-                    uniqueQuarters.forEach(({ year, quarter }) => {
-                      const qStartMonth = quarter * 3;
-                      const qEndMonth = (quarter + 1) * 3 - 1;
-
-                      const qStart = new Date(year, qStartMonth, 1, 0, 0, 0, 0);
-                      const qEnd = new Date(year, qEndMonth + 1, 0, 23, 59, 59, 999);
-
-                      const startClamp = qStart < startDateLimit ? startDateLimit : qStart;
-                      const endClamp = qEnd > endDateLimit ? endDateLimit : qEnd;
-
-                      const clampDays = Math.max(0, Math.round((endClamp.getTime() - startClamp.getTime()) / (1000 * 60 * 60 * 24)));
-                      if (clampDays > 0) {
-                        const pct = (clampDays / totalDays) * 100;
-                        gridColumns.push({
-                          label: `${quarter + 1}º Trim/${year}`,
-                          widthPercent: pct,
-                          key: `${year}-Q${quarter}`
-                        });
-                      }
-                    });
-                  } else {
-                    let currentPointer = new Date(startDateLimit);
-                    const currentS = Math.floor(currentPointer.getMonth() / 6);
-                    currentPointer.setMonth(currentS * 6);
-                    currentPointer.setDate(1);
-
-                    const semestersList: { year: number; semester: number }[] = [];
-                    const endPointer = new Date(endDateLimit);
-
-                    while (currentPointer <= endPointer) {
-                      const s = Math.floor(currentPointer.getMonth() / 6);
-                      semestersList.push({
-                        year: currentPointer.getFullYear(),
-                        semester: s
-                      });
-                      currentPointer.setMonth((s + 1) * 6);
-                    }
-
-                    const uniqueSemesters = semestersList.filter((item, index, self) => 
-                      self.findIndex(t => t.year === item.year && t.semester === item.semester) === index
-                    );
-
-                    uniqueSemesters.forEach(({ year, semester }) => {
-                      const sStartMonth = semester * 6;
-                      const sEndMonth = (semester + 1) * 6 - 1;
-
-                      const sStart = new Date(year, sStartMonth, 1, 0, 0, 0, 0);
-                      const sEnd = new Date(year, sEndMonth + 1, 0, 23, 59, 59, 999);
-
-                      const startClamp = sStart < startDateLimit ? startDateLimit : sStart;
-                      const endClamp = sEnd > endDateLimit ? endDateLimit : sEnd;
-
-                      const clampDays = Math.max(0, Math.round((endClamp.getTime() - startClamp.getTime()) / (1000 * 60 * 60 * 24)));
-                      if (clampDays > 0) {
-                        const pct = (clampDays / totalDays) * 100;
-                        gridColumns.push({
-                          label: `${semester + 1}º Sem/${year}`,
-                          widthPercent: pct,
-                          key: `${year}-S${semester}`
-                        });
-                      }
-                    });
-                  }
-
-                  return (
-                    <div className="space-y-6 text-left">
-                      <div className="mb-4">
-                        <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                          <Activity size={16} className="text-indigo-600" />
-                          Cronograma do Item: {getTaskDisplayName(taskById[timelineTaskId]) || ""}
-                        </h4>
-                        <p className="text-[11px] font-semibold text-slate-500 mt-1">
-                          Acompanhe os prazos de início, término e o progresso (%) das subatividades ao longo do tempo.
-                        </p>
-                      </div>
-
-                      {/* Scale Selector & Legend */}
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                        <div className="flex items-center bg-white p-1 rounded-xl border border-slate-200 shadow-xs shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setGanttScale("mes")}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-extrabold transition-all duration-200 cursor-pointer ${ganttScale === "mes" ? "bg-slate-800 text-white shadow-xs" : "text-slate-500 hover:text-slate-850"}`}
-                          >
-                            Mês
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setGanttScale("trimestre")}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-extrabold transition-all duration-200 cursor-pointer ${ganttScale === "trimestre" ? "bg-slate-800 text-white shadow-xs" : "text-slate-500 hover:text-slate-850"}`}
-                          >
-                            Trimestre
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setGanttScale("semestre")}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-extrabold transition-all duration-200 cursor-pointer ${ganttScale === "semestre" ? "bg-slate-800 text-white shadow-xs" : "text-slate-500 hover:text-slate-850"}`}
-                          >
-                            Semestre
-                          </button>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-3 text-xs font-bold text-slate-600">
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full" /> Concluída
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-2.5 h-2.5 bg-blue-500 rounded-full" /> Em andamento
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-2.5 h-2.5 bg-slate-400 rounded-full" /> Não Iniciada
-                          </div>
-                        </div>
-                      </div>
-
-                      {timelineTasks.length === 0 ? (
-                        <div className="py-12 text-center text-slate-400 font-medium">
-                          Nenhuma atividade disponível para exibição cronológica.
-                        </div>
-                      ) : (
-                        <div className="border border-slate-200 rounded-2xl overflow-hidden flex flex-col bg-white shadow-xs">
-                          <div className="flex bg-slate-50 border-b border-slate-200 text-xs font-black uppercase text-slate-500 tracking-wider font-sans">
-                            <div className="w-1/3 min-w-[240px] px-4 py-3 bg-slate-100/30 border-r border-slate-200">
-                              Atividade
-                            </div>
-                            <div className="flex-1 relative flex">
-                              {gridColumns.map(gc => (
-                                <div 
-                                  key={gc.key}
-                                  style={{ width: `${gc.widthPercent}%` }}
-                                  className="px-2 py-3 border-r border-slate-200 last:border-r-0 text-center text-[10px] truncate"
-                                >
-                                  {gc.label}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          
-                          <div className="divide-y divide-slate-100 max-h-[40vh] overflow-y-auto custom-scrollbar">
-                            {timelineTasks.map(({ task, depth }) => {
-                              const hasDates = task.startDate && task.endDate;
-                              const dateStart = hasDates ? parseSafeDate(task.startDate) : null;
-                              const dateEnd = hasDates ? parseSafeDate(task.endDate) : null;
-                              const statusName = normalizeStatus(task.status);
-                              
-                              const statusColor = statusName === "Concluída" 
-                                ? "bg-emerald-500 hover:bg-emerald-600" 
-                                : statusName === "Em andamento" 
-                                ? "bg-blue-500 hover:bg-blue-600" 
-                                : "bg-slate-400 hover:bg-slate-500";
-                              
-                              let leftPct = 0;
-                              let widthPct = 0;
-                              
-                              if (dateStart && dateEnd && dateEnd >= dateStart) {
-                                const diffLeft = dateStart.getTime() - startDateLimit.getTime();
-                                leftPct = Math.max(0, Math.min(100, (diffLeft / (1000 * 60 * 60 * 24)) / totalDays * 100));
-                                
-                                const diffWidth = dateEnd.getTime() - dateStart.getTime();
-                                widthPct = Math.max(1, Math.min(100 - leftPct, (diffWidth / (1000 * 60 * 60 * 24)) / totalDays * 100));
-                              }
-
-                              return (
-                                <div key={task.id} className="flex transition-colors hover:bg-slate-50/50 group items-stretch min-h-[52px]">
-                                  <div className="w-1/3 min-w-[240px] px-4 py-2 border-r border-slate-200 flex flex-col justify-center text-left bg-slate-50/10">
-                                    <div className="flex items-center gap-1.5 mb-0.5" style={{ paddingLeft: `${Math.min(depth * 0.75, 4)}rem` }}>
-                                      <span className={`w-2 h-2 rounded-full shrink-0 ${statusName === "Concluída" ? "bg-emerald-500" : statusName === "Em andamento" ? "bg-blue-500" : "bg-slate-400"}`} />
-                                      <span className="text-xs font-bold text-slate-800 line-clamp-1 cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => { setTimelineTaskId(null); handleEditTask(task); }}>
-                                        {getTaskDisplayName(task)}
-                                      </span>
-                                    </div>
-                                    <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-slate-400 font-bold uppercase tracking-wider" style={{ paddingLeft: `${Math.min(depth * 0.75, 4)}rem` }}>
-                                      {task.startDate ? <span>Início: {task.startDate.split("T")[0].split("-").reverse().join("/")}</span> : null}
-                                      {task.endDate ? <span>Término: {task.endDate.split("T")[0].split("-").reverse().join("/")}</span> : null}
-                                      {!hasDates && <span className="text-amber-500 font-bold normal-case">Período não definido</span>}
-                                    </div>
-                                  </div>
-                                  
-                                  <div className="flex-1 relative flex bg-white hover:bg-slate-50/20">
-                                    <div className="absolute inset-y-0 left-0 right-0 flex pointer-events-none">
-                                      {gridColumns.map(gc => (
-                                        <div 
-                                          key={`bg-${gc.key}`}
-                                          style={{ width: `${gc.widthPercent}%` }}
-                                          className="h-full border-r border-slate-100 last:border-r-0"
-                                        />
-                                      ))}
-                                    </div>
-                                    
-                                    {hasDates && dateStart && dateEnd ? (
-                                      <div className="w-full h-full relative flex items-center px-1">
-                                        <div
-                                          style={{ marginLeft: `${leftPct}%`, width: `${widthPct}%` }}
-                                          onClick={() => { setTimelineTaskId(null); handleEditTask(task); }}
-                                          className={`h-7 rounded-lg relative overflow-hidden transition-all duration-350 shadow-xs cursor-pointer select-none flex items-center ${statusColor}`}
-                                          title={`${getTaskDisplayName(task)}: ${task.progress || 0}%`}
-                                        >
-                                          <span className="absolute inset-0 flex items-center justify-center font-bold text-[9px] text-white px-1.5 truncate">
-                                            {task.progress || 0}%
-                                          </span>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <div className="w-full flex items-center justify-center p-3 text-[10px] text-slate-300 italic">
-                                        -
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
+          <TaskTimelineModal
+            taskId={timelineTaskId}
+            onClose={() => setTimelineTaskId(null)}
+            onEditTask={handleEditTask}
+            tasks={tasks}
+            taskById={taskById}
+            childrenMap={childrenMap}
+            areas={areas}
+            categories={categories}
+            responsibles={responsibles}
+            formatDate={formatDate}
+            formatDateTime={formatDateTime}
+            showToast={showToast}
+            renderProgressCalc={renderProgressCalc}
+          />
         )}
       </div>
     );
@@ -11678,599 +11142,22 @@ export function PlanningTab({
 
             {/* Timeline Modal Overlay */}
             {timelineTaskId !== null && (
-              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex flex-col p-4 sm:p-8 md:p-12 items-center justify-center overflow-hidden">
-                <div className="bg-white rounded-[2rem] w-full max-w-5xl h-full max-h-[90vh] shadow-2xl relative flex flex-col text-left">
-                  <div className="flex z-20 justify-between items-center p-6 border-b border-slate-100 shrink-0">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
-                      <h3 className="text-xl font-black text-slate-800 tracking-tight">Evolução do Item</h3>
-                      <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-xs shrink-0 self-start sm:self-auto">
-                        <button
-                          type="button"
-                          onClick={() => setTimelineModalTab("timeline")}
-                          className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer ${timelineModalTab === "timeline" ? "bg-white text-slate-850 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-800"}`}
-                        >
-                          Linha do Tempo
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setTimelineModalTab("gantt")}
-                          className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer ${timelineModalTab === "gantt" ? "bg-white text-slate-850 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-800"}`}
-                        >
-                          Gráfico de Gantt
-                        </button>
-                      <button
-                        type="button"
-                        onClick={() => setTimelineModalTab("calc")}
-                        className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer ${timelineModalTab === "calc" ? "bg-white text-slate-850 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-800"}`}
-                      >
-                        Cálculo do Progresso
-                      </button>
-                      </div>
-                    </div>
-                    <button onClick={() => setTimelineTaskId(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                      <X size={24} className="text-slate-500 hover:text-slate-800" />
-                    </button>
-                  </div>
-                  <div className="p-6 sm:p-10 overflow-y-auto custom-scrollbar flex-1 relative text-left">
-                    {timelineModalTab === "timeline" ? (
-                      <>
-                        <div className="mb-8 border-b border-slate-100 pb-4">
-                      <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                  <Activity size={16} className="text-adasa-mid" /> 
-                  Linha do Tempo: {getTaskDisplayName(taskById[timelineTaskId]) || ""}
-                </h4>
-                <p className="text-[11px] font-semibold text-slate-500 mt-1 mb-4">
-                  Exibindo a hierarquia da tarefa (predecessores e subtarefas dependentes). As estatísticas referem-se à tarefa selecionada e suas filhas.
-                </p>
-                {(() => {
-                  const getDescendantsAndSelf = (id: number): number[] => {
-                    const res = [id];
-                    const children = childrenMap[id] || [];
-                    children.forEach(c => res.push(...getDescendantsAndSelf(c.id)));
-                    return res;
-                  };
-                  const descendantsIds = new Set(getDescendantsAndSelf(timelineTaskId));
-                  const childrenTasks = timelineTasks.filter(t => descendantsIds.has(t.task.id));
-                  const total = childrenTasks.length;
-                  if (total === 0) return null;
-                  
-                  const completed = childrenTasks.filter(t => normalizeStatus(t.task.status) === "Concluída").length;
-                  const inProgress = childrenTasks.filter(t => normalizeStatus(t.task.status) === "Em andamento").length;
-                  const pending = total - completed - inProgress;
-                  
-                  return (
-                    <div className="flex flex-wrap items-center justify-center gap-4 py-2">
-                      <div className="flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm">
-                        <span>TOTAIS <span className="border-l border-slate-300 ml-2 pl-2 text-sm font-extrabold">{total}</span></span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm">
-                        <CheckCircle2 size={16} /> CONCLUÍDAS <span className="border-l border-emerald-200 ml-1 pl-2 text-sm font-extrabold">{completed}</span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm">
-                        <Activity size={16} /> EM ANDAMENTO <span className="border-l border-blue-200 ml-1 pl-2 text-sm font-extrabold">{inProgress}</span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-slate-50 text-slate-600 border border-slate-200 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm">
-                        <Clock size={16} /> NÃO INICIADAS <span className="border-l border-slate-200 ml-1 pl-2 text-sm font-extrabold">{pending}</span>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-              <div className="relative border-l-2 border-slate-200/80 ml-4 lg:ml-6 pl-6 lg:pl-10 space-y-12">
-                {timelineTasks.map(({ task, depth, isTarget, isAncestor }, idx) => (
-                  <div key={task.id} className="relative group z-10">
-                    {depth > 0 && (
-                      <div 
-                        className="absolute top-4 border-t-2 border-slate-200/80 border-dashed -z-10"
-                        style={{ left: '-20px', width: `calc(20px + ${Math.min(depth * 1.5, 6)}rem)` }}
-                      />
-                    )}
-                    
-                    <div className={`absolute -left-[37px] lg:-left-[55px] top-1.5 z-10 w-6 h-6 lg:w-7 lg:h-7 rounded-full border-[3px] border-white flex items-center justify-center shadow-sm transition-transform duration-300 group-hover:scale-110 ${normalizeStatus(task.status) === "Concluída" ? "bg-emerald-500" : normalizeStatus(task.status) === "Em andamento" ? "bg-blue-500" : "bg-slate-400"}`}>
-                      {normalizeStatus(task.status) === "Concluída" ? <CheckCircle2 size={12} className="text-white" /> : normalizeStatus(task.status) === "Em andamento" ? <Activity size={12} className="text-white" /> : <Clock size={12} className="text-white" />}
-                    </div>
-                    
-                    <div 
-                      className={cn("border p-5 rounded-2xl hover:shadow-md transition-all cursor-pointer group-hover:-translate-y-0.5", isTarget ? "bg-indigo-50/50 border-indigo-300 shadow-md ring-2 ring-indigo-500/20" : isAncestor ? "bg-slate-50/50 border-slate-200 opacity-80 hover:opacity-100" : "bg-white border-slate-200/70 hover:border-adasa-mid/60")} 
-                      onClick={() => handleEditTask(task)}
-                      style={{ marginLeft: `${depth > 0 ? Math.min(depth * 1.5, 6) : 0}rem` }}
-                    >
-                      <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4 mb-4">
-                        <div className="space-y-1.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            {isTarget && <span className="text-[10px] font-black tracking-widest uppercase text-white bg-indigo-500 px-2.5 py-0.5 rounded-md flex items-center gap-1 shadow-sm"><Activity size={10} className="text-indigo-100" /> Selecionada</span>}
-                            <span className="text-[10px] font-black tracking-widest uppercase text-slate-400 bg-slate-200/50 px-2 py-0.5 rounded-md">ID: {task.id}</span>
-                            <span className={`text-[9px] font-bold uppercase py-0.5 px-2 rounded-md border flex items-center gap-1 ${getPriorityBadgeClass(task.priority)}`}>
-                              <Flag size={10} className={task.priority === "Alta" ? "fill-rose-100" : task.priority === "Média" ? "fill-amber-100" : ""} />
-                              {task.priority}
-                            </span>
-
-                            {(() => {
-                              const normStatus = normalizeStatus(task.status);
-                              let statusClasses = "bg-slate-100 text-slate-600 border-slate-200";
-                              let StatusIcon = Circle;
-                              if (normStatus === "Concluída") {
-                                statusClasses = "bg-emerald-50 text-emerald-700 border-emerald-200";
-                                StatusIcon = CheckCircle2;
-                              } else if (normStatus === "Em andamento") {
-                                statusClasses = "bg-blue-50 text-blue-700 border-blue-200";
-                                StatusIcon = Clock;
-                              }
-
-                              return (
-                                <span className={`text-[9px] font-black uppercase py-0.5 px-2 rounded-md border flex items-center gap-1 ${statusClasses}`}>
-                                  <StatusIcon size={10} />
-                                  {normStatus}
-                                </span>
-                              );
-                            })()}
-
-                            {(() => {
-                              if (normalizeStatus(task.status) === "Concluída") return null;
-                              const dlStatus = getDeadlineStatus(task.endDate, task.status);
-                              let dlClasses = "bg-slate-550 text-slate-500 border-slate-200";
-                              let DlIcon = CheckCircle2;
-                              if (dlStatus === "Atrasada") {
-                                dlClasses = "bg-rose-500 text-white border-rose-500 font-extrabold shadow-xs";
-                                DlIcon = AlertCircle;
-                              } else if (dlStatus === "Crítica") {
-                                dlClasses = "bg-amber-500 text-white border-amber-500 font-extrabold shadow-xs";
-                                DlIcon = AlertTriangle;
-                              } else {
-                                dlClasses = "bg-emerald-50 text-emerald-800 border-emerald-200 font-semibold";
-                                DlIcon = CheckCircle2;
-                              }
-
-                              return (
-                                <span className={`text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border flex items-center gap-1 ${dlClasses}`}>
-                                  <DlIcon size={10} />
-                                  {dlStatus}
-                                </span>
-                              );
-                            })()}
-                            
-                            {task.isProgrammed !== false ? (
-                              <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border flex items-center gap-1 bg-indigo-50 text-indigo-700 border-indigo-200">
-                                PROGRAMADA
-                              </span>
-                            ) : (
-                              <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border flex items-center gap-1 bg-rose-50 text-rose-700 border-rose-200">
-                                NÃO PROGRAMADA
-                              </span>
-                            )}
-                            
-                            {task.parentId && (
-                              <span className="text-[10px] font-black tracking-widest uppercase text-indigo-500 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md flex items-center gap-1"><GitCommit size={10} /> Subatividade</span>
-                            )}
-                            {task.categoryIds?.map(cid => {
-                              const cat = categories.find(c => c.id === cid);
-                              return cat ? (
-                                <span key={cid} className="text-[9px] font-bold uppercase text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                  <Tag size={10} /> {cat.name}
-                                </span>
-                              ) : null;
-                            })}
-                          </div>
-                          <h4 className="text-base font-black text-slate-800 leading-tight group-hover:text-adasa-mid transition-colors">{getTaskDisplayName(task)}</h4>
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0 bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex-wrap justify-end">
-                          <div className="flex flex-col items-start gap-1">
-                            <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                              <CalendarRange size={12} className="text-adasa-mid" /> Início
-                            </div>
-                            <div className="text-sm font-black text-slate-800">{formatDate(task.startDate) || "Não definido"}</div>
-                          </div>
-                          <div className="w-px h-8 bg-slate-100"></div>
-                          <div className="flex flex-col items-start gap-1">
-                            <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                              <CalendarRange size={12} className="text-adasa-mid" /> Prazo final
-                            </div>
-                            <div className="text-sm font-black text-slate-800">{formatDate(task.endDate) || "Não definido"}</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {task.description && (
-                        <p className="text-xs font-semibold text-slate-600 mb-4 leading-relaxed line-clamp-2">{task.description}</p>
-                      )}
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-200/70">
-                        <div className="space-y-4">
-  {task.responsibleIds && task.responsibleIds.length > 0 && (
-    <div className="space-y-2">
-      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Responsáveis</span>
-      <div className="flex flex-wrap gap-1.5">
-        {task.responsibleIds.map(rid => {
-          const resp = responsibles.find(r => r.id === rid);
-          if (!resp) return null;
-          const initials = resp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-          return (
-            <div key={rid} className="flex items-center justify-center w-7 h-7 text-[10px] font-bold text-slate-700 bg-slate-100 rounded-full border border-slate-200 shadow-sm" title={resp.name}>
-              {initials}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  )}
-                          
-                          {task.dependsOnTaskId && taskById[task.dependsOnTaskId] && (
-                            <div className="space-y-2">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Depende de</span>
-                              <div className="flex items-center gap-2 text-[11px] font-bold text-slate-700 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-sm w-max" title={getTaskDisplayName(taskById[task.dependsOnTaskId])}>
-                                <Link2 size={14} className="text-slate-400" />
-                                <span className="max-w-[200px] truncate">{getTaskDisplayName(taskById[task.dependsOnTaskId])}</span>
-                              </div>
-                            </div>
-                          )}
-                          
-                          {task.seiProcess && (
-                            <div className="space-y-2">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Processo SEI</span>
-                              <div className="flex items-center gap-2 text-[11px] font-bold text-slate-700 bg-white pl-2.5 pr-1 py-1 rounded-lg border border-slate-200 shadow-sm w-max">
-                                <FileDigit size={14} className="text-slate-400" />
-                                <span className="max-w-[200px] truncate font-mono">{task.seiProcess}</span>
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigator.clipboard.writeText(task.seiProcess || "");
-                                    showToast("Sucesso", "Processo SEI copiado", "success");
-                                  }}
-                                  className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600 transition-colors"
-                                  title="Copiar Processo SEI"
-                                >
-                                  <Copy size={12} />
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="space-y-2">
-                           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block flex justify-between">Progresso <span className="text-adasa-mid">{task.progress}%</span></span>
-                           <div className="h-2 bg-slate-200 rounded-full overflow-hidden border border-slate-200/50">
-                             <div className={`h-full ${normalizeStatus(task.status) === "Concluída" ? "bg-emerald-500" : "bg-adasa-mid"} transition-all duration-500`} style={{ width: `${task.progress || 0}%` }} />
-                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                
-                {timelineTasks.length === 0 && (
-                  <div className="text-center py-10 text-slate-400 font-semibold italic text-sm">
-                    Nenhuma tarefa encontrada na linha do tempo.
-                  </div>
-                )}
-                    </div>
-                  </>
-            ) : timelineModalTab === "calc" ? (
-              <div className="mt-4">
-                {renderProgressCalc(timelineTaskId, timelineTaskId ? (taskById[timelineTaskId]?.progress ?? 0) : 0)}
-              </div>
-            ) : (() => {
-              const parseSafeDate = (dateStr: string | null | undefined): Date | null => {
-                if (!dateStr) return null;
-                try {
-                  let d: Date;
-                  if (dateStr.includes("-")) {
-                    const parts = dateStr.split("T")[0].split("-");
-                    d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-                  } else {
-                    d = new Date(dateStr);
-                  }
-                  return isNaN(d.getTime()) ? null : d;
-                } catch (e) {
-                  return null;
-                }
-              };
-
-              const tasksWithDates = timelineTasks.map(t => t.task).filter(t => t.startDate && t.endDate);
-              
-              let startDateLimit = new Date();
-              startDateLimit.setMonth(startDateLimit.getMonth() - 1);
-              let endDateLimit = new Date();
-              endDateLimit.setMonth(endDateLimit.getMonth() + 4);
-              
-              const parsedTasks = tasksWithDates.map(t => ({
-                task: t,
-                start: parseSafeDate(t.startDate)!,
-                end: parseSafeDate(t.endDate)!
-              })).filter(item => item.start !== null && item.end !== null && item.start <= item.end);
-              
-              if (parsedTasks.length > 0) {
-                let minT = new Date(Math.min(...parsedTasks.map(t => t.start.getTime())));
-                let maxT = new Date(Math.max(...parsedTasks.map(t => t.end.getTime())));
-                
-                minT.setDate(minT.getDate() - 7);
-                maxT.setDate(maxT.getDate() + 15);
-                
-                startDateLimit = minT;
-                endDateLimit = maxT;
-              }
-              
-              startDateLimit.setHours(0,0,0,0);
-              endDateLimit.setHours(23,59,59,999);
-              
-              const totalDays = Math.max(1, Math.round((endDateLimit.getTime() - startDateLimit.getTime()) / (1000 * 60 * 60 * 24)));
-              const gridColumns: { label: string; widthPercent: number; key: string }[] = [];
-
-              if (ganttScale === "mes") {
-                let currentPointer = new Date(startDateLimit);
-                currentPointer.setDate(1);
-                
-                const monthsList: { year: number; month: number }[] = [];
-                const endPointer = new Date(endDateLimit);
-                
-                while (currentPointer <= endPointer) {
-                  monthsList.push({
-                    year: currentPointer.getFullYear(),
-                    month: currentPointer.getMonth()
-                  });
-                  currentPointer.setMonth(currentPointer.getMonth() + 1);
-                }
-                
-                monthsList.forEach(({ year, month }) => {
-                  const monthStart = new Date(year, month, 1, 0, 0, 0, 0);
-                  const monthEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
-                  
-                  const startClamp = monthStart < startDateLimit ? startDateLimit : monthStart;
-                  const endClamp = monthEnd > endDateLimit ? endDateLimit : monthEnd;
-                  
-                  const clampDays = Math.max(0, Math.round((endClamp.getTime() - startClamp.getTime()) / (1000 * 60 * 60 * 24)));
-                  if (clampDays > 0) {
-                    const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-                    const pct = (clampDays / totalDays) * 100;
-                    gridColumns.push({
-                      label: `${monthNames[month]}/${year}`,
-                      widthPercent: pct,
-                      key: `${year}-${month}`
-                    });
-                  }
-                });
-              } else if (ganttScale === "trimestre") {
-                let currentPointer = new Date(startDateLimit);
-                const currentQ = Math.floor(currentPointer.getMonth() / 3);
-                currentPointer.setMonth(currentQ * 3);
-                currentPointer.setDate(1);
-
-                const quartersList: { year: number; quarter: number }[] = [];
-                const endPointer = new Date(endDateLimit);
-
-                while (currentPointer <= endPointer) {
-                  const q = Math.floor(currentPointer.getMonth() / 3);
-                  quartersList.push({
-                    year: currentPointer.getFullYear(),
-                    quarter: q
-                  });
-                  currentPointer.setMonth((q + 1) * 3);
-                }
-
-                const uniqueQuarters = quartersList.filter((item, index, self) => 
-                  self.findIndex(t => t.year === item.year && t.quarter === item.quarter) === index
-                );
-
-                uniqueQuarters.forEach(({ year, quarter }) => {
-                  const qStartMonth = quarter * 3;
-                  const qEndMonth = (quarter + 1) * 3 - 1;
-
-                  const qStart = new Date(year, qStartMonth, 1, 0, 0, 0, 0);
-                  const qEnd = new Date(year, qEndMonth + 1, 0, 23, 59, 59, 999);
-
-                  const startClamp = qStart < startDateLimit ? startDateLimit : qStart;
-                  const endClamp = qEnd > endDateLimit ? endDateLimit : qEnd;
-
-                  const clampDays = Math.max(0, Math.round((endClamp.getTime() - startClamp.getTime()) / (1000 * 60 * 60 * 24)));
-                  if (clampDays > 0) {
-                    const pct = (clampDays / totalDays) * 100;
-                    gridColumns.push({
-                      label: `${quarter + 1}º Trim/${year}`,
-                      widthPercent: pct,
-                      key: `${year}-Q${quarter}`
-                    });
-                  }
-                });
-              } else {
-                let currentPointer = new Date(startDateLimit);
-                const currentS = Math.floor(currentPointer.getMonth() / 6);
-                currentPointer.setMonth(currentS * 6);
-                currentPointer.setDate(1);
-
-                const semestersList: { year: number; semester: number }[] = [];
-                const endPointer = new Date(endDateLimit);
-
-                while (currentPointer <= endPointer) {
-                  const s = Math.floor(currentPointer.getMonth() / 6);
-                  semestersList.push({
-                    year: currentPointer.getFullYear(),
-                    semester: s
-                  });
-                  currentPointer.setMonth((s + 1) * 6);
-                }
-
-                const uniqueSemesters = semestersList.filter((item, index, self) => 
-                  self.findIndex(t => t.year === item.year && t.semester === item.semester) === index
-                );
-
-                uniqueSemesters.forEach(({ year, semester }) => {
-                  const sStartMonth = semester * 6;
-                  const sEndMonth = (semester + 1) * 6 - 1;
-
-                  const sStart = new Date(year, sStartMonth, 1, 0, 0, 0, 0);
-                  const sEnd = new Date(year, sEndMonth + 1, 0, 23, 59, 59, 999);
-
-                  const startClamp = sStart < startDateLimit ? startDateLimit : sStart;
-                  const endClamp = sEnd > endDateLimit ? endDateLimit : sEnd;
-
-                  const clampDays = Math.max(0, Math.round((endClamp.getTime() - startClamp.getTime()) / (1000 * 60 * 60 * 24)));
-                  if (clampDays > 0) {
-                    const pct = (clampDays / totalDays) * 100;
-                    gridColumns.push({
-                      label: `${semester + 1}º Sem/${year}`,
-                      widthPercent: pct,
-                      key: `${year}-S${semester}`
-                    });
-                  }
-                });
-              }
-
-              return (
-                <div className="space-y-6 text-left">
-                  <div className="mb-4">
-                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                      <Activity size={16} className="text-indigo-600" />
-                      Cronograma do Item: {getTaskDisplayName(taskById[timelineTaskId]) || ""}
-                    </h4>
-                    <p className="text-[11px] font-semibold text-slate-500 mt-1">
-                      Acompanhe os prazos de início, término e o progresso (%) das subatividades ao longo do tempo.
-                    </p>
-                  </div>
-
-                  {/* Scale Selector & Legend */}
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                    <div className="flex items-center bg-white p-1 rounded-xl border border-slate-200 shadow-xs shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setGanttScale("mes")}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-extrabold transition-all duration-200 cursor-pointer ${ganttScale === "mes" ? "bg-slate-800 text-white shadow-xs" : "text-slate-500 hover:text-slate-850"}`}
-                      >
-                        Mês
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setGanttScale("trimestre")}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-extrabold transition-all duration-200 cursor-pointer ${ganttScale === "trimestre" ? "bg-slate-800 text-white shadow-xs" : "text-slate-500 hover:text-slate-850"}`}
-                      >
-                        Trimestre
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setGanttScale("semestre")}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-extrabold transition-all duration-200 cursor-pointer ${ganttScale === "semestre" ? "bg-slate-800 text-white shadow-xs" : "text-slate-500 hover:text-slate-850"}`}
-                      >
-                        Semestre
-                      </button>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 text-xs font-bold text-slate-600">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full" /> Concluída
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 bg-blue-500 rounded-full" /> Em andamento
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 bg-slate-400 rounded-full" /> Não Iniciada
-                      </div>
-                    </div>
-                  </div>
-
-                  {timelineTasks.length === 0 ? (
-                    <div className="py-12 text-center text-slate-400 font-medium">
-                      Nenhuma atividade disponível para exibição cronológica.
-                    </div>
-                  ) : (
-                    <div className="border border-slate-200 rounded-2xl overflow-hidden flex flex-col bg-white shadow-xs">
-                      <div className="flex bg-slate-50 border-b border-slate-200 text-xs font-black uppercase text-slate-500 tracking-wider font-sans">
-                        <div className="w-1/3 min-w-[240px] px-4 py-3 bg-slate-100/30 border-r border-slate-200">
-                          Atividade / Cronograma
-                        </div>
-                        <div className="flex-1 relative flex">
-                          {gridColumns.map(gc => (
-                            <div 
-                              key={gc.key}
-                              style={{ width: `${gc.widthPercent}%` }}
-                              className="px-2 py-3 border-r border-slate-200 last:border-r-0 text-center text-[10px] truncate"
-                            >
-                              {gc.label}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      <div className="divide-y divide-slate-100 max-h-[40vh] overflow-y-auto custom-scrollbar">
-                        {timelineTasks.map(({ task, depth }) => {
-                          const hasDates = task.startDate && task.endDate;
-                          const dateStart = hasDates ? parseSafeDate(task.startDate) : null;
-                          const dateEnd = hasDates ? parseSafeDate(task.endDate) : null;
-                          const statusName = normalizeStatus(task.status);
-                          
-                          const statusColor = statusName === "Concluída" 
-                            ? "bg-emerald-500 hover:bg-emerald-600" 
-                            : statusName === "Em andamento" 
-                            ? "bg-blue-500 hover:bg-blue-600" 
-                            : "bg-slate-400 hover:bg-slate-500";
-                          
-                          let leftPct = 0;
-                          let widthPct = 0;
-                          
-                          if (dateStart && dateEnd && dateEnd >= dateStart) {
-                            const diffLeft = dateStart.getTime() - startDateLimit.getTime();
-                            leftPct = Math.max(0, Math.min(100, (diffLeft / (1000 * 60 * 60 * 24)) / totalDays * 100));
-                            
-                            const diffWidth = dateEnd.getTime() - dateStart.getTime();
-                            widthPct = Math.max(1, Math.min(100 - leftPct, (diffWidth / (1000 * 60 * 60 * 24)) / totalDays * 100));
-                          }
-
-                          return (
-                            <div key={task.id} className="flex transition-colors hover:bg-slate-50/50 group items-stretch min-h-[52px]">
-                              <div className="w-1/3 min-w-[240px] px-4 py-2 border-r border-slate-200 flex flex-col justify-center text-left bg-slate-50/10">
-                                <div className="flex items-center gap-1.5 mb-0.5" style={{ paddingLeft: `${Math.min(depth * 0.75, 4)}rem` }}>
-                                  <span className={`w-2 h-2 rounded-full shrink-0 ${statusName === "Concluída" ? "bg-emerald-500" : statusName === "Em andamento" ? "bg-blue-500" : "bg-slate-400"}`} />
-                                  <span className="text-xs font-bold text-slate-800 line-clamp-1 cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => { setTimelineTaskId(null); handleEditTask(task); }}>
-                                    {getTaskDisplayName(task)}
-                                  </span>
-                                </div>
-                                <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-slate-400 font-bold uppercase tracking-wider" style={{ paddingLeft: `${Math.min(depth * 0.75, 4)}rem` }}>
-                                  {task.startDate ? <span>Início: {task.startDate.split("T")[0].split("-").reverse().join("/")}</span> : null}
-                                  {task.endDate ? <span>Término: {task.endDate.split("T")[0].split("-").reverse().join("/")}</span> : null}
-                                  {!hasDates && <span className="text-amber-500 font-bold normal-case">Período não definido</span>}
-                                </div>
-                              </div>
-                              
-                              <div className="flex-1 relative flex bg-white hover:bg-slate-50/20">
-                                <div className="absolute inset-y-0 left-0 right-0 flex pointer-events-none">
-                                  {gridColumns.map(gc => (
-                                    <div 
-                                      key={`bg-${gc.key}`}
-                                      style={{ width: `${gc.widthPercent}%` }}
-                                      className="h-full border-r border-slate-100 last:border-r-0"
-                                    />
-                                  ))}
-                                </div>
-                                
-                                {hasDates && dateStart && dateEnd ? (
-                                  <div className="w-full h-full relative flex items-center px-1">
-                                    <div
-                                      style={{ marginLeft: `${leftPct}%`, width: `${widthPct}%` }}
-                                      onClick={() => { setTimelineTaskId(null); handleEditTask(task); }}
-                                      className={`h-7 rounded-lg relative overflow-hidden transition-all duration-350 shadow-xs cursor-pointer select-none flex items-center ${statusColor}`}
-                                      title={`${getTaskDisplayName(task)}: ${task.progress || 0}%`}
-                                    >
-                                      <span className="absolute inset-0 flex items-center justify-center font-bold text-[9px] text-white px-1.5 truncate">
-                                        {task.progress || 0}%
-                                      </span>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="w-full flex items-center justify-center p-3 text-[10px] text-slate-300 italic">
-                                    -
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-      </div>
-    )}
+              <TaskTimelineModal
+                taskId={timelineTaskId}
+                onClose={() => setTimelineTaskId(null)}
+                onEditTask={handleEditTask}
+                tasks={tasks}
+                taskById={taskById}
+                childrenMap={childrenMap}
+                areas={areas}
+                categories={categories}
+                responsibles={responsibles}
+                formatDate={formatDate}
+                formatDateTime={formatDateTime}
+                showToast={showToast}
+                renderProgressCalc={renderProgressCalc}
+              />
+            )}
         </div>
           </>
         )}
