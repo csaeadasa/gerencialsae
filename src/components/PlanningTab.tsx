@@ -18,6 +18,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Plus,
+  Minus,
   Trash2,
   Edit2,
   Edit3,
@@ -927,6 +928,7 @@ export function PlanningTab({
   const [isMigrateCatModalOpen, setIsMigrateCatModalOpen] = useState<boolean>(false);
   const [migrateCatSourceId, setMigrateCatSourceId] = useState<number | null>(null);
   const [migrateCatTargetId, setMigrateCatTargetId] = useState<number | null>(null);
+  const [migrateCatAreaId, setMigrateCatAreaId] = useState<number | null>(null);
   const [isMigratingCatTasks, setIsMigratingCatTasks] = useState<boolean>(false);
 
   // UI tree expand/collapse state (keyed by task.id)
@@ -1632,40 +1634,68 @@ export function PlanningTab({
     });
   };
 
-  // Archive / Unarchive Category Handler
-  const handleToggleArchiveCategory = async (cat: Category) => {
-    const catTasks = tasks.filter(t => t.categoryIds?.includes(cat.id));
-    const notCompleted = catTasks.filter(t => normalizeStatus(t.status) !== "Concluída");
+  // Helper to check if a category is archived in a specific area
+  const isCategoryArchivedInArea = (cat: Category, areaId?: number | null): boolean => {
+    if (areaId !== null && areaId !== undefined) {
+      if (cat.archivedAreaIds && cat.archivedAreaIds.includes(areaId)) return true;
+      if (cat.areaStatuses && cat.areaStatuses[areaId] !== undefined) {
+        return !!cat.areaStatuses[areaId].isArchived;
+      }
+    }
+    return !!cat.isArchived;
+  };
 
-    if (!cat.isArchived) {
+  // Archive / Unarchive Category Handler (Strictly Scoped to Selected Area)
+  const handleToggleArchiveCategory = async (cat: Category, areaId?: number | null) => {
+    const areaObj = areaId ? areas.find(a => a.id === areaId) : null;
+    const isCurrentlyArchived = isCategoryArchivedInArea(cat, areaId);
+    const catTasksInArea = (areaId !== null && areaId !== undefined)
+      ? tasks.filter(t => t.categoryIds?.includes(cat.id) && t.areaIds?.includes(areaId))
+      : tasks.filter(t => t.categoryIds?.includes(cat.id));
+    const notCompleted = catTasksInArea.filter(t => normalizeStatus(t.status) !== "Concluída");
+
+    if (!isCurrentlyArchived) {
       if (notCompleted.length > 0) {
         const pendingCount = notCompleted.filter(t => normalizeStatus(t.status) === "Não iniciada").length;
         const inProgCount = notCompleted.filter(t => normalizeStatus(t.status) === "Em andamento").length;
         setConfirmState({
           type: "alert",
           title: "Bloqueio de Arquivamento",
-          message: `Não é possível arquivar a categoria "${cat.name}".\n\nExistem ${notCompleted.length} atividade(s) não concluída(s) vinculada(s) a ela:\n• ${pendingCount} Não Iniciada(s)\n• ${inProgCount} Em Andamento\n\nRegra do Sistema: Somente é possível arquivar uma categoria quando 100% de suas atividades estiverem Concluídas. Conclua as atividades pendentes ou migre-as para outra categoria antes de arquivar.`
+          message: `Não é possível arquivar a categoria "${cat.name}"${areaObj ? ` na área "${areaObj.name}"` : ""}.\n\nExistem ${notCompleted.length} atividade(s) não concluída(s) vinculada(s) a ela${areaObj ? ` nesta área` : ""}:\n• ${pendingCount} Não Iniciada(s)\n• ${inProgCount} Em Andamento\n\nRegra do Sistema: Somente é possível arquivar uma categoria em uma área quando 100% de suas atividades naquela área estiverem Concluídas. Conclua as atividades pendentes ou migre-as para outra categoria antes de arquivar.`
         });
         return;
       }
 
       setConfirmState({
         type: "confirm",
-        title: "Arquivar Categoria",
-        message: `Deseja realmente arquivar a categoria "${cat.name}"?\n\nTodas as ${catTasks.length} atividade(s) vinculadas estão concluídas. Categorias arquivadas ficam protegidas e ocultas do fluxo padrão de novas atividades.`,
+        title: `Arquivar Categoria ${areaObj ? `na Área ${areaObj.abbreviation || areaObj.name}` : ""}`,
+        message: `Deseja realmente arquivar a categoria "${cat.name}" ${areaObj ? `apenas na área "${areaObj.name}"` : ""}?${areaObj && cat.areaIds && cat.areaIds.length > 1 ? `\n\nNota: Ela permanecerá ativa e disponível nas demais áreas vinculadas (${cat.areaIds.filter(id => id !== areaObj.id).map(id => areas.find(a => a.id === id)?.abbreviation || areas.find(a => a.id === id)?.name).filter(Boolean).join(", ")}).` : ""}\n\nTodas as ${catTasksInArea.length} atividade(s) desta categoria ${areaObj ? `na área "${areaObj.name}" ` : ""}estão concluídas.`,
         onConfirm: async () => {
           try {
             const userSignature = currentUser?.name || currentUser?.email || "SGI Pro";
             const res = await fetch(`/api/categories/${cat.id}/archive`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ isArchived: true, archivedBy: userSignature })
+              body: JSON.stringify({ isArchived: true, archivedBy: userSignature, areaId })
             });
             const data = await res.json();
             if (data.success) {
-              showToast("Sucesso", `Categoria "${cat.name}" arquivada com sucesso.`, "success");
-              setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, isArchived: true, archivedAt: new Date().toISOString(), archivedBy: userSignature } : c));
-              if (setCategoriesProp) setCategoriesProp(prev => prev.map(c => c.id === cat.id ? { ...c, isArchived: true, archivedAt: new Date().toISOString(), archivedBy: userSignature } : c));
+              showToast("Sucesso", `Categoria "${cat.name}" arquivada com sucesso ${areaObj ? `na área ${areaObj.abbreviation || areaObj.name}` : ""}.`, "success");
+              setCategories(prev => prev.map(c => {
+                if (c.id !== cat.id) return c;
+                const prevArchived = c.archivedAreaIds || [];
+                const newArchived = areaId ? Array.from(new Set([...prevArchived, areaId])) : c.areaIds;
+                const newStatuses = { ...(c.areaStatuses || {}) };
+                if (areaId) {
+                  newStatuses[areaId] = { isArchived: true, archivedAt: new Date().toISOString(), archivedBy: userSignature };
+                }
+                return {
+                  ...c,
+                  isArchived: newArchived.length > 0 && newArchived.length === (c.areaIds?.length || 1),
+                  archivedAreaIds: newArchived,
+                  areaStatuses: newStatuses
+                };
+              }));
               await loadRegistriesOnly();
             } else {
               showToast("Erro", data.error || "Erro ao arquivar categoria.", "error");
@@ -1678,21 +1708,34 @@ export function PlanningTab({
     } else {
       setConfirmState({
         type: "confirm",
-        title: "Desarquivar Categoria",
-        message: `Deseja reativar a categoria "${cat.name}"?\n\nEla voltará a ficar disponível para seleção e vínculo em novas atividades.`,
+        title: `Desarquivar Categoria ${areaObj ? `na Área ${areaObj.abbreviation || areaObj.name}` : ""}`,
+        message: `Deseja reativar a categoria "${cat.name}" ${areaObj ? `na área "${areaObj.name}"` : ""}?\n\nEla voltará a ficar disponível para seleção e vínculo em novas atividades desta área temática.`,
         onConfirm: async () => {
           try {
             const userSignature = currentUser?.name || currentUser?.email || "SGI Pro";
             const res = await fetch(`/api/categories/${cat.id}/archive`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ isArchived: false, archivedBy: userSignature })
+              body: JSON.stringify({ isArchived: false, archivedBy: userSignature, areaId })
             });
             const data = await res.json();
             if (data.success) {
-              showToast("Sucesso", `Categoria "${cat.name}" desarquivada com sucesso.`, "success");
-              setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, isArchived: false, archivedAt: null, archivedBy: null } : c));
-              if (setCategoriesProp) setCategoriesProp(prev => prev.map(c => c.id === cat.id ? { ...c, isArchived: false, archivedAt: null, archivedBy: null } : c));
+              showToast("Sucesso", `Categoria "${cat.name}" reativada com sucesso ${areaObj ? `na área ${areaObj.abbreviation || areaObj.name}` : ""}.`, "success");
+              setCategories(prev => prev.map(c => {
+                if (c.id !== cat.id) return c;
+                const prevArchived = c.archivedAreaIds || [];
+                const newArchived = areaId ? prevArchived.filter(id => id !== areaId) : [];
+                const newStatuses = { ...(c.areaStatuses || {}) };
+                if (areaId) {
+                  newStatuses[areaId] = { isArchived: false, archivedAt: null, archivedBy: null };
+                }
+                return {
+                  ...c,
+                  isArchived: newArchived.length > 0 && newArchived.length === (c.areaIds?.length || 1),
+                  archivedAreaIds: newArchived,
+                  areaStatuses: newStatuses
+                };
+              }));
               await loadRegistriesOnly();
             } else {
               showToast("Erro", data.error || "Erro ao desarquivar categoria.", "error");
@@ -1706,7 +1749,7 @@ export function PlanningTab({
   };
 
   // Migrate Tasks between Categories Handler
-  const handleMigrateCategoryTasks = async (fromCatId: number, toCatId: number) => {
+  const handleMigrateCategoryTasks = async (fromCatId: number, toCatId: number, areaId?: number | null) => {
     if (!fromCatId || !toCatId) {
       showToast("Aviso", "Selecione a categoria de origem e de destino.", "warning");
       return;
@@ -1716,12 +1759,17 @@ export function PlanningTab({
       return;
     }
 
+    const currentAreaId = areaId !== undefined ? areaId : migrateCatAreaId;
     const fromCat = categories.find(c => c.id === fromCatId);
     const toCat = categories.find(c => c.id === toCatId);
-    const tasksToMove = tasks.filter(t => t.categoryIds?.includes(fromCatId));
+    const areaObj = currentAreaId !== null ? areas.find(a => a.id === currentAreaId) : null;
+
+    const tasksToMove = currentAreaId !== null
+      ? tasks.filter(t => t.categoryIds?.includes(fromCatId) && t.areaIds?.includes(currentAreaId))
+      : tasks.filter(t => t.categoryIds?.includes(fromCatId) && (!t.areaIds || t.areaIds.length === 0));
 
     if (tasksToMove.length === 0) {
-      showToast("Aviso", `A categoria de origem "${fromCat?.name}" não possui nenhuma tarefa vinculada para migrar.`, "warning");
+      showToast("Aviso", `A categoria de origem "${fromCat?.name}" não possui nenhuma tarefa vinculada ${areaObj ? `na área "${areaObj.name}"` : ""} para migrar.`, "warning");
       return;
     }
 
@@ -1734,18 +1782,23 @@ export function PlanningTab({
         body: JSON.stringify({
           fromCategoryId: fromCatId,
           toCategoryId: toCatId,
+          areaId: currentAreaId,
           updatedBy: userSignature
         })
       });
       const data = await res.json();
       if (data.success) {
-        showToast("Sucesso", `${data.count || tasksToMove.length} atividade(s) migradas com sucesso de "${fromCat?.name}" para "${toCat?.name}".`, "success");
+        const movedCount = data.count || tasksToMove.length;
+        showToast("Sucesso", `${movedCount} atividade(s) ${areaObj ? `da área "${areaObj.abbreviation || areaObj.name}" ` : ""}migradas com sucesso de "${fromCat?.name}" para "${toCat?.name}".`, "success");
         setIsMigrateCatModalOpen(false);
         setMigrateCatSourceId(null);
         setMigrateCatTargetId(null);
+        setMigrateCatAreaId(null);
+
+        const targetMovedIds = new Set(data.taskIds || tasksToMove.map(t => t.id));
         setTasks(prev => prev.map(t => {
-          if (!t.categoryIds?.includes(fromCatId)) return t;
-          const filtered = t.categoryIds.filter(id => id !== fromCatId);
+          if (!targetMovedIds.has(t.id)) return t;
+          const filtered = (t.categoryIds || []).filter(id => id !== fromCatId);
           const next = filtered.includes(toCatId) ? filtered : [...filtered, toCatId];
           return { ...t, categoryIds: next };
         }));
@@ -4531,19 +4584,6 @@ export function PlanningTab({
             </p>
           </div>
           <div className="flex items-center gap-2.5">
-            {activeSubTab === 'categories' && (
-              <button
-                onClick={() => {
-                  setMigrateCatSourceId(null);
-                  setMigrateCatTargetId(null);
-                  setIsMigrateCatModalOpen(true);
-                }}
-                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-slate-200 shadow-2xs"
-                title="Migrar tarefas de uma categoria para outra"
-              >
-                <ArrowRightLeft size={15} className="text-indigo-600" /> Migrar Tarefas
-              </button>
-            )}
             <button
               onClick={() => {
                 setRegName("");
@@ -5086,7 +5126,14 @@ export function PlanningTab({
         {isMigrateCatModalOpen && (() => {
           const sourceCategory = categories.find(c => c.id === migrateCatSourceId);
           const targetCategory = categories.find(c => c.id === migrateCatTargetId);
-          const sourceTasks = migrateCatSourceId ? tasks.filter(t => t.categoryIds?.includes(migrateCatSourceId)) : [];
+          const targetArea = migrateCatAreaId !== null ? areas.find(a => a.id === migrateCatAreaId) : null;
+
+          // Filter source tasks strictly to the source category and the specific area
+          const sourceTasks = migrateCatSourceId
+            ? (migrateCatAreaId !== null
+                ? tasks.filter(t => t.categoryIds?.includes(migrateCatSourceId) && t.areaIds?.includes(migrateCatAreaId))
+                : tasks.filter(t => t.categoryIds?.includes(migrateCatSourceId) && (!t.areaIds || t.areaIds.length === 0)))
+            : [];
           
           let pendingCount = 0;
           let inProgCount = 0;
@@ -5099,7 +5146,15 @@ export function PlanningTab({
             else pendingCount++;
           });
 
-          const eligibleTargetCategories = categories.filter(c => c.id !== migrateCatSourceId && !c.isArchived);
+          // Eligible target categories: must belong to the same area (if area is selected), must not be archived in that area, and must not be the source category
+          const eligibleTargetCategories = categories.filter(c => {
+            if (c.id === migrateCatSourceId) return false;
+            if (isCategoryArchivedInArea(c, migrateCatAreaId)) return false;
+            if (migrateCatAreaId !== null) {
+              return c.areaIds?.includes(migrateCatAreaId);
+            }
+            return true;
+          });
 
           return (
             <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -5109,14 +5164,15 @@ export function PlanningTab({
                     setIsMigrateCatModalOpen(false);
                     setMigrateCatSourceId(null);
                     setMigrateCatTargetId(null);
+                    setMigrateCatAreaId(null);
                   }}
-                  className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 transition-colors p-1"
+                  className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 transition-colors p-1 cursor-pointer"
                 >
                   <X size={20} />
                 </button>
 
                 <div className="flex items-center gap-3 mb-2">
-                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-2xs">
                     <ArrowRightLeft size={20} />
                   </div>
                   <div>
@@ -5124,10 +5180,30 @@ export function PlanningTab({
                       Migrar Atividades entre Categorias
                     </h3>
                     <p className="text-xs text-slate-500 font-medium">
-                      Transfira todas as tarefas de uma categoria de origem para outra categoria de destino.
+                      {targetArea ? (
+                        <span>
+                          Transfira atividades da área temática <strong className="text-indigo-700">{targetArea.name} ({targetArea.abbreviation})</strong> de uma categoria para outra.
+                        </span>
+                      ) : (
+                        <span>Transfira as atividades desta categoria para outra categoria de destino.</span>
+                      )}
                     </p>
                   </div>
                 </div>
+
+                {/* Badge da Área de Escopo */}
+                {targetArea && (
+                  <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-xl px-3.5 py-2 flex items-center justify-between gap-2 mt-3">
+                    <div className="flex items-center gap-2 text-xs font-bold text-indigo-900">
+                      <Layers size={14} className="text-indigo-600 shrink-0" />
+                      <span>Área Temática de Migração:</span>
+                      <span className="font-extrabold text-indigo-700">{targetArea.name}</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-indigo-600 text-white shadow-2xs">
+                      {targetArea.abbreviation || "ÁREA"}
+                    </span>
+                  </div>
+                )}
 
                 <div className="space-y-4 my-5">
                   {/* Categoria de Origem */}
@@ -5135,56 +5211,48 @@ export function PlanningTab({
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
                       <Tag size={12} className="text-rose-500" /> Categoria de Origem (Atual)
                     </label>
-                    <select
-                      value={migrateCatSourceId || ""}
-                      onChange={(e) => {
-                        const val = Number(e.target.value) || null;
-                        setMigrateCatSourceId(val);
-                        if (migrateCatTargetId === val) setMigrateCatTargetId(null);
-                      }}
-                      className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-3 text-xs font-bold text-slate-800 focus:border-indigo-600 outline-none bg-white transition-all"
-                    >
-                      <option value="">Selecione a categoria de origem...</option>
-                      {[...categories].sort((a, b) => a.name.localeCompare(b.name)).map(c => {
-                        const count = tasks.filter(t => t.categoryIds?.includes(c.id)).length;
-                        return (
-                          <option key={c.id} value={c.id}>
-                            {c.name} ({count} atividade{count === 1 ? '' : 's'}{c.isArchived ? ' - Arquivada' : ''})
-                          </option>
-                        );
-                      })}
-                    </select>
+                    <div className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 bg-slate-50 flex items-center justify-between">
+                      <span className="font-extrabold text-slate-800">{sourceCategory?.name || "Categoria Selecionada"}</span>
+                      <span className="text-[10px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
+                        {sourceTasks.length} {sourceTasks.length === 1 ? "atividade" : "atividades"} {targetArea ? `em ${targetArea.abbreviation || 'área'}` : ''}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Categoria de Destino */}
                   <div className="space-y-1.5">
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-                      <Tag size={12} className="text-emerald-500" /> Categoria de Destino (Nova)
+                      <Tag size={12} className="text-emerald-500" /> Categoria de Destino {targetArea ? `(Ativa em ${targetArea.abbreviation || targetArea.name})` : "(Nova)"}
                     </label>
                     <select
                       value={migrateCatTargetId || ""}
                       onChange={(e) => setMigrateCatTargetId(Number(e.target.value) || null)}
-                      disabled={!migrateCatSourceId}
-                      className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-3 text-xs font-bold text-slate-800 focus:border-indigo-600 outline-none bg-white transition-all disabled:opacity-50 disabled:bg-slate-50"
+                      className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-3 text-xs font-bold text-slate-800 focus:border-indigo-600 outline-none bg-white transition-all"
                     >
                       <option value="">Selecione a categoria de destino...</option>
                       {eligibleTargetCategories.sort((a, b) => a.name.localeCompare(b.name)).map(c => {
-                        const count = tasks.filter(t => t.categoryIds?.includes(c.id)).length;
-                        const areaNames = c.areaIds?.map(aid => areas.find(a => a.id === aid)?.abbreviation || areas.find(a => a.id === aid)?.name).filter(Boolean).join(", ");
+                        const countInArea = migrateCatAreaId !== null
+                          ? tasks.filter(t => t.categoryIds?.includes(c.id) && t.areaIds?.includes(migrateCatAreaId)).length
+                          : tasks.filter(t => t.categoryIds?.includes(c.id)).length;
                         return (
                           <option key={c.id} value={c.id}>
-                            {c.name} {areaNames ? `[${areaNames}]` : ''} ({count} atual{count === 1 ? '' : 'is'})
+                            {c.name} ({countInArea} atual{countInArea === 1 ? ' na área' : 'is na área'})
                           </option>
                         );
                       })}
                     </select>
+                    {eligibleTargetCategories.length === 0 && (
+                      <p className="text-[11px] text-amber-600 font-semibold mt-1">
+                        Não existem outras categorias ativas cadastradas nesta área temática para receber a migração.
+                      </p>
+                    )}
                   </div>
 
                   {/* Resumo da Migração */}
                   {migrateCatSourceId && (
                     <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-slate-600">Atividades a migrar:</span>
+                        <span className="font-bold text-slate-600">Atividades a serem migradas:</span>
                         <span className="font-black text-slate-800 text-sm bg-white px-2.5 py-0.5 rounded-lg border border-slate-200 shadow-2xs">
                           {sourceTasks.length} {sourceTasks.length === 1 ? 'tarefa' : 'tarefas'}
                         </span>
@@ -5209,7 +5277,7 @@ export function PlanningTab({
 
                           {/* Preview list */}
                           <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Prévia das Tarefas:</span>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Prévia das Tarefas da Área:</span>
                             {sourceTasks.slice(0, 4).map(t => (
                               <div key={t.id} className="text-[11px] font-semibold text-slate-600 bg-white px-2.5 py-1.5 rounded-lg border border-slate-100 flex items-center justify-between gap-2">
                                 <span className="truncate">{t.title}</span>
@@ -5232,7 +5300,7 @@ export function PlanningTab({
                       ) : (
                         <div className="text-xs text-amber-600 font-semibold bg-amber-50 p-2.5 rounded-xl border border-amber-200 flex items-center gap-2">
                           <AlertCircle size={14} className="shrink-0" />
-                          <span>Esta categoria de origem não possui nenhuma atividade vinculada para migrar.</span>
+                          <span>Esta categoria não possui nenhuma atividade vinculada nesta área temática para migrar.</span>
                         </div>
                       )}
                     </div>
@@ -5246,16 +5314,17 @@ export function PlanningTab({
                       setIsMigrateCatModalOpen(false);
                       setMigrateCatSourceId(null);
                       setMigrateCatTargetId(null);
+                      setMigrateCatAreaId(null);
                     }}
-                    className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition"
+                    className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition cursor-pointer"
                   >
                     Cancelar
                   </button>
                   <button
                     type="button"
                     disabled={!migrateCatSourceId || !migrateCatTargetId || sourceTasks.length === 0 || isMigratingCatTasks}
-                    onClick={() => handleMigrateCategoryTasks(migrateCatSourceId!, migrateCatTargetId!)}
-                    className="px-5 py-2.5 text-xs font-black uppercase tracking-wider bg-adasa-mid text-white hover:bg-adasa-hover rounded-xl transition shadow-md flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => handleMigrateCategoryTasks(migrateCatSourceId!, migrateCatTargetId!, migrateCatAreaId)}
+                    className="px-5 py-2.5 text-xs font-black uppercase tracking-wider bg-adasa-mid text-white hover:bg-adasa-hover rounded-xl transition shadow-md flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     {isMigratingCatTasks ? <RefreshCw size={14} className="animate-spin" /> : <ArrowRightLeft size={14} />}
                     Confirmar Migração ({sourceTasks.length})
@@ -6041,28 +6110,40 @@ export function PlanningTab({
           )}
 
           {configActiveTab === "categories" && (() => {
-            // Filter categories based on search and archive status
-            const filteredCategories = categories.filter(c => {
-              if (categoryTabFilter === "active" && c.isArchived) return false;
-              if (categoryTabFilter === "archived" && !c.isArchived) return false;
-              if (categorySearchTerm.trim()) {
-                const q = categorySearchTerm.toLowerCase();
-                const matchName = c.name.toLowerCase().includes(q);
-                const matchArea = c.areaIds?.some(aid => {
-                  const area = areas.find(a => a.id === aid);
-                  return area?.name.toLowerCase().includes(q) || area?.abbreviation?.toLowerCase().includes(q);
-                });
-                if (!matchName && !matchArea) return false;
-              }
-              return true;
+            // Calculate active and archived counts across area-category assignments
+            let activeCount = 0;
+            let archivedCount = 0;
+            let allCount = 0;
+
+            areas.forEach(area => {
+              const cats = categories.filter(c => c.areaIds?.includes(area.id));
+              cats.forEach(c => {
+                allCount++;
+                if (isCategoryArchivedInArea(c, area.id)) archivedCount++;
+                else activeCount++;
+              });
             });
 
-            // Build groups per area
+            // Build groups per area with per-area archive filtering
             const areaGroups: { area: Area | null; categories: Category[] }[] = [];
             const sortedAreas = [...areas].sort((a, b) => a.name.localeCompare(b.name));
 
             sortedAreas.forEach(area => {
-              const catsInArea = filteredCategories.filter(c => c.areaIds?.includes(area.id));
+              const catsInArea = categories
+                .filter(c => c.areaIds?.includes(area.id))
+                .filter(c => {
+                  const isArchived = isCategoryArchivedInArea(c, area.id);
+                  if (categoryTabFilter === "active" && isArchived) return false;
+                  if (categoryTabFilter === "archived" && !isArchived) return false;
+                  if (categorySearchTerm.trim()) {
+                    const q = categorySearchTerm.toLowerCase();
+                    const matchName = c.name.toLowerCase().includes(q);
+                    const matchArea = area.name.toLowerCase().includes(q) || area.abbreviation?.toLowerCase().includes(q);
+                    if (!matchName && !matchArea) return false;
+                  }
+                  return true;
+                });
+
               // Always show area section if no active search or if it has matching categories
               if (catsInArea.length > 0 || (!categorySearchTerm.trim() && categoryTabFilter !== "archived")) {
                 areaGroups.push({
@@ -6073,17 +6154,24 @@ export function PlanningTab({
             });
 
             // Categories without assigned area
-            const catsWithoutArea = filteredCategories.filter(c => !c.areaIds || c.areaIds.length === 0);
+            const catsWithoutArea = categories
+              .filter(c => !c.areaIds || c.areaIds.length === 0)
+              .filter(c => {
+                if (categoryTabFilter === "active" && c.isArchived) return false;
+                if (categoryTabFilter === "archived" && !c.isArchived) return false;
+                if (categorySearchTerm.trim()) {
+                  const q = categorySearchTerm.toLowerCase();
+                  return c.name.toLowerCase().includes(q);
+                }
+                return true;
+              });
+
             if (catsWithoutArea.length > 0) {
               areaGroups.push({
                 area: null,
                 categories: [...catsWithoutArea].sort((a, b) => a.name.localeCompare(b.name))
               });
             }
-
-            const activeCount = categories.filter(c => !c.isArchived).length;
-            const archivedCount = categories.filter(c => c.isArchived).length;
-            const allCount = categories.length;
 
             const toggleAreaCollapse = (areaKey: string) => {
               setCollapsedCategoryAreas(prev => ({
@@ -6224,21 +6312,21 @@ export function PlanningTab({
                     const areaName = group.area ? group.area.name : "Categorias sem Área Vinculada";
                     const areaAbbr = group.area?.abbreviation;
 
-                    // Calculate area-level metrics
-                    let areaTasksCount = 0;
+                    // Calculate area-level metrics (strictly for tasks associated with this specific thematic area)
+                    const areaTasks = group.area
+                      ? tasks.filter(t => t.areaIds?.includes(group.area.id))
+                      : tasks.filter(t => !t.areaIds || t.areaIds.length === 0);
+
+                    const areaTasksCount = areaTasks.length;
                     let areaPendingCount = 0;
                     let areaInProgCount = 0;
                     let areaCompletedCount = 0;
 
-                    group.categories.forEach(c => {
-                      const catTasks = tasks.filter(t => t.categoryIds?.includes(c.id));
-                      areaTasksCount += catTasks.length;
-                      catTasks.forEach(t => {
-                        const s = normalizeStatus(t.status);
-                        if (s === "Concluída") areaCompletedCount++;
-                        else if (s === "Em andamento") areaInProgCount++;
-                        else areaPendingCount++;
-                      });
+                    areaTasks.forEach(t => {
+                      const s = normalizeStatus(t.status);
+                      if (s === "Concluída") areaCompletedCount++;
+                      else if (s === "Em andamento") areaInProgCount++;
+                      else areaPendingCount++;
                     });
 
                     return (
@@ -6329,7 +6417,10 @@ export function PlanningTab({
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 text-sm">
                                   {group.categories.map(c => {
-                                    const catTasks = tasks.filter(t => t.categoryIds?.includes(c.id));
+                                    // Count tasks strictly for this category AND this specific area group
+                                    const catTasks = group.area
+                                      ? tasks.filter(t => t.categoryIds?.includes(c.id) && t.areaIds?.includes(group.area.id))
+                                      : tasks.filter(t => t.categoryIds?.includes(c.id) && (!t.areaIds || t.areaIds.length === 0));
                                     const total = catTasks.length;
                                     let pending = 0;
                                     let inProg = 0;
@@ -6342,21 +6433,27 @@ export function PlanningTab({
                                       else pending++;
                                     });
 
+                                    // A category can be archived in this area if all its tasks in this area are completed (or 0 tasks)
                                     const canArchive = total === 0 || completed === total;
                                     const progressPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+                                    const isArchivedInThisArea = isCategoryArchivedInArea(c, group.area?.id);
+                                    const areaStatusInfo = group.area?.id && c.areaStatuses ? c.areaStatuses[group.area.id] : null;
+                                    const archivedAtDate = areaStatusInfo?.archivedAt || c.archivedAt;
+                                    const archivedByPerson = areaStatusInfo?.archivedBy || c.archivedBy;
 
                                     return (
                                       <tr
                                         key={`${areaKey}-${c.id}`}
                                         className={`hover:bg-slate-50/50 transition-colors group ${
-                                          c.isArchived ? "bg-amber-50/20" : ""
+                                          isArchivedInThisArea ? "bg-amber-50/20" : ""
                                         }`}
                                       >
                                         {/* Categoria */}
                                         <td className="px-5 py-3.5 align-middle">
                                           <div className="flex items-center gap-3">
                                             <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${
-                                              c.isArchived
+                                              isArchivedInThisArea
                                                 ? "bg-amber-100/70 text-amber-700 border-amber-200"
                                                 : "bg-indigo-50 text-indigo-600 border-indigo-100 group-hover:bg-indigo-100 group-hover:border-indigo-200"
                                             }`}>
@@ -6365,12 +6462,12 @@ export function PlanningTab({
                                             <div className="flex flex-col">
                                               <div className="flex items-center gap-2">
                                                 <span className="font-extrabold text-slate-800">{c.name}</span>
-                                                {c.isArchived && (
+                                                {isArchivedInThisArea && (
                                                   <span
                                                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs"
-                                                    title={c.archivedAt ? `Arquivada em ${formatDateTime(c.archivedAt)} por ${c.archivedBy || 'Sistema'}` : 'Categoria Arquivada'}
+                                                    title={archivedAtDate ? `Arquivada nesta área em ${formatDateTime(archivedAtDate)} por ${archivedByPerson || 'Sistema'}` : 'Categoria Arquivada nesta Área'}
                                                   >
-                                                    <Archive size={10} /> Arquivada
+                                                    <Archive size={10} /> Arquivada na Área
                                                   </span>
                                                 )}
                                               </div>
@@ -6468,43 +6565,44 @@ export function PlanningTab({
                                         {/* Ações */}
                                         <td className="px-5 py-3.5 align-middle text-right">
                                           <div className="flex gap-1 justify-end items-center">
-                                            {/* Migrar Tarefas Button */}
+                                            {/* Migrar Tarefas Button (Escopado para a Área Temática) */}
                                             <button
                                               type="button"
                                               onClick={() => {
                                                 setMigrateCatSourceId(c.id);
+                                                setMigrateCatAreaId(group.area ? group.area.id : null);
                                                 setMigrateCatTargetId(null);
                                                 setIsMigrateCatModalOpen(true);
                                               }}
-                                              className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors"
-                                              title={`Migrar ${total} tarefa(s) desta categoria para outra`}
+                                              className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                                              title={group.area ? `Migrar ${total} atividade(s) desta categoria na área ${group.area.abbreviation || group.area.name} para outra categoria` : `Migrar ${total} atividade(s) desta categoria para outra`}
                                             >
                                               <ArrowRightLeft size={16} />
                                             </button>
 
-                                            {/* Arquivar / Desarquivar Button */}
-                                            {c.isArchived ? (
+                                            {/* Arquivar / Desarquivar Button (Por Área Específica) */}
+                                            {isArchivedInThisArea ? (
                                               <button
                                                 type="button"
-                                                onClick={() => handleToggleArchiveCategory(c)}
-                                                className="p-2 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-colors"
-                                                title="Desarquivar Categoria"
+                                                onClick={() => handleToggleArchiveCategory(c, group.area ? group.area.id : null)}
+                                                className="p-2 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                                                title={group.area ? `Desarquivar Categoria na área ${group.area.abbreviation || group.area.name}` : "Desarquivar Categoria"}
                                               >
                                                 <ArchiveRestore size={16} />
                                               </button>
                                             ) : (
                                               <button
                                                 type="button"
-                                                onClick={() => handleToggleArchiveCategory(c)}
-                                                className={`p-2 rounded-lg transition-colors ${
+                                                onClick={() => handleToggleArchiveCategory(c, group.area ? group.area.id : null)}
+                                                className={`p-2 rounded-lg transition-colors cursor-pointer ${
                                                   canArchive
-                                                    ? "text-slate-400 hover:text-amber-700 hover:bg-amber-50 cursor-pointer"
-                                                    : "text-slate-300 hover:text-amber-600 hover:bg-slate-100 cursor-pointer"
+                                                    ? "text-slate-400 hover:text-amber-700 hover:bg-amber-50"
+                                                    : "text-slate-300 hover:text-amber-600 hover:bg-slate-100"
                                                 }`}
                                                 title={
                                                   canArchive
-                                                    ? "Arquivar Categoria (Todas tarefas concluídas)"
-                                                    : `Bloqueado: Existem ${pending + inProg} tarefa(s) pendentes ou em andamento`
+                                                    ? `Arquivar Categoria nesta área (Todas as ${total} atividades ${group.area ? `em ${group.area.abbreviation || group.area.name} ` : ""}concluídas)`
+                                                    : `Bloqueado: Existem ${pending + inProg} tarefa(s) pendentes ou em andamento ${group.area ? `na área ${group.area.abbreviation || group.area.name}` : ""}`
                                                 }
                                               >
                                                 <Archive size={16} />
@@ -12427,24 +12525,43 @@ export function PlanningTab({
                     <div className="space-y-1">
                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Associe categorias temáticas para facilitar relatórios de acompanhamento">
                         <ListTree size={14} className="text-amber-500 shrink-0" /> 
-                        Categorias (Filtradas pelas Áreas selecionadas)
+                        Categorias (Agrupadas por Área)
                       </label>
-                      <div className="bg-slate-50/50 border-2 border-slate-200 rounded-xl p-3 max-h-[110px] overflow-y-auto space-y-1.5 custom-scrollbar">
-                        {categories.filter(c => c.areaIds?.some(aid => genAreaIds.includes(aid))).length === 0 ? (
-                          <span className="block text-xs text-slate-400 italic">Nenhuma categoria encontrada para as áreas selecionadas.</span>
+                      <div className="bg-slate-50/50 border-2 border-slate-200 rounded-xl p-2.5 max-h-[160px] overflow-y-auto space-y-2 custom-scrollbar">
+                        {(!genAreaIds || genAreaIds.length === 0) ? (
+                          <div className="py-3 text-center">
+                            <span className="block text-xs text-slate-400 italic">Selecione ao menos uma Área para ver as categorias.</span>
+                          </div>
                         ) : (
-                          categories.filter(c => c.areaIds?.some(aid => genAreaIds.includes(aid))).sort((a,b) => a.name.localeCompare(b.name)).map(c => (
-                            <label key={c.id} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-600 hover:text-slate-800 select-none justify-between pr-2">
-                              <span className="truncate pr-2">{c.name} <span className="opacity-50 font-normal text-[10px]">({c.areaIds?.map(aid => areas.find(a => a.id === aid)?.name).filter(Boolean).join(", ")})</span></span>
-                              <input
-                                type="checkbox"
-                                id={`gen-cat-${c.id}`}
-                                checked={genCategoryIds.includes(c.id)}
-                                onChange={() => toggleGenCategoryId(c.id)}
-                                className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0 cursor-pointer"
-                              />
-                            </label>
-                          ))
+                          (() => {
+                            const selectedGenAreas = areas.filter(a => genAreaIds.includes(a.id)).sort((a,b) => a.name.localeCompare(b.name));
+                            return selectedGenAreas.map(a => {
+                              const areaCats = categories.filter(c => !isCategoryArchivedInArea(c, a.id) && c.areaIds?.includes(a.id)).sort((x,y) => x.name.localeCompare(y.name));
+                              return (
+                                <div key={a.id} className="border border-slate-200 rounded-lg p-2 bg-white space-y-1">
+                                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 pb-1 border-b border-slate-100">
+                                    <span>{a.name} ({a.abbreviation})</span>
+                                    <span className="text-[9px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{areaCats.length}</span>
+                                  </div>
+                                  {areaCats.length === 0 ? (
+                                    <span className="block text-[10px] text-slate-400 italic">Sem categorias.</span>
+                                  ) : (
+                                    areaCats.map(c => (
+                                      <label key={`${a.id}-${c.id}`} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-600 hover:text-slate-800 select-none justify-between pr-1">
+                                        <span className="truncate pr-1">{c.name}</span>
+                                        <input
+                                          type="checkbox"
+                                          checked={genCategoryIds.includes(c.id)}
+                                          onChange={() => toggleGenCategoryId(c.id)}
+                                          className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-3.5 w-3.5 shrink-0 cursor-pointer"
+                                        />
+                                      </label>
+                                    ))
+                                  )}
+                                </div>
+                              );
+                            });
+                          })()
                         )}
                       </div>
                     </div>
@@ -12455,7 +12572,7 @@ export function PlanningTab({
                         <Users size={14} className="text-sky-500 shrink-0" /> 
                         Responsáveis Designados (Filtrados por Área)
                       </label>
-                      <div className="bg-slate-50/50 border-2 border-slate-200 rounded-xl p-3 max-h-[110px] overflow-y-auto space-y-1.5 custom-scrollbar">
+                      <div className="bg-slate-50/50 border-2 border-slate-200 rounded-xl p-2.5 max-h-[160px] overflow-y-auto space-y-1.5 custom-scrollbar">
                         {responsibles.filter(r => !genAreaIds || genAreaIds.length === 0 || r.areaIds?.some(aid => genAreaIds.includes(aid))).length === 0 ? (
                           <span className="block text-xs text-slate-400 italic font-medium">Nenhum responsável encontrado para as áreas selecionadas.</span>
                         ) : (
@@ -13090,11 +13207,11 @@ export function PlanningTab({
                     Áreas de Vinculação
                     {editingTask.parentId && taskById[editingTask.parentId]?.areaIds?.length ? " (Herdado e bloqueado pela Tarefa Pai)" : ""}
                   </label>
-                  <div className={`bg-slate-50 border-2 border-slate-200 rounded-xl p-3.5 max-h-44 overflow-y-auto space-y-2 ${editingTask.parentId && taskById[editingTask.parentId]?.areaIds?.length ? "opacity-60 pointer-events-none" : ""}`}>
+                  <div className={`bg-slate-50 border-2 border-slate-200 rounded-xl p-3.5 min-h-[180px] max-h-80 overflow-y-auto space-y-2 custom-scrollbar ${editingTask.parentId && taskById[editingTask.parentId]?.areaIds?.length ? "opacity-60 pointer-events-none" : ""}`}>
                     {[...areas].sort((a,b) => a.name.localeCompare(b.name)).map(a => {
                       const isChecked = editingTask.areaIds?.includes(a.id);
                       return (
-                        <label key={a.id} className="flex items-center gap-2.5 cursor-pointer text-sm font-semibold text-slate-700 hover:text-slate-900">
+                        <label key={a.id} className="flex items-center gap-2.5 cursor-pointer text-sm font-semibold text-slate-700 hover:text-slate-900 select-none py-0.5">
                           <input
                             type="checkbox"
                             checked={!!isChecked}
@@ -13112,7 +13229,7 @@ export function PlanningTab({
                             }}
                             className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0 cursor-pointer"
                           />
-                          <span>{a.name}</span>
+                          <span>{a.name} {a.abbreviation ? `(${a.abbreviation})` : ""}</span>
                         </label>
                       );
                     })}
@@ -13122,42 +13239,98 @@ export function PlanningTab({
                   </div>
                 </div>
 
-                {/* Categories of Activities (One or More) */}
+                {/* Categories of Activities (Grouped by Areas) */}
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Assuntos temáticos aos quais a atividade se relaciona">
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Assuntos temáticos aos quais a atividade se relaciona, agrupados pelas áreas selecionadas">
                     <ListTree size={15} className="text-amber-500 shrink-0" />
-                    Categorias (Filtradas pelas Áreas selecionadas)
+                    Categorias (Agrupadas por Área)
                     {editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length ? " (Herdado e bloqueado pela Tarefa Pai)" : ""}
                   </label>
-                  <div className={`bg-slate-50 border-2 border-slate-200 rounded-xl p-3.5 max-h-44 overflow-y-auto space-y-2 ${editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length ? "opacity-60 pointer-events-none" : ""}`}>
-                    {categories.filter(c => c.areaIds?.some(aid => editingTask.areaIds?.includes(aid))).length === 0 ? (
-                      <span className="block text-sm text-slate-400 italic">Nenhuma categoria encontrada para as áreas selecionadas.</span>
+                  <div className={`bg-slate-50 border-2 border-slate-200 rounded-xl p-3 min-h-[180px] max-h-80 overflow-y-auto space-y-3 custom-scrollbar ${editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length ? "opacity-60 pointer-events-none" : ""}`}>
+                    {(!editingTask.areaIds || editingTask.areaIds.length === 0) ? (
+                      <div className="py-8 px-4 text-center">
+                        <span className="block text-xs text-slate-400 font-medium italic">
+                          Selecione ao menos uma Área de Vinculação para visualizar as categorias disponíveis.
+                        </span>
+                      </div>
                     ) : (
-                      categories.filter(c => c.areaIds?.some(aid => editingTask.areaIds?.includes(aid))).sort((a,b) => a.name.localeCompare(b.name)).map(c => {
-                        const isChecked = editingTask.categoryIds?.includes(c.id);
-                        return (
-                          <label key={c.id} className="flex items-center gap-2.5 cursor-pointer text-sm font-semibold text-slate-700 hover:text-slate-900">
-                            <input
-                              type="checkbox"
-                              checked={!!isChecked}
-                              readOnly={!!(editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length)}
-                              onChange={(e) => {
-                                if (editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length) return;
-                                const checked = e.target.checked;
-                                setEditingTask(prev => {
-                                  const current = prev.categoryIds || [];
-                                  const next = checked 
-                                    ? [...current, c.id] 
-                                    : current.filter(id => id !== c.id);
-                                  return { ...prev, categoryIds: next };
-                                });
-                              }}
-                              className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0 cursor-pointer"
-                            />
-                            <span>{c.name} <span className="opacity-50 font-normal">({c.areaIds?.map(aid => areas.find(a => a.id === aid)?.name).filter(Boolean).join(", ")})</span></span>
-                          </label>
-                        );
-                      })
+                      (() => {
+                        const selectedAreas = areas
+                          .filter(a => editingTask.areaIds?.includes(a.id))
+                          .sort((a, b) => a.name.localeCompare(b.name));
+
+                        let totalCategoriesCount = 0;
+
+                        const renderedGroups = selectedAreas.map(area => {
+                          const areaCats = categories
+                            .filter(c => !isCategoryArchivedInArea(c, area.id) && c.areaIds?.includes(area.id))
+                            .sort((a, b) => a.name.localeCompare(b.name));
+
+                          totalCategoriesCount += areaCats.length;
+
+                          return (
+                            <div key={area.id} className="border border-slate-200/90 rounded-xl p-2.5 bg-white shadow-2xs space-y-2">
+                              {/* Area Group Header */}
+                              <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 text-xs font-bold text-slate-800">
+                                <span className="flex items-center gap-1.5 text-adasa-dark truncate pr-2">
+                                  <Briefcase size={13} className="text-lime-600 shrink-0" />
+                                  {area.name} {area.abbreviation ? `(${area.abbreviation})` : ""}
+                                </span>
+                                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded-full shrink-0">
+                                  {areaCats.length} {areaCats.length === 1 ? "categoria" : "categorias"}
+                                </span>
+                              </div>
+
+                              {/* Categories under this Area */}
+                              {areaCats.length === 0 ? (
+                                <span className="block text-[11px] text-slate-400 italic px-1 py-1">
+                                  Nenhuma categoria vinculada a esta área.
+                                </span>
+                              ) : (
+                                <div className="space-y-1.5 pl-1">
+                                  {areaCats.map(c => {
+                                    const isChecked = editingTask.categoryIds?.includes(c.id);
+                                    return (
+                                      <label key={`${area.id}-${c.id}`} className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 hover:text-slate-900 select-none py-0.5">
+                                        <input
+                                          type="checkbox"
+                                          checked={!!isChecked}
+                                          readOnly={!!(editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length)}
+                                          onChange={(e) => {
+                                            if (editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length) return;
+                                            const checked = e.target.checked;
+                                            setEditingTask(prev => {
+                                              const current = prev.categoryIds || [];
+                                              const next = checked 
+                                                ? Array.from(new Set([...current, c.id]))
+                                                : current.filter(id => id !== c.id);
+                                              return { ...prev, categoryIds: next };
+                                            });
+                                          }}
+                                          className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0 cursor-pointer"
+                                        />
+                                        <span className="leading-snug">{c.name}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        });
+
+                        if (totalCategoriesCount === 0) {
+                          return (
+                            <div className="py-6 px-4 text-center">
+                              <span className="block text-xs text-slate-400 italic font-medium">
+                                Nenhuma categoria cadastrada para as áreas selecionadas.
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        return renderedGroups;
+                      })()
                     )}
                   </div>
                 </div>
@@ -13168,14 +13341,16 @@ export function PlanningTab({
                     <Users size={15} className="text-sky-500 shrink-0" />
                     Responsáveis Designados (Filtrados por Área)
                   </label>
-                  <div className="bg-slate-50 border-2 border-slate-200 rounded-xl p-3.5 max-h-44 overflow-y-auto space-y-2 animate-none">
+                  <div className="bg-slate-50 border-2 border-slate-200 rounded-xl p-3.5 min-h-[160px] max-h-72 overflow-y-auto space-y-2 custom-scrollbar">
                     {responsibles.filter(r => !editingTask.areaIds || editingTask.areaIds.length === 0 || r.areaIds?.some(aid => editingTask.areaIds?.includes(aid))).length === 0 ? (
-                      <span className="block text-sm text-slate-400 italic font-medium">Nenhum responsável encontrado para as áreas selecionadas.</span>
+                      <div className="py-6 px-4 text-center">
+                        <span className="block text-xs text-slate-400 italic font-medium">Nenhum responsável encontrado para as áreas selecionadas.</span>
+                      </div>
                     ) : (
                       responsibles.filter(r => !editingTask.areaIds || editingTask.areaIds.length === 0 || r.areaIds?.some(aid => editingTask.areaIds?.includes(aid))).sort((a,b) => a.name.localeCompare(b.name)).map(r => {
                       const isChecked = editingTask.responsibleIds?.includes(r.id);
                       return (
-                        <label key={r.id} className="flex items-center gap-2.5 cursor-pointer text-sm font-semibold text-slate-700 hover:text-slate-900">
+                        <label key={r.id} className="flex items-center gap-2.5 cursor-pointer text-sm font-semibold text-slate-700 hover:text-slate-900 select-none py-0.5">
                           <input
                             type="checkbox"
                             checked={!!isChecked}
@@ -13966,6 +14141,7 @@ export function PlanningTab({
     // To respect the rule: Lucide React icons to differentiate root task from subtask
     const TaskIcon = depth === 0 ? FolderKanban : ListTodo;
     const isRecent = isTaskRecentlyModified(task.id);
+    const showLeftFamilyBorder = (depth === 0 && hasSubs) || (forceFlat && (hasSubs || task.parentId !== null));
     const dlStatus = getDeadlineStatus(task.endDate, task.status);
     const verticalBarBorder = dlStatus === "Atrasada"
       ? "border-2 border-rose-500 text-rose-600 bg-rose-50/20 hover:bg-rose-50/50 shadow-xs"
@@ -13978,372 +14154,413 @@ export function PlanningTab({
       <div 
         key={task.id} 
         id={`task-node-${task.id}`}
-        className={`w-full border-b border-b-slate-100 last:border-b-0 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.03)_inset] ${nodeBgTint} ${isRecent ? "rounded-xl ring-2 ring-indigo-500 ring-inset my-1 relative z-10" : ""}`}
+        className={`w-full border-b border-b-slate-100 last:border-b-0 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.03)_inset] ${nodeBgTint} ${
+          depth === 0
+            ? (showLeftFamilyBorder ? "border-l-4 border-l-[#1A3E8A]" : "border-l-4 border-l-transparent")
+            : "border-l-0"
+        } ${isRecent ? "rounded-xl ring-2 ring-indigo-500 ring-inset my-1 relative z-10" : ""}`}
       >
         {/* Node Layout block */}
         <div 
-          className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 transition-all gap-3 hover:bg-slate-50/50"
-          style={{ paddingLeft: `${forceFlat ? 16 : 16 + depth * 48}px` }}
+          className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 transition-all gap-3 hover:bg-slate-50/50 relative"
+          style={{ paddingLeft: `${forceFlat ? 16 : 16 + depth * 44}px` }}
         >
-          {/* Column Left: Collapse Indicator + Icon + Title */}
-          <div className="flex items-start gap-2.5 flex-1 min-w-0">
+          {/* Vertical line extending downward from parent expand button through bottom of parent row */}
+          {hasSubs && isExpanded && (
+            <div 
+              className="absolute bottom-0 w-[2px] bg-indigo-300 pointer-events-none z-10"
+              style={{ 
+                left: `${forceFlat ? 28 : 16 + depth * 44 + 15}px`,
+                top: '44px'
+              }}
+            />
+          )}
+
+          {/* Visual Tree Branch Connector Line for subtasks */}
+          {depth > 0 && !forceFlat && (
+            <div 
+              className="absolute top-0 bottom-0 pointer-events-none z-10 flex items-center"
+              style={{ left: `${16 + (depth - 1) * 44 + 15}px` }}
+            >
+              <div className="w-6 h-7 border-b-2 border-l-2 border-indigo-300 rounded-bl-lg -mt-3.5 relative">
+                {/* Circle / dot positioned exactly at the end of the horizontal branch line */}
+                <div className="absolute right-0 -bottom-[4px] translate-x-1/2 w-2.5 h-2.5 rounded-full bg-indigo-500 ring-2 ring-indigo-100 shadow-xs" />
+              </div>
+            </div>
+          )}
+
+          {/* Column Left: Large Expand/Collapse (+) Indicator + Icon + Title */}
+          <div className="flex items-start gap-2.5 flex-1 min-w-0 relative z-20">
             {hasSubs ? (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleExpand(task.id);
                 }}
-                className="p-1 mt-0.5 hover:bg-slate-200/50 rounded-md text-slate-400 hover:text-slate-700 transition"
-                title={isExpanded ? "Recolher subtarefas" : "Expandir subtarefas"}
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center font-black transition-all shadow-xs shrink-0 cursor-pointer ${
+                  isExpanded
+                    ? "bg-[#1A3E8A] text-white hover:bg-blue-900 ring-2 ring-[#1A3E8A]/30"
+                    : "bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white border-2 border-indigo-500 hover:border-indigo-600"
+                }`}
+                title={isExpanded ? `Recolher subtarefas (${taskChildren.length})` : `Expandir ${taskChildren.length} subtarefas`}
               >
-                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {isExpanded ? <Minus size={18} className="stroke-[3]" /> : <Plus size={18} className="stroke-[3]" />}
               </button>
+            ) : depth > 0 ? (
+              <div className="w-3 shrink-0" />
             ) : (
-              <div className="w-6 shrink-0" />
+              <div className="w-7 sm:w-8 shrink-0" />
             )}
 
-            <div className="flex gap-2.5 flex-1 min-w-0">
+            <div className="flex gap-3 flex-1 min-w-0">
               <div 
                 onClick={() => handleEditTask(task)}
-                className={`w-7 sm:w-8 rounded-2xl mt-0.5 cursor-pointer flex-shrink-0 flex flex-col items-center justify-start pt-2.5 pb-2 px-1 transition-all ${verticalBarBorder}`}
+                className={`w-8 h-8 rounded-xl mt-0.5 cursor-pointer flex-shrink-0 flex items-center justify-center transition-all ${verticalBarBorder}`}
                 title={`Situação: ${dlStatus} - Clique para abrir atividade`}
               >
-                <TaskIcon size={14} className="stroke-[2.5]" />
+                <TaskIcon size={16} className="stroke-[2.2]" />
               </div>
 
               <div className="min-w-0 flex-1">
-                {/* Title & Tag */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span 
-                    onClick={() => handleEditTask(task)}
-                    className="text-xs font-bold uppercase tracking-tight cursor-pointer hover:text-adasa-mid transition-colors text-slate-700"
-                  >
-                    {getTaskDisplayName(task)}
-                  </span>
-
-                  {(task.type === "demanda_ouvidoria" || task.type === "recurso") && (
+                {/* Title & Top Action Badges */}
+                <div className="flex items-start justify-between gap-2 flex-wrap mb-2">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
                     <span 
-                      className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shadow-xs cursor-pointer"
-                      title={`Etapa do Processo: ${(task.ouvidoriaData || task.recursoData)?.situacao || "Recebido"}`}
                       onClick={() => handleEditTask(task)}
+                      className="text-[13.5px] sm:text-[14px] font-bold uppercase tracking-tight cursor-pointer hover:text-adasa-dark transition-colors text-slate-800 leading-snug"
                     >
-                      <Scale size={10} className="stroke-[2.5]" />
-                      Etapa: {(task.ouvidoriaData || task.recursoData)?.situacao || "Recebido"}
+                      {getTaskDisplayName(task)}
                     </span>
-                  )}
 
-                  {hasSubs && (
-                    <span 
-                      className="text-xs font-black px-2 py-1 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-lg flex items-center gap-1.5 hover:bg-indigo-100 transition-all cursor-pointer shadow-sm"
-                      title="Totais de Subatividades"
-                      onClick={(e) => {
-                         e.stopPropagation();
-                         toggleExpand(task.id);
-                      }}
-                    >
-                      Subatividades ({taskChildren.length})
-                    </span>
-                  )}
+                    {(task.type === "demanda_ouvidoria" || task.type === "recurso") && (
+                      <span 
+                        className="text-[9.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shadow-2xs cursor-pointer"
+                        title={`Etapa do Processo: ${(task.ouvidoriaData || task.recursoData)?.situacao || "Recebido"}`}
+                        onClick={() => handleEditTask(task)}
+                      >
+                        <Scale size={11} className="stroke-[2.5]" />
+                        Etapa: {(task.ouvidoriaData || task.recursoData)?.situacao || "Recebido"}
+                      </span>
+                    )}
+
+                    {hasSubs && (
+                      <button 
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleExpand(task.id);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200/80 rounded-lg text-[10.5px] font-bold hover:bg-indigo-100 transition-all cursor-pointer shadow-2xs"
+                        title="Subatividades vinculadas - Clique para expandir/recolher"
+                      >
+                        <Layers size={12} className="text-indigo-600" />
+                        Subatividades ({taskChildren.length})
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Boxes de Prioridade, Programação, Status e Situação em linha abaixo do nome */}
-                <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
-                  {task.priority && (
-                    <span 
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
-                      title={`Prioridade: ${task.priority}`}
-                    >
-                      <Flag size={10} className="text-slate-400 shrink-0" />
-                      Prioridade: {task.priority}
-                    </span>
-                  )}
+                {/* Subtitle / Notes */}
+                {task.description && (
+                  <p className="text-[11px] font-medium text-slate-500 truncate max-w-md sm:max-w-2xl leading-normal mb-2 -mt-1">
+                    {task.description}
+                  </p>
+                )}
 
-                  {task.isProgrammed !== false ? (
-                    <span 
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
-                      title="Atividade Programada"
-                    >
-                      <CalendarCheck size={11} className="text-slate-400 shrink-0" />
-                      Programada
-                    </span>
-                  ) : (
-                    <span 
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
-                      title="Atividade Não Programada"
-                    >
-                      <CalendarX size={11} className="text-slate-400 shrink-0" />
-                      Não programada
-                    </span>
-                  )}
-
-                  {(() => {
-                    const normStatus = normalizeStatus(task.status);
-                    if (normStatus === "Concluída") {
-                      return (
-                        <span 
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs"
-                          title="Status: Concluída"
-                        >
-                          <CheckCircle2 size={11} className="text-emerald-600" />
-                          Concluída
-                        </span>
-                      );
-                    }
-                    if (normStatus === "Em andamento") {
-                      return (
-                        <span 
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs"
-                          title="Status: Em andamento"
-                        >
-                          <Clock size={11} className="text-blue-600 animate-pulse" />
-                          Em andamento
-                        </span>
-                      );
-                    }
-                    return (
+                {/* Structured Metadata Section */}
+                <div className="space-y-1.5 w-full">
+                  {/* Row 1: Badges de Prioridade, Programação, Status e Situação */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {task.priority && (
                       <span 
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
-                        title="Status: Não iniciada"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs"
+                        title={`Prioridade: ${task.priority}`}
                       >
-                        <Circle size={11} className="text-slate-400" />
-                        Não iniciada
+                        <Flag size={10} className="text-slate-400 shrink-0" />
+                        Prioridade: {task.priority}
                       </span>
-                    );
-                  })()}
+                    )}
 
-                  {(() => {
-                    const normStatus = normalizeStatus(task.status);
-                    const dlStatus = getDeadlineStatus(task.endDate, task.status);
-                    if (normStatus === "Concluída") {
+                    {task.isProgrammed !== false ? (
+                      <span 
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs"
+                        title="Atividade Programada"
+                      >
+                        <CalendarCheck size={11} className="text-slate-400 shrink-0" />
+                        Programada
+                      </span>
+                    ) : (
+                      <span 
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs"
+                        title="Atividade Não Programada"
+                      >
+                        <CalendarX size={11} className="text-slate-400 shrink-0" />
+                        Não programada
+                      </span>
+                    )}
+
+                    {(() => {
+                      const normStatus = normalizeStatus(task.status);
+                      if (normStatus === "Concluída") {
+                        return (
+                          <span 
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs"
+                            title="Status: Concluída"
+                          >
+                            <CheckCircle2 size={11} className="text-emerald-600" />
+                            Concluída
+                          </span>
+                        );
+                      }
+                      if (normStatus === "Em andamento") {
+                        return (
+                          <span 
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs"
+                            title="Status: Em andamento"
+                          >
+                            <Clock size={11} className="text-blue-600 animate-pulse" />
+                            Em andamento
+                          </span>
+                        );
+                      }
+                      return (
+                        <span 
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
+                          title="Status: Não iniciada"
+                        >
+                          <Circle size={11} className="text-slate-400" />
+                          Não iniciada
+                        </span>
+                      );
+                    })()}
+
+                    {(() => {
+                      const normStatus = normalizeStatus(task.status);
+                      const dlStatus = getDeadlineStatus(task.endDate, task.status);
+                      if (normStatus === "Concluída") {
+                        return (
+                          <span 
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
+                            title="Situação: No Prazo (Concluída)"
+                          >
+                            <CheckCircle2 size={11} className="text-slate-400" />
+                            No Prazo
+                          </span>
+                        );
+                      }
+                      if (dlStatus === "Atrasada") {
+                        return (
+                          <span 
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-300 shadow-2xs"
+                            title="Situação: Atrasada"
+                          >
+                            <AlertCircle size={11} className="text-rose-600" />
+                            Atrasada
+                          </span>
+                        );
+                      }
+                      if (dlStatus === "Crítica") {
+                        return (
+                          <span 
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs"
+                            title="Situação: Crítica"
+                          >
+                            <AlertTriangle size={11} className="text-amber-600" />
+                            Crítica
+                          </span>
+                        );
+                      }
                       return (
                         <span 
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
-                          title="Situação: No Prazo (Concluída)"
+                          title="Situação: No Prazo"
                         >
                           <CheckCircle2 size={11} className="text-slate-400" />
                           No Prazo
                         </span>
                       );
-                    }
-                    if (dlStatus === "Atrasada") {
-                      return (
-                        <span 
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-300 shadow-2xs"
-                          title="Situação: Atrasada"
-                        >
-                          <AlertCircle size={11} className="text-rose-600" />
-                          Atrasada
-                        </span>
-                      );
-                    }
-                    if (dlStatus === "Crítica") {
-                      return (
-                        <span 
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs"
-                          title="Situação: Crítica"
-                        >
-                          <AlertTriangle size={11} className="text-amber-600" />
-                          Crítica
-                        </span>
-                      );
-                    }
-                    return (
-                      <span 
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
-                        title="Situação: No Prazo"
-                      >
-                        <CheckCircle2 size={11} className="text-slate-400" />
-                        No Prazo
-                      </span>
-                    );
-                  })()}
-                </div>
-
-                {/* Subtitle / Notes */}
-                {task.description && (
-                  <p className="text-[10px] font-semibold text-slate-400 truncate max-w-md sm:max-w-xl leading-normal mt-0.5">
-                    {task.description}
-                  </p>
-                )}
-
-                {/* Dates & Owner */}
-                <div className="flex items-center gap-3 text-sm font-semibold text-slate-600 mt-1.5 flex-wrap">
-                  <span className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 flex-wrap">
-                    <Calendar size={14} className="text-slate-400 shrink-0" />
-                    <span><span className="text-slate-400 font-medium">Início:</span> {formatDate(task.startDate)}</span>
-                    <span className="text-slate-300 mx-1">|</span>
-                    <span><span className="text-slate-400 font-medium">Prazo:</span> {formatDate(task.endDate)}</span>
-                    {(() => {
-                      const dur = calculateDurationInDays(task.startDate, task.endDate);
-                      if (dur === null) return null;
-                      return (
-                        <>
-                          <span className="text-slate-300 mx-1">|</span>
-                          <span title="Duração da atividade em dias corridos">
-                            <span className="text-slate-400 font-medium">Duração:</span> {dur} {dur === 1 ? "dia corrido" : "dias corridos"}
-                          </span>
-                        </>
-                      );
                     })()}
-                  </span>
-                  {task.responsibleIds && task.responsibleIds.length > 0 && (
-                    <div className="flex items-center gap-1">
-                      {task.responsibleIds.map(rid => {
-                        const resp = responsibles.find(r => r.id === rid);
-                        if (!resp) return null;
-                        const initials = resp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                  </div>
+
+                  {/* Row 2: Cronograma, Responsáveis & Dependências */}
+                  <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-600 flex-wrap pt-0.5">
+                    <span className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/80 flex-wrap text-xs shadow-2xs">
+                      <Calendar size={13} className="text-slate-400 shrink-0" />
+                      <span><span className="text-slate-400 font-normal">Início:</span> {formatDate(task.startDate)}</span>
+                      <span className="text-slate-300 mx-0.5">|</span>
+                      <span><span className="text-slate-400 font-normal">Prazo:</span> {formatDate(task.endDate)}</span>
+                      {(() => {
+                        const dur = calculateDurationInDays(task.startDate, task.endDate);
+                        if (dur === null) return null;
                         return (
-                          <div key={rid} className="flex items-center justify-center w-6 h-6 text-[9px] font-bold text-slate-700 bg-slate-100 rounded-full border border-slate-200 shadow-sm" title={resp.name}>
-                            {initials}
-                          </div>
+                          <>
+                            <span className="text-slate-300 mx-0.5">|</span>
+                            <span title="Duração da atividade em dias corridos">
+                              <span className="text-slate-400 font-normal">Duração:</span> {dur} {dur === 1 ? "dia corrido" : "dias corridos"}
+                            </span>
+                          </>
                         );
+                      })()}
+                    </span>
+                    {task.responsibleIds && task.responsibleIds.length > 0 && (
+                      <div className="flex items-center gap-1">
+                        {task.responsibleIds.map(rid => {
+                          const resp = responsibles.find(r => r.id === rid);
+                          if (!resp) return null;
+                          const initials = resp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                          return (
+                            <div key={rid} className="flex items-center justify-center w-6 h-6 text-[9.5px] font-bold text-slate-700 bg-slate-100 rounded-full border border-slate-200 shadow-2xs" title={resp.name}>
+                              {initials}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {task.dependsOnTaskId && taskById[task.dependsOnTaskId] && (
+                      <span className="flex items-center gap-1 text-[9.5px] font-bold uppercase text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-md shadow-2xs" title={`Depende de: ${getTaskDisplayName(taskById[task.dependsOnTaskId])}`}>
+                        <Link2 size={11} className="text-slate-400" />
+                        <span className="truncate max-w-[160px]">Depende de: {getTaskDisplayName(taskById[task.dependsOnTaskId])}</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Row 3: Processo SEI, Área Temática & Categorias */}
+                  {((task.seiProcess) || (task.areaIds && task.areaIds.length > 0) || (task.categoryIds && task.categoryIds.length > 0)) && (
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5 text-[9.5px]">
+                      {task.seiProcess && (
+                        <div className="inline-flex items-center text-[10px] font-bold text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md shadow-2xs">
+                          <span className="truncate mr-1 font-mono flex items-center gap-1.5 text-slate-600"><FileDigit size={12} className="text-slate-400" /> {task.seiProcess}</span>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(task.seiProcess || "");
+                              showToast("Sucesso", "Processo SEI copiado para a área de transferência", "success");
+                            }}
+                            className="p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600 transition-colors ml-auto flex-shrink-0 cursor-pointer"
+                            title="Copiar Processo SEI"
+                          >
+                            <Copy size={11} />
+                          </button>
+                        </div>
+                      )}
+
+                      {task.areaIds && task.areaIds.map(aid => {
+                        const area = areas.find(a => a.id === aid);
+                        return (
+                          <span key={aid} className="text-[9.5px] font-bold uppercase text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                            <Briefcase size={10} className="text-slate-400" />
+                            {area?.name || `Área: ${aid}`}
+                          </span>
+                        );
+                      })}
+                      {task.categoryIds && task.categoryIds.map(cid => {
+                        const cat = categories.find(c => c.id === cid);
+                        return cat ? (
+                          <span key={cid} className="text-[9.5px] font-bold uppercase text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                            <Tag size={10} className="text-slate-400" /> {cat.name}
+                          </span>
+                        ) : null;
                       })}
                     </div>
                   )}
-                  {task.dependsOnTaskId && taskById[task.dependsOnTaskId] && (
-                    <span className="flex items-center gap-1 text-[9px] font-bold uppercase text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-md" title={`Depende de: ${getTaskDisplayName(taskById[task.dependsOnTaskId])}`}>
-                      <Link2 size={10} />
-                      <span className="truncate max-w-[150px]">Depende de: {getTaskDisplayName(taskById[task.dependsOnTaskId])}</span>
-                    </span>
-                  )}
-                </div>
 
-                {/* Area & Category dynamic tags */}
-                <div className="flex flex-col gap-1.5 mt-1.5 w-full">
-                  {task.seiProcess && (
-                    <div className="flex items-center self-start text-[10px] font-bold text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded-md max-w-full">
-                      <span className="truncate mr-2 font-mono flex items-center gap-1.5 text-slate-600"><FileDigit size={12} className="text-slate-400" /> {task.seiProcess}</span>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigator.clipboard.writeText(task.seiProcess || "");
-                          showToast("Sucesso", "Processo SEI copiado para a área de transferência", "success");
-                        }}
-                        className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600 transition-colors ml-auto flex-shrink-0"
-                        title="Copiar Processo SEI"
-                      >
-                        <Copy size={12} />
-                      </button>
-                    </div>
-                  )}
+                  {(() => {
+                    if (task.type !== 'fiscalizacao') return null;
+                    const fData = task.fiscalizacaoData;
+                    const totalConstatacoes = fData?.constatacoes?.length || 0;
+                    const totalTermos = fData?.termosNotificacao?.length || 0;
+                    const totalAutos = fData?.autosDeInfracao?.length || 0;
 
-                  {((task.areaIds && task.areaIds.length > 0) || (task.categoryIds && task.categoryIds.length > 0)) && (
-                    <div className="flex items-center gap-1.5 text-[9px] font-black flex-wrap">
-                      {task.areaIds && task.areaIds.map(aid => {
-                      const area = areas.find(a => a.id === aid);
-                      return (
-                        <span key={aid} className="text-[9px] font-bold uppercase text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1">
-                          {area?.name || `Área: ${aid}`}
+                    const todayStr = new Date().toISOString().split('T')[0];
+
+                    const hasOverdueConstatacao = (fData?.constatacoes || []).some(c => {
+                      if (c.alertaPrazo === false) return false;
+                      if (c.situacao !== 'Não Conforme') return false;
+                      const tratamento = c.situacaoNaoConforme || 'Não Tratada';
+                      if (tratamento === 'Tratada Adequadamente') return false;
+                      return c.prazoCorrecao && c.prazoCorrecao < todayStr;
+                    });
+
+                    const hasSoonOverdueConstatacao = (fData?.constatacoes || []).some(c => {
+                      if (c.alertaPrazo === false) return false;
+                      if (c.situacao !== 'Não Conforme') return false;
+                      const tratamento = c.situacaoNaoConforme || 'Não Tratada';
+                      if (tratamento === 'Tratada Adequadamente') return false;
+                      if (!c.prazoCorrecao) return false;
+                      if (c.prazoCorrecao < todayStr) return false;
+                      
+                      const today = new Date(todayStr);
+                      const prazo = new Date(c.prazoCorrecao);
+                      const diffTime = prazo.getTime() - today.getTime();
+                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                      return diffDays <= 15;
+                    });
+
+                    const hasOverdueTermo = (fData?.termosNotificacao || []).some(termo => {
+                      return !termo.respondidoEm && termo.dataResposta && termo.dataResposta < todayStr;
+                    });
+
+                    const hasOverdueAuto = (fData?.autosDeInfracao || []).some(auto => {
+                      return auto.dataLimiteRecurso && auto.dataLimiteRecurso < todayStr;
+                    });
+
+                    return (
+                      <div className="flex flex-wrap items-center gap-2 pt-0.5 select-none">
+                        {/* Badge Constatacoes */}
+                        <span 
+                          className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-md border flex items-center gap-1.5 transition-all shadow-sm ${
+                            hasOverdueConstatacao 
+                              ? "bg-rose-500 text-white border-rose-600 animate-pulse font-extrabold" 
+                              : hasSoonOverdueConstatacao 
+                              ? "bg-amber-500 text-white border-amber-600 font-extrabold" 
+                              : "bg-sky-50 text-sky-800 border-sky-200"
+                          }`}
+                          title={hasOverdueConstatacao ? "Constatações com PRAZO VENCIDO!" : hasSoonOverdueConstatacao ? "Constatações prestes a vencer (≤ 15 dias)" : "Constatações cadastradas"}
+                        >
+                          <FileText size={10} />
+                          Constatações: {totalConstatacoes}
+                          {hasOverdueConstatacao && " (VENCIDA)"}
+                          {!hasOverdueConstatacao && hasSoonOverdueConstatacao && " (ALERTA)"}
                         </span>
-                      );
-                    })}
-                    {task.categoryIds && task.categoryIds.map(cid => {
-                      const cat = categories.find(c => c.id === cid);
-                      return cat ? (
-                        <span key={cid} className="text-[9px] font-bold uppercase text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1">
-                          <Tag size={10} /> {cat.name}
+
+                        {/* Badge Termos de Notificação */}
+                        <span 
+                          className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-md border flex items-center gap-1.5 transition-all shadow-sm ${
+                            hasOverdueTermo 
+                              ? "bg-rose-500 text-white border-rose-600 animate-pulse font-extrabold" 
+                              : "bg-indigo-50 text-indigo-800 border-indigo-200"
+                          }`}
+                          title={hasOverdueTermo ? "Termos de Notificação com PRAZO VENCIDO!" : "Termos de Notificação cadastrados"}
+                        >
+                          <AlertCircle size={10} />
+                          Termos: {totalTermos}
+                          {hasOverdueTermo && " (VENCIDO)"}
                         </span>
-                      ) : null;
-                    })}
-                  </div>
-                )}
 
-                {(() => {
-                  if (task.type !== 'fiscalizacao') return null;
-                  const fData = task.fiscalizacaoData;
-                  const totalConstatacoes = fData?.constatacoes?.length || 0;
-                  const totalTermos = fData?.termosNotificacao?.length || 0;
-                  const totalAutos = fData?.autosDeInfracao?.length || 0;
-
-                  const todayStr = new Date().toISOString().split('T')[0];
-
-                  const hasOverdueConstatacao = (fData?.constatacoes || []).some(c => {
-                    if (c.alertaPrazo === false) return false;
-                    if (c.situacao !== 'Não Conforme') return false;
-                    const tratamento = c.situacaoNaoConforme || 'Não Tratada';
-                    if (tratamento === 'Tratada Adequadamente') return false;
-                    return c.prazoCorrecao && c.prazoCorrecao < todayStr;
-                  });
-
-                  const hasSoonOverdueConstatacao = (fData?.constatacoes || []).some(c => {
-                    if (c.alertaPrazo === false) return false;
-                    if (c.situacao !== 'Não Conforme') return false;
-                    const tratamento = c.situacaoNaoConforme || 'Não Tratada';
-                    if (tratamento === 'Tratada Adequadamente') return false;
-                    if (!c.prazoCorrecao) return false;
-                    if (c.prazoCorrecao < todayStr) return false;
-                    
-                    const today = new Date(todayStr);
-                    const prazo = new Date(c.prazoCorrecao);
-                    const diffTime = prazo.getTime() - today.getTime();
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    return diffDays <= 15;
-                  });
-
-                  const hasOverdueTermo = (fData?.termosNotificacao || []).some(termo => {
-                    return !termo.respondidoEm && termo.dataResposta && termo.dataResposta < todayStr;
-                  });
-
-                  const hasOverdueAuto = (fData?.autosDeInfracao || []).some(auto => {
-                    return auto.dataLimiteRecurso && auto.dataLimiteRecurso < todayStr;
-                  });
-
-                  return (
-                    <div className="flex flex-wrap items-center gap-2 mt-1 select-none">
-                      {/* Badge Constatacoes */}
-                      <span 
-                        className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-md border flex items-center gap-1.5 transition-all shadow-sm ${
-                          hasOverdueConstatacao 
-                            ? "bg-rose-500 text-white border-rose-600 animate-pulse font-extrabold" 
-                            : hasSoonOverdueConstatacao 
-                            ? "bg-amber-500 text-white border-amber-600 font-extrabold" 
-                            : "bg-sky-50 text-sky-800 border-sky-200"
-                        }`}
-                        title={hasOverdueConstatacao ? "Constatações com PRAZO VENCIDO!" : hasSoonOverdueConstatacao ? "Constatações prestes a vencer (≤ 15 dias)" : "Constatações cadastradas"}
-                      >
-                        <FileText size={10} />
-                        Constatações: {totalConstatacoes}
-                        {hasOverdueConstatacao && " (VENCIDA)"}
-                        {!hasOverdueConstatacao && hasSoonOverdueConstatacao && " (ALERTA)"}
-                      </span>
-
-                      {/* Badge Termos de Notificação */}
-                      <span 
-                        className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-md border flex items-center gap-1.5 transition-all shadow-sm ${
-                          hasOverdueTermo 
-                            ? "bg-rose-500 text-white border-rose-600 animate-pulse font-extrabold" 
-                            : "bg-indigo-50 text-indigo-800 border-indigo-200"
-                        }`}
-                        title={hasOverdueTermo ? "Termos de Notificação com PRAZO VENCIDO!" : "Termos de Notificação cadastrados"}
-                      >
-                        <AlertCircle size={10} />
-                        Termos: {totalTermos}
-                        {hasOverdueTermo && " (VENCIDO)"}
-                      </span>
-
-                      {/* Badge Autos de Infracao */}
-                      <span 
-                        className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-md border flex items-center gap-1.5 transition-all shadow-sm ${
-                          hasOverdueAuto
-                            ? "bg-rose-500 text-white border-rose-600 animate-pulse font-extrabold"
-                            : "bg-rose-50 text-rose-800 border-rose-200"
-                        }`}
-                        title={hasOverdueAuto ? "Autos de Infração com PRAZO DE RECURSO VENCIDO!" : "Autos de Infração cadastrados"}
-                      >
-                        <AlertTriangle size={10} />
-                        Autos: {totalAutos}
-                        {hasOverdueAuto && " (VENCIDO)"}
-                      </span>
-                    </div>
-                  );
-                })()}
+                        {/* Badge Autos de Infracao */}
+                        <span 
+                          className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-md border flex items-center gap-1.5 transition-all shadow-sm ${
+                            hasOverdueAuto
+                              ? "bg-rose-500 text-white border-rose-600 animate-pulse font-extrabold"
+                              : "bg-rose-50 text-rose-800 border-rose-200"
+                          }`}
+                          title={hasOverdueAuto ? "Autos de Infração com PRAZO DE RECURSO VENCIDO!" : "Autos de Infração cadastrados"}
+                        >
+                          <AlertTriangle size={10} />
+                          Autos: {totalAutos}
+                          {hasOverdueAuto && " (VENCIDO)"}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
           </div>
 
           {/* Column Right: Progress Bar & Actions */}
-          <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+          <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
             {/* Progress visually */}
             <div className="flex items-center gap-2.5 min-w-[130px] sm:min-w-[150px]">
               <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-100">
@@ -14407,7 +14624,12 @@ export function PlanningTab({
 
         {/* Children Nested Elements */}
         {hasSubs && isExpanded && (
-          <div className="bg-slate-50/30">
+          <div className="relative bg-slate-50/40">
+            {/* Continuous vertical guide line connecting parent down to all child tasks */}
+            <div 
+              className="absolute top-0 bottom-5 w-[2px] bg-indigo-300 pointer-events-none z-10"
+              style={{ left: `${forceFlat ? 28 : 16 + depth * 44 + 15}px` }}
+            />
             <AnimatePresence initial={false}>
               <motion.div
                 initial={{ height: 0, opacity: 0 }}

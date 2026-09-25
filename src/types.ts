@@ -397,6 +397,12 @@ export interface Area {
   updatedBy?: string | null;
 }
 
+export interface CategoryAreaStatus {
+  isArchived: boolean;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+}
+
 export interface Category {
   id: number;
   name: string;
@@ -404,6 +410,8 @@ export interface Category {
   isArchived?: boolean;
   archivedAt?: string | null;
   archivedBy?: string | null;
+  archivedAreaIds?: number[];
+  areaStatuses?: Record<number, CategoryAreaStatus>;
   createdAt?: string | null;
   createdBy?: string | null;
   updatedAt?: string | null;

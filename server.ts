@@ -250,7 +250,16 @@ async function authenticateApiRequest(req: express.Request, res: express.Respons
       if (!allowed) return res.status(403).json({ success: false, error: "Permissão insuficiente para esta operação." });
     }
     return next();
-  } catch (error) {
+  } catch (error: any) {
+    const isQuotaExceeded = error?.message?.includes("quota") || error?.message?.includes("exceeded the quota");
+    if (isQuotaExceeded) {
+      console.warn("Aviso: Limite de cota do PostgreSQL ao validar sessão:", error.message);
+      return res.status(429).json({
+        success: false,
+        isQuotaExceeded: true,
+        error: "A cota de uso do banco de dados na nuvem (PostgreSQL) foi excedida no provedor externo."
+      });
+    }
     console.error("Falha ao validar sessão:", error);
     return res.status(503).json({ success: false, error: "Não foi possível validar a sessão." });
   }
@@ -833,16 +842,6 @@ async function runStartupMigration() {
       } catch (err) {
         // ignore if already exists
       }
-      // Remove mock/test users if present in the database
-      try {
-        await client.query(`
-          DELETE FROM au_users 
-          WHERE LOWER(email) IN ('admin@adasa.gov.br', 'joao@adasa.gov.br', 'maria@caesb.gov.br')
-             OR name IN ('Admin', 'Joao Regulador', 'Maria CAESB');
-        `);
-      } catch (err) {
-        // ignore
-      }
 
 
       await client.query(`
@@ -907,8 +906,10 @@ async function runStartupMigration() {
       await client.query(`ALTER TABLE pl_categories ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;`);
       await client.query(`ALTER TABLE pl_categories ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP;`);
       await client.query(`ALTER TABLE pl_categories ADD COLUMN IF NOT EXISTS archived_by VARCHAR(255);`);
+      await client.query(`ALTER TABLE pl_category_areas ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;`);
+      await client.query(`ALTER TABLE pl_category_areas ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP;`);
+      await client.query(`ALTER TABLE pl_category_areas ADD COLUMN IF NOT EXISTS archived_by VARCHAR(255);`);
       await client.query(`ALTER TABLE pl_areas ALTER COLUMN abbreviation TYPE VARCHAR(4);`);
-      await client.query("UPDATE pl_areas SET abbreviation = 'CORA' WHERE abbreviation = 'CO';");
 
       // Ensure pl_tasks has weight column
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS weight REAL DEFAULT 1.0;`);
@@ -917,72 +918,10 @@ async function runStartupMigration() {
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS fiscalizacao_data JSONB;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS ouvidoria_data JSONB;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS recurso_rev_data JSONB;`);
-      await client.query(`
-        DO $$
-        BEGIN
-          IF EXISTS (
-            SELECT 1 FROM information_schema.columns 
-            WHERE table_name='pl_tasks' AND column_name='recurso_data'
-          ) THEN
-            UPDATE pl_tasks SET ouvidoria_data = recurso_data WHERE ouvidoria_data IS NULL AND recurso_data IS NOT NULL;
-            ALTER TABLE pl_tasks DROP COLUMN IF EXISTS recurso_data;
-          END IF;
-        END $$;
-      `);
       await client.query(`ALTER TABLE pl_tasks DROP COLUMN IF EXISTS recurso_data;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS checklist JSONB;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS links JSONB DEFAULT '[]'::jsonb;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS comments JSONB DEFAULT '[]'::jsonb;`);
-
-      // Migrate legacy task type 'recurso' to 'demanda_ouvidoria' if needed
-      await client.query(`
-        UPDATE pl_tasks 
-        SET type = 'demanda_ouvidoria'
-        WHERE type = 'recurso';
-      `);
-
-      // Update any existing recurso_data jsonb that still references 'Reclamação'
-      await client.query(`
-        UPDATE pl_tasks
-        SET ouvidoria_data = jsonb_set(ouvidoria_data, '{tipoManifestacao}', '"Demanda Ouvidoria"')
-        WHERE ouvidoria_data IS NOT NULL AND ouvidoria_data->>'tipoManifestacao' = 'Reclamação';
-      `);
-
-      // Extract and update sei_process from title for tasks where sei_process is null or empty
-      try {
-        const tasksForSei = await client.query(`
-          SELECT id, title, sei_process 
-          FROM pl_tasks 
-          WHERE (sei_process IS NULL OR sei_process = '')
-            AND title IS NOT NULL
-        `);
-        for (const row of tasksForSei.rows) {
-          const extracted = extractSeiProcessFromTitle(row.title);
-          if (extracted) {
-            await client.query("UPDATE pl_tasks SET sei_process = $1 WHERE id = $2", [extracted, row.id]);
-          }
-        }
-      } catch (errSei) {
-        console.error("Erro ao extrair e atualizar sei_process das tarefas:", errSei);
-      }
-
-      // Auto-link categories to areas based on existing tasks that have both category and area assigned
-      try {
-        const syncRes = await client.query(`
-          INSERT INTO pl_category_areas (category_id, area_id, order_index)
-          SELECT DISTINCT tc.category_id, ta.area_id, 0
-          FROM pl_task_categories tc
-          JOIN pl_task_areas ta ON ta.task_id = tc.task_id
-          WHERE tc.category_id IS NOT NULL AND ta.area_id IS NOT NULL
-          ON CONFLICT (category_id, area_id) DO NOTHING
-          RETURNING *;
-        `);
-        if (syncRes.rowCount && syncRes.rowCount > 0) {
-          console.log(`[Auto-sync] ${syncRes.rowCount} novos vínculos categoria-área criados a partir das atividades existentes.`);
-        }
-      } catch (errSyncCatAreas) {
-        console.error("Erro ao sincronizar pl_category_areas a partir de pl_tasks:", errSyncCatAreas);
-      }
 
       // Ensure pl_task_models and pl_model_tasks tables exist for task templates
       await client.query(`
@@ -1241,71 +1180,9 @@ async function runStartupMigration() {
 
       // Migration: Ensure user_id column exists, backfill from author_name if present, drop author_name column
       try {
+        // Ensure columns exist on re_participation_contributions
         await client.query(`
           ALTER TABLE re_participation_contributions ADD COLUMN IF NOT EXISTS user_id INTEGER;
-        `);
-
-        // Check if author_name column exists to backfill user_id
-        const hasAuthorNameCol = await client.query(`
-          SELECT column_name FROM information_schema.columns 
-          WHERE table_name = 're_participation_contributions' AND column_name = 'author_name';
-        `);
-
-        if (hasAuthorNameCol.rows.length > 0) {
-          // Backfill user_id from author_name by matching au_users.name or creating user
-          const unlinkedContribs = await client.query(`
-            SELECT DISTINCT author_name FROM re_participation_contributions 
-            WHERE user_id IS NULL AND author_name IS NOT NULL AND TRIM(author_name) != '';
-          `);
-
-          for (const row of unlinkedContribs.rows) {
-            const authorName = (row.author_name || "").trim();
-            if (!authorName) continue;
-            
-            let uRes = await client.query("SELECT id FROM au_users WHERE LOWER(TRIM(name)) = LOWER($1) LIMIT 1", [authorName]);
-            let uid = uRes.rows.length > 0 ? uRes.rows[0].id : null;
-
-            if (!uid) {
-              const fakeEmail = `${authorName.toLowerCase().replace(/[^a-z0-9]/g, '.')}@adasa.df.gov.br`;
-              const checkEmail = await client.query("SELECT id FROM au_users WHERE LOWER(email) = LOWER($1) LIMIT 1", [fakeEmail]);
-              if (checkEmail.rows.length > 0) {
-                uid = checkEmail.rows[0].id;
-              } else {
-                const insUser = await client.query(
-                  "INSERT INTO au_users (name, email, password, role_id, status) VALUES ($1, $2, $3, 'provider', 'active') RETURNING id",
-                  [authorName, fakeEmail, await hashPassword("1234")]
-                );
-                uid = insUser.rows[0].id;
-              }
-            }
-
-            if (uid) {
-              await client.query("UPDATE re_participation_contributions SET user_id = $1 WHERE user_id IS NULL AND author_name = $2", [uid, row.author_name]);
-            }
-          }
-
-          // If any user_id is still NULL, associate with the first admin user
-          await client.query(`
-            UPDATE re_participation_contributions 
-            SET user_id = (SELECT id FROM au_users ORDER BY id ASC LIMIT 1) 
-            WHERE user_id IS NULL;
-          `);
-
-          // Remove duplicate contributions per (article_id, user_id) before adding UNIQUE constraint
-          await client.query(`
-            DELETE FROM re_participation_contributions c1
-            WHERE c1.id NOT IN (
-              SELECT MAX(c2.id)
-              FROM re_participation_contributions c2
-              GROUP BY c2.article_id, c2.user_id
-            );
-          `);
-
-        }
-
-        // Add support for oral manifestations, physical/official documents, institutions, protocols and operator audit
-        // We ALWAYS need to ensure these columns exist (whether or not author_name existed before)
-        await client.query(`
           ALTER TABLE re_participation_contributions ADD COLUMN IF NOT EXISTS author_name TEXT;
           ALTER TABLE re_participation_contributions ADD COLUMN IF NOT EXISTS author_email TEXT;
           ALTER TABLE re_participation_contributions ADD COLUMN IF NOT EXISTS author_institution TEXT;
@@ -2118,13 +1995,29 @@ export async function startServer(isVercel = false) {
 
         const categoryAreasMap: Record<number, number[]> = {};
         const areaCategoriesMap: Record<number, number[]> = {};
+        const categoryArchivedAreaIdsMap: Record<number, number[]> = {};
+        const categoryAreaStatusesMap: Record<number, Record<number, { isArchived: boolean; archivedAt?: string | null; archivedBy?: string | null }>> = {};
+
         dbCategoryAreas.rows.forEach(r => {
           const cid = Number(r.category_id);
           const aid = Number(r.area_id);
+          const isArch = !!r.is_archived;
+          const archAt = r.archived_at || null;
+          const archBy = r.archived_by || null;
+
           if (!categoryAreasMap[cid]) categoryAreasMap[cid] = [];
           categoryAreasMap[cid].push(aid);
+
           if (!areaCategoriesMap[aid]) areaCategoriesMap[aid] = [];
           areaCategoriesMap[aid].push(cid);
+
+          if (isArch) {
+            if (!categoryArchivedAreaIdsMap[cid]) categoryArchivedAreaIdsMap[cid] = [];
+            categoryArchivedAreaIdsMap[cid].push(aid);
+          }
+
+          if (!categoryAreaStatusesMap[cid]) categoryAreaStatusesMap[cid] = {};
+          categoryAreaStatusesMap[cid][aid] = { isArchived: isArch, archivedAt: archAt, archivedBy: archBy };
         });
 
         const responsibleAreasMap: Record<number, number[]> = {};
@@ -2281,18 +2174,23 @@ export async function startServer(isVercel = false) {
             areaIds: responsibleAreasMap[Number(r.id)] || [],
             userId: r.user_id ? Number(r.user_id) : null
           })),
-          categories: dbCategories.rows.map(c => ({
-            id: Number(c.id),
-            name: c.name,
-            isArchived: !!c.is_archived,
-            archivedAt: c.archived_at,
-            archivedBy: c.archived_by,
-            areaIds: categoryAreasMap[Number(c.id)] || [],
-            createdAt: c.created_at,
-            createdBy: c.created_by,
-            updatedAt: c.updated_at,
-            updatedBy: c.updated_by
-          })),
+          categories: dbCategories.rows.map(c => {
+            const cid = Number(c.id);
+            return {
+              id: cid,
+              name: c.name,
+              isArchived: !!c.is_archived,
+              archivedAt: c.archived_at,
+              archivedBy: c.archived_by,
+              archivedAreaIds: categoryArchivedAreaIdsMap[cid] || [],
+              areaStatuses: categoryAreaStatusesMap[cid] || {},
+              areaIds: categoryAreasMap[cid] || [],
+              createdAt: c.created_at,
+              createdBy: c.created_by,
+              updatedAt: c.updated_at,
+              updatedBy: c.updated_by
+            };
+          }),
           tasks: dbTasks.rows.map(t => ({
             id: Number(t.id),
             title: t.title,
@@ -3952,6 +3850,15 @@ export async function startServer(isVercel = false) {
         }
       });
     } catch (error: any) {
+      const isQuotaExceeded = error?.message?.includes("quota") || error?.message?.includes("exceeded the quota");
+      if (isQuotaExceeded) {
+        console.warn("Aviso: Limite de cota do PostgreSQL ao fazer login:", error.message);
+        return res.status(429).json({
+          success: false,
+          isQuotaExceeded: true,
+          error: "A cota de uso do banco de dados na nuvem (PostgreSQL) foi excedida no provedor externo. É necessário atualizar o plano ou aguardar a renovação da cota."
+        });
+      }
       console.error("Erro ao fazer login:", error);
       res.status(500).json({ success: false, error: "Não foi possível concluir a autenticação." });
     }
@@ -4233,20 +4140,29 @@ export async function startServer(isVercel = false) {
           return res.status(404).json({ success: false, error: "Categoria não encontrada" });
         }
         
-        // Keep existing order index
-        const existingOrderRes = await pool.query("SELECT area_id, order_index FROM pl_category_areas WHERE category_id = $1", [catId]);
-        const existingOrders = new Map<number, number>();
-        existingOrderRes.rows.forEach(r => existingOrders.set(Number(r.area_id), Number(r.order_index)));
+        // Keep existing order index and archive state per area
+        const existingOrderRes = await pool.query("SELECT area_id, order_index, is_archived, archived_at, archived_by FROM pl_category_areas WHERE category_id = $1", [catId]);
+        const existingOrders = new Map<number, { order: number; isArchived: boolean; archivedAt: any; archivedBy: any }>();
+        existingOrderRes.rows.forEach(r => existingOrders.set(Number(r.area_id), {
+          order: Number(r.order_index),
+          isArchived: !!r.is_archived,
+          archivedAt: r.archived_at,
+          archivedBy: r.archived_by
+        }));
         
         await pool.query("DELETE FROM pl_category_areas WHERE category_id = $1", [catId]);
         if (Array.isArray(areaIds) && areaIds.length > 0) {
           for (const aId of areaIds) {
-            let orderIdx = existingOrders.get(aId);
+            const existing = existingOrders.get(aId);
+            let orderIdx = existing?.order;
             if (orderIdx === undefined) {
               const maxOrderRes = await pool.query("SELECT COALESCE(MAX(order_index), -1) + 1 as next_order FROM pl_category_areas WHERE area_id = $1", [aId]);
               orderIdx = maxOrderRes.rows[0].next_order;
             }
-            await pool.query("INSERT INTO pl_category_areas (category_id, area_id, order_index) VALUES ($1, $2, $3)", [catId, aId, orderIdx]);
+            await pool.query(
+              "INSERT INTO pl_category_areas (category_id, area_id, order_index, is_archived, archived_at, archived_by) VALUES ($1, $2, $3, $4, $5, $6)",
+              [catId, aId, orderIdx, existing?.isArchived || false, existing?.archivedAt || null, existing?.archivedBy || null]
+            );
           }
         }
         await pool.query("COMMIT");
@@ -4255,6 +4171,17 @@ export async function startServer(isVercel = false) {
         throw err;
       }
       
+      const allAreasRes = await pool.query("SELECT area_id, is_archived, archived_at, archived_by FROM pl_category_areas WHERE category_id = $1", [catId]);
+      const archivedAreaIds = allAreasRes.rows.filter(r => r.is_archived).map(r => Number(r.area_id));
+      const areaStatuses: Record<number, any> = {};
+      allAreasRes.rows.forEach(r => {
+        areaStatuses[Number(r.area_id)] = {
+          isArchived: !!r.is_archived,
+          archivedAt: r.archived_at,
+          archivedBy: r.archived_by
+        };
+      });
+
       res.json({
         success: true,
         data: {
@@ -4263,6 +4190,8 @@ export async function startServer(isVercel = false) {
           isArchived: !!result.rows[0].is_archived,
           archivedAt: result.rows[0].archived_at,
           archivedBy: result.rows[0].archived_by,
+          archivedAreaIds,
+          areaStatuses,
           areaIds: areaIds || [],
           createdAt: result.rows[0].created_at,
           createdBy: result.rows[0].created_by,
@@ -4279,26 +4208,101 @@ export async function startServer(isVercel = false) {
   app.put("/api/categories/:id/archive", async (req, res) => {
     try {
       const catId = parseInt(req.params.id);
-      const { isArchived, archivedBy } = req.body;
+      const { isArchived, archivedBy, areaId } = req.body;
       const pool = getDbPool();
       const shouldArchive = isArchived === true;
-      const result = await pool.query(
-        "UPDATE pl_categories SET is_archived = $1, archived_at = CASE WHEN $1 = TRUE THEN NOW() ELSE NULL END, archived_by = CASE WHEN $1 = TRUE THEN $2 ELSE NULL END, updated_at = NOW(), updated_by = $2 WHERE id = $3 RETURNING *",
-        [shouldArchive, archivedBy || "SGI Pro", catId]
-      );
-      if (result.rows.length === 0) {
-        return res.status(404).json({ success: false, error: "Categoria não encontrada" });
-      }
-      res.json({
-        success: true,
-        data: {
-          id: Number(result.rows[0].id),
-          name: result.rows[0].name,
-          isArchived: !!result.rows[0].is_archived,
-          archivedAt: result.rows[0].archived_at,
-          archivedBy: result.rows[0].archived_by
+      const userSignature = archivedBy || "SGI Pro";
+      const targetAreaId = areaId !== undefined && areaId !== null && areaId !== "" ? Number(areaId) : null;
+
+      if (targetAreaId !== null) {
+        // Archive/unarchive specifically for this area
+        await pool.query(
+          `UPDATE pl_category_areas 
+           SET is_archived = $1, 
+               archived_at = CASE WHEN $1 = TRUE THEN NOW() ELSE NULL END, 
+               archived_by = CASE WHEN $1 = TRUE THEN $2 ELSE NULL END 
+           WHERE category_id = $3 AND area_id = $4`,
+          [shouldArchive, userSignature, catId, targetAreaId]
+        );
+
+        // Check if all areas of this category are now archived
+        const allAreasRes = await pool.query(
+          "SELECT area_id, is_archived, archived_at, archived_by FROM pl_category_areas WHERE category_id = $1",
+          [catId]
+        );
+        const allArchived = allAreasRes.rows.length > 0 && allAreasRes.rows.every(r => r.is_archived);
+        await pool.query(
+          "UPDATE pl_categories SET is_archived = $1, updated_at = NOW(), updated_by = $2 WHERE id = $3",
+          [allArchived, userSignature, catId]
+        );
+
+        const archivedAreaIds = allAreasRes.rows.filter(r => r.is_archived).map(r => Number(r.area_id));
+        const areaStatuses: Record<number, any> = {};
+        allAreasRes.rows.forEach(r => {
+          areaStatuses[Number(r.area_id)] = {
+            isArchived: !!r.is_archived,
+            archivedAt: r.archived_at,
+            archivedBy: r.archived_by
+          };
+        });
+
+        return res.json({
+          success: true,
+          data: {
+            id: catId,
+            areaId: targetAreaId,
+            isArchived: shouldArchive,
+            archivedAreaIds,
+            areaStatuses,
+            allArchived
+          }
+        });
+      } else {
+        // Global archive/unarchive (if no area is specified)
+        const result = await pool.query(
+          "UPDATE pl_categories SET is_archived = $1, archived_at = CASE WHEN $1 = TRUE THEN NOW() ELSE NULL END, archived_by = CASE WHEN $1 = TRUE THEN $2 ELSE NULL END, updated_at = NOW(), updated_by = $2 WHERE id = $3 RETURNING *",
+          [shouldArchive, userSignature, catId]
+        );
+        if (result.rows.length === 0) {
+          return res.status(404).json({ success: false, error: "Categoria não encontrada" });
         }
-      });
+
+        await pool.query(
+          `UPDATE pl_category_areas 
+           SET is_archived = $1, 
+               archived_at = CASE WHEN $1 = TRUE THEN NOW() ELSE NULL END, 
+               archived_by = CASE WHEN $1 = TRUE THEN $2 ELSE NULL END 
+           WHERE category_id = $3`,
+          [shouldArchive, userSignature, catId]
+        );
+
+        const allAreasRes = await pool.query(
+          "SELECT area_id, is_archived, archived_at, archived_by FROM pl_category_areas WHERE category_id = $1",
+          [catId]
+        );
+        const archivedAreaIds = allAreasRes.rows.filter(r => r.is_archived).map(r => Number(r.area_id));
+        const areaStatuses: Record<number, any> = {};
+        allAreasRes.rows.forEach(r => {
+          areaStatuses[Number(r.area_id)] = {
+            isArchived: !!r.is_archived,
+            archivedAt: r.archived_at,
+            archivedBy: r.archived_by
+          };
+        });
+
+        return res.json({
+          success: true,
+          data: {
+            id: Number(result.rows[0].id),
+            name: result.rows[0].name,
+            isArchived: !!result.rows[0].is_archived,
+            archivedAt: result.rows[0].archived_at,
+            archivedBy: result.rows[0].archived_by,
+            archivedAreaIds,
+            areaStatuses
+          }
+        });
+      }
     } catch (error: any) {
       console.error("Erro ao arquivar/desarquivar categoria:", error);
       res.status(500).json({ success: false, error: error.message });
@@ -4307,12 +4311,13 @@ export async function startServer(isVercel = false) {
 
   app.post("/api/categories/migrate-tasks", async (req, res) => {
     try {
-      const { fromCategoryId, toCategoryId, updatedBy } = req.body;
+      const { fromCategoryId, toCategoryId, areaId, updatedBy } = req.body;
       if (!fromCategoryId || !toCategoryId) {
         return res.status(400).json({ success: false, error: "Categorias de origem e destino são obrigatórias." });
       }
       const fromId = Number(fromCategoryId);
       const toId = Number(toCategoryId);
+      const targetAreaId = areaId !== undefined && areaId !== null && areaId !== "" ? Number(areaId) : null;
       if (fromId === toId) {
         return res.status(400).json({ success: false, error: "As categorias de origem e destino devem ser diferentes." });
       }
@@ -4329,13 +4334,23 @@ export async function startServer(isVercel = false) {
           return res.status(404).json({ success: false, error: "Uma ou ambas as categorias não foram encontradas." });
         }
 
-        // Find all tasks associated with fromCategoryId
-        const tasksRes = await client.query("SELECT task_id FROM pl_task_categories WHERE category_id = $1", [fromId]);
+        // Find tasks associated with fromCategoryId (scoped by areaId if specified)
+        let tasksRes;
+        if (targetAreaId !== null) {
+          tasksRes = await client.query(`
+            SELECT DISTINCT tc.task_id 
+            FROM pl_task_categories tc
+            JOIN pl_task_areas ta ON ta.task_id = tc.task_id
+            WHERE tc.category_id = $1 AND ta.area_id = $2
+          `, [fromId, targetAreaId]);
+        } else {
+          tasksRes = await client.query("SELECT DISTINCT task_id FROM pl_task_categories WHERE category_id = $1", [fromId]);
+        }
         const taskIds = tasksRes.rows.map(r => Number(r.task_id));
 
         if (taskIds.length > 0) {
-          // Remove fromCategoryId
-          await client.query("DELETE FROM pl_task_categories WHERE category_id = $1", [fromId]);
+          // Remove fromCategoryId for these matching tasks only
+          await client.query("DELETE FROM pl_task_categories WHERE category_id = $1 AND task_id = ANY($2::int[])", [fromId, taskIds]);
 
           // Link to toCategoryId (avoiding duplicates)
           for (const tid of taskIds) {
@@ -4996,13 +5011,29 @@ export async function startServer(isVercel = false) {
 
         const categoryAreasMap: Record<number, number[]> = {};
         const areaCategoriesMap: Record<number, number[]> = {};
+        const categoryArchivedAreaIdsMap: Record<number, number[]> = {};
+        const categoryAreaStatusesMap: Record<number, Record<number, { isArchived: boolean; archivedAt?: string | null; archivedBy?: string | null }>> = {};
+
         dbCategoryAreas.rows.forEach(r => {
           const cid = Number(r.category_id);
           const aid = Number(r.area_id);
+          const isArch = !!r.is_archived;
+          const archAt = r.archived_at || null;
+          const archBy = r.archived_by || null;
+
           if (!categoryAreasMap[cid]) categoryAreasMap[cid] = [];
           categoryAreasMap[cid].push(aid);
+
           if (!areaCategoriesMap[aid]) areaCategoriesMap[aid] = [];
           areaCategoriesMap[aid].push(cid);
+
+          if (isArch) {
+            if (!categoryArchivedAreaIdsMap[cid]) categoryArchivedAreaIdsMap[cid] = [];
+            categoryArchivedAreaIdsMap[cid].push(aid);
+          }
+
+          if (!categoryAreaStatusesMap[cid]) categoryAreaStatusesMap[cid] = {};
+          categoryAreaStatusesMap[cid][aid] = { isArchived: isArch, archivedAt: archAt, archivedBy: archBy };
         });
 
         const responsibleAreasMap: Record<number, number[]> = {};
@@ -5109,18 +5140,23 @@ export async function startServer(isVercel = false) {
             updatedBy: r.updated_by,
             userId: r.user_id ? Number(r.user_id) : null
           })),
-          categories: dbCategories.rows.map(c => ({
-            id: Number(c.id),
-            name: c.name,
-            isArchived: !!c.is_archived,
-            archivedAt: c.archived_at,
-            archivedBy: c.archived_by,
-            areaIds: categoryAreasMap[Number(c.id)] || [],
-            createdAt: c.created_at,
-            createdBy: c.created_by,
-            updatedAt: c.updated_at,
-            updatedBy: c.updated_by
-          }))
+          categories: dbCategories.rows.map(c => {
+            const cid = Number(c.id);
+            return {
+              id: cid,
+              name: c.name,
+              isArchived: !!c.is_archived,
+              archivedAt: c.archived_at,
+              archivedBy: c.archived_by,
+              archivedAreaIds: categoryArchivedAreaIdsMap[cid] || [],
+              areaStatuses: categoryAreaStatusesMap[cid] || {},
+              areaIds: categoryAreasMap[cid] || [],
+              createdAt: c.created_at,
+              createdBy: c.created_by,
+              updatedAt: c.updated_at,
+              updatedBy: c.updated_by
+            };
+          })
         });
       } finally {
         client.release();
