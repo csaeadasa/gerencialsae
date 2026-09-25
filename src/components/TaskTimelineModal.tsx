@@ -34,6 +34,7 @@ import {
 import { Task, Area, Category, Responsible } from "../types";
 import { cn } from "../lib/utils";
 import { calculateTaskProbability, TaskProbabilityResult, SubtaskAnalysis } from "../utils/taskProbability";
+import { calculateDurationInDays } from "../utils/durationUtils";
 
 interface TaskTimelineModalProps {
   taskId: number | null;
@@ -799,6 +800,23 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
                                   </span>
                                   <span className="text-xs font-black text-slate-800">{formatDate(task.endDate) || "Não definido"}</span>
                                 </div>
+                                {(() => {
+                                  const dur = calculateDurationInDays(task.startDate, task.endDate);
+                                  if (!dur) return null;
+                                  return (
+                                    <>
+                                      <div className="w-px h-7 bg-slate-200" />
+                                      <div className="flex flex-col items-start">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                          <Clock size={11} className="text-adasa-mid" /> Duração
+                                        </span>
+                                        <span className="text-xs font-black text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200" title={`${dur} dias corridos`}>
+                                          {dur} {dur === 1 ? "dia corrido" : "dias corridos"}
+                                        </span>
+                                      </div>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             </div>
 
@@ -1410,6 +1428,11 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[10px] text-slate-400 font-semibold" style={{ paddingLeft: `${Math.min(depth * 1.2, 5)}rem` }}>
                               {task.startDate && <span>Início: {formatDate(task.startDate)}</span>}
                               {task.endDate && <span>Fim: {formatDate(task.endDate)}</span>}
+                              {(() => {
+                                const dur = calculateDurationInDays(task.startDate, task.endDate);
+                                if (!dur) return null;
+                                return <span>Duração: {dur} {dur === 1 ? "dia" : "dias"}</span>;
+                              })()}
                               {hasDates && (
                                 <span className="text-slate-500 font-bold ml-auto pr-1">
                                   R: <strong className="text-slate-800">{realProg}%</strong> | I: <strong className="text-indigo-700">{idealProg}%</strong>

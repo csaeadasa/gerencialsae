@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { Task, ConstatacaoFiscalizacao } from "../types";
 import { FISCALIZACAO_ETAPAS, FISCALIZACAO_ETAPA_INICIAL } from "../lib/fiscalizacao";
+import { calculateDurationInDays } from "../utils/durationUtils";
 
 interface FiscalizacaoPainelProps {
   tasks: Task[];
@@ -1772,11 +1773,21 @@ export function FiscalizacaoPainel({ tasks, plans = [], onEditTaskClick }: Fisca
                               </span>
 
                               {/* Dates Pill matching the image style exactly */}
-                              <div className="flex items-center gap-1.5 mt-2 bg-slate-50/70 border border-slate-100 text-[10px] text-slate-500 font-bold px-2.5 py-1 rounded-lg w-max">
+                              <div className="flex items-center gap-1.5 mt-2 bg-slate-50/70 border border-slate-100 text-[10px] text-slate-500 font-bold px-2.5 py-1 rounded-lg w-max flex-wrap">
                                 <Calendar size={11} className="text-slate-400 shrink-0" />
                                 <span>Início: {formatDateBR(t.startDate)}</span>
                                 <span className="text-slate-300 font-normal">|</span>
                                 <span>Prazo: {formatDateBR(t.endDate)}</span>
+                                {(() => {
+                                  const dur = calculateDurationInDays(t.startDate, t.endDate);
+                                  if (!dur) return null;
+                                  return (
+                                    <>
+                                      <span className="text-slate-300 font-normal">|</span>
+                                      <span>Duração: {dur} {dur === 1 ? "dia corrido" : "dias corridos"}</span>
+                                    </>
+                                  );
+                                })()}
                               </div>
 
                               {/* Bottom Tags matching the bottom tags of the image */}

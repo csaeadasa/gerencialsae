@@ -401,6 +401,9 @@ export interface Category {
   id: number;
   name: string;
   areaIds: number[];
+  isArchived?: boolean;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
   createdAt?: string | null;
   createdBy?: string | null;
   updatedAt?: string | null;

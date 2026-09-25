@@ -904,6 +904,9 @@ async function runStartupMigration() {
       await client.query(`ALTER TABLE pl_responsibles ADD COLUMN IF NOT EXISTS created_at TIMESTAMP, ADD COLUMN IF NOT EXISTS created_by VARCHAR(255);`);
       await client.query(`ALTER TABLE pl_categories ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP, ADD COLUMN IF NOT EXISTS updated_by VARCHAR(255);`);
       await client.query(`ALTER TABLE pl_categories ADD COLUMN IF NOT EXISTS created_at TIMESTAMP, ADD COLUMN IF NOT EXISTS created_by VARCHAR(255);`);
+      await client.query(`ALTER TABLE pl_categories ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;`);
+      await client.query(`ALTER TABLE pl_categories ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP;`);
+      await client.query(`ALTER TABLE pl_categories ADD COLUMN IF NOT EXISTS archived_by VARCHAR(255);`);
       await client.query(`ALTER TABLE pl_areas ALTER COLUMN abbreviation TYPE VARCHAR(4);`);
       await client.query("UPDATE pl_areas SET abbreviation = 'CORA' WHERE abbreviation = 'CO';");
 
@@ -961,6 +964,24 @@ async function runStartupMigration() {
         }
       } catch (errSei) {
         console.error("Erro ao extrair e atualizar sei_process das tarefas:", errSei);
+      }
+
+      // Auto-link categories to areas based on existing tasks that have both category and area assigned
+      try {
+        const syncRes = await client.query(`
+          INSERT INTO pl_category_areas (category_id, area_id, order_index)
+          SELECT DISTINCT tc.category_id, ta.area_id, 0
+          FROM pl_task_categories tc
+          JOIN pl_task_areas ta ON ta.task_id = tc.task_id
+          WHERE tc.category_id IS NOT NULL AND ta.area_id IS NOT NULL
+          ON CONFLICT (category_id, area_id) DO NOTHING
+          RETURNING *;
+        `);
+        if (syncRes.rowCount && syncRes.rowCount > 0) {
+          console.log(`[Auto-sync] ${syncRes.rowCount} novos vínculos categoria-área criados a partir das atividades existentes.`);
+        }
+      } catch (errSyncCatAreas) {
+        console.error("Erro ao sincronizar pl_category_areas a partir de pl_tasks:", errSyncCatAreas);
       }
 
       // Ensure pl_task_models and pl_model_tasks tables exist for task templates
@@ -1582,10 +1603,14 @@ async function runStartupMigration() {
     } finally {
       client.release();
     }
-  } catch (err) {
-    console.error("Erro detalhado na migração:", err);
-    if (process.env.NODE_ENV === "production" || process.env.VERCEL) throw err;
-    console.warn("Aviso: não foi possível verificar o banco. O servidor não deve ser usado em produção neste estado.");
+  } catch (err: any) {
+    const isQuotaError = err?.message?.includes("quota") || err?.message?.includes("exceeded the quota");
+    if (isQuotaError) {
+      console.error("Aviso: A cota do banco de dados na nuvem foi excedida:", err.message);
+    } else {
+      console.error("Erro detalhado na migração:", err);
+    }
+    console.warn("Aviso: o servidor continuará em execução com status de aviso para o banco de dados.");
   }
 }
 
@@ -2050,8 +2075,19 @@ export async function startServer(isVercel = false) {
         client.release();
       }
     } catch (error: any) {
-      console.error("Erro ao conectar no banco:", error);
-      res.status(500).json({ success: false, error: error.message || "Falha na conexão com o banco de dados." });
+      const isQuotaExceeded = error?.message?.includes("quota") || error?.message?.includes("exceeded the quota");
+      if (isQuotaExceeded) {
+        console.warn("Aviso: Limite de cota do PostgreSQL atingido:", error.message);
+      } else {
+        console.error("Erro ao conectar no banco:", error);
+      }
+      res.status(isQuotaExceeded ? 429 : 500).json({
+        success: false,
+        isQuotaExceeded,
+        error: isQuotaExceeded
+          ? "A cota de uso do banco de dados na nuvem (PostgreSQL) foi excedida no provedor externo. É necessário atualizar o plano do banco ou aguardar a renovação da cota."
+          : (error.message || "Falha na conexão com o banco de dados.")
+      });
     }
   });
 
@@ -2248,6 +2284,9 @@ export async function startServer(isVercel = false) {
           categories: dbCategories.rows.map(c => ({
             id: Number(c.id),
             name: c.name,
+            isArchived: !!c.is_archived,
+            archivedAt: c.archived_at,
+            archivedBy: c.archived_by,
             areaIds: categoryAreasMap[Number(c.id)] || [],
             createdAt: c.created_at,
             createdBy: c.created_by,
@@ -3455,6 +3494,26 @@ export async function startServer(isVercel = false) {
           return res.status(404).json({ success: false, error: "Área não encontrada" });
         }
         if (Array.isArray(categoryIds)) {
+          // Check if any category currently linked to this area has tasks and is being removed
+          const lockedRes = await pool.query(
+            `SELECT tc.category_id, c.name as category_name, COUNT(DISTINCT ta.task_id) as task_count
+             FROM pl_task_categories tc
+             JOIN pl_task_areas ta ON ta.task_id = tc.task_id
+             LEFT JOIN pl_categories c ON c.id = tc.category_id
+             WHERE ta.area_id = $1
+             GROUP BY tc.category_id, c.name`,
+            [areaId]
+          );
+
+          const missingLocked = lockedRes.rows.filter(r => !categoryIds.includes(Number(r.category_id)));
+          if (missingLocked.length > 0) {
+            await pool.query("ROLLBACK");
+            return res.status(400).json({
+              success: false,
+              error: `Não é possível desvincular a categoria "${missingLocked[0].category_name || 'selecionada'}" da área, pois existem ${missingLocked[0].task_count} atividade(s) associada(s) a ela nesta área.`
+            });
+          }
+
           await pool.query("DELETE FROM pl_category_areas WHERE area_id = $1", [areaId]);
           for (let i = 0; i < categoryIds.length; i++) {
             await pool.query("INSERT INTO pl_category_areas (category_id, area_id, order_index) VALUES ($1, $2, $3)", [categoryIds[i], areaId, i]);
@@ -4070,7 +4129,7 @@ export async function startServer(isVercel = false) {
   app.get("/api/categories", async (req, res) => {
     try {
       const pool = getDbPool();
-      const result = await pool.query("SELECT id, name, created_at, created_by, updated_at, updated_by FROM pl_categories ORDER BY id ASC");
+      const result = await pool.query("SELECT id, name, is_archived, archived_at, archived_by, created_at, created_by, updated_at, updated_by FROM pl_categories ORDER BY id ASC");
       const mapping = await pool.query("SELECT category_id, area_id FROM pl_category_areas");
       
       const areaMap: Record<number, number[]> = {};
@@ -4085,6 +4144,9 @@ export async function startServer(isVercel = false) {
         data: result.rows.map(c => ({
           id: Number(c.id),
           name: c.name,
+          isArchived: !!c.is_archived,
+          archivedAt: c.archived_at,
+          archivedBy: c.archived_by,
           createdAt: c.created_at,
           createdBy: c.created_by,
           updatedAt: c.updated_at,
@@ -4100,15 +4162,15 @@ export async function startServer(isVercel = false) {
 
   app.post("/api/categories", async (req, res) => {
     try {
-      const { name, areaIds, updatedBy, createdBy } = req.body;
+      const { name, areaIds, updatedBy, createdBy, isArchived } = req.body;
       const pool = getDbPool();
       let createdId;
       let finalResult;
       try {
         await pool.query("BEGIN");
         const result = await pool.query(
-          "INSERT INTO pl_categories (name, created_at, created_by, updated_at, updated_by) VALUES ($1, NOW(), $2, NOW(), $3) RETURNING *",
-          [name || "Categoria Sem Nome", createdBy || "SGI Pro", updatedBy || "SGI Pro"]
+          "INSERT INTO pl_categories (name, is_archived, created_at, created_by, updated_at, updated_by) VALUES ($1, $2, NOW(), $3, NOW(), $4) RETURNING *",
+          [name || "Categoria Sem Nome", isArchived === true, createdBy || "SGI Pro", updatedBy || "SGI Pro"]
         );
         createdId = result.rows[0].id;
         finalResult = result;
@@ -4131,6 +4193,9 @@ export async function startServer(isVercel = false) {
         data: {
           id: Number(createdId),
           name: finalResult.rows[0].name,
+          isArchived: !!finalResult.rows[0].is_archived,
+          archivedAt: finalResult.rows[0].archived_at,
+          archivedBy: finalResult.rows[0].archived_by,
           areaIds: areaIds || [],
           createdAt: finalResult.rows[0].created_at,
           createdBy: finalResult.rows[0].created_by,
@@ -4147,15 +4212,22 @@ export async function startServer(isVercel = false) {
   app.put("/api/categories/:id", async (req, res) => {
     try {
       const catId = parseInt(req.params.id);
-      const { name, areaIds, updatedBy } = req.body;
+      const { name, areaIds, updatedBy, isArchived } = req.body;
       const pool = getDbPool();
       let result;
       try {
         await pool.query("BEGIN");
-        result = await pool.query(
-          "UPDATE pl_categories SET name = $1, updated_at = NOW(), updated_by = $2 WHERE id = $3 RETURNING *",
-          [name, updatedBy || "SGI Pro", catId]
-        );
+        if (isArchived !== undefined) {
+          result = await pool.query(
+            "UPDATE pl_categories SET name = $1, is_archived = $2, archived_at = CASE WHEN $2 = TRUE THEN COALESCE(archived_at, NOW()) ELSE NULL END, archived_by = CASE WHEN $2 = TRUE THEN COALESCE(archived_by, $3) ELSE NULL END, updated_at = NOW(), updated_by = $3 WHERE id = $4 RETURNING *",
+            [name, isArchived === true, updatedBy || "SGI Pro", catId]
+          );
+        } else {
+          result = await pool.query(
+            "UPDATE pl_categories SET name = $1, updated_at = NOW(), updated_by = $2 WHERE id = $3 RETURNING *",
+            [name, updatedBy || "SGI Pro", catId]
+          );
+        }
         if (result.rows.length === 0) {
           await pool.query("ROLLBACK");
           return res.status(404).json({ success: false, error: "Categoria não encontrada" });
@@ -4188,6 +4260,9 @@ export async function startServer(isVercel = false) {
         data: {
           id: Number(result.rows[0].id),
           name: result.rows[0].name,
+          isArchived: !!result.rows[0].is_archived,
+          archivedAt: result.rows[0].archived_at,
+          archivedBy: result.rows[0].archived_by,
           areaIds: areaIds || [],
           createdAt: result.rows[0].created_at,
           createdBy: result.rows[0].created_by,
@@ -4197,6 +4272,90 @@ export async function startServer(isVercel = false) {
       });
     } catch (error: any) {
       console.error("Erro ao atualizar categoria:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.put("/api/categories/:id/archive", async (req, res) => {
+    try {
+      const catId = parseInt(req.params.id);
+      const { isArchived, archivedBy } = req.body;
+      const pool = getDbPool();
+      const shouldArchive = isArchived === true;
+      const result = await pool.query(
+        "UPDATE pl_categories SET is_archived = $1, archived_at = CASE WHEN $1 = TRUE THEN NOW() ELSE NULL END, archived_by = CASE WHEN $1 = TRUE THEN $2 ELSE NULL END, updated_at = NOW(), updated_by = $2 WHERE id = $3 RETURNING *",
+        [shouldArchive, archivedBy || "SGI Pro", catId]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, error: "Categoria não encontrada" });
+      }
+      res.json({
+        success: true,
+        data: {
+          id: Number(result.rows[0].id),
+          name: result.rows[0].name,
+          isArchived: !!result.rows[0].is_archived,
+          archivedAt: result.rows[0].archived_at,
+          archivedBy: result.rows[0].archived_by
+        }
+      });
+    } catch (error: any) {
+      console.error("Erro ao arquivar/desarquivar categoria:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/categories/migrate-tasks", async (req, res) => {
+    try {
+      const { fromCategoryId, toCategoryId, updatedBy } = req.body;
+      if (!fromCategoryId || !toCategoryId) {
+        return res.status(400).json({ success: false, error: "Categorias de origem e destino são obrigatórias." });
+      }
+      const fromId = Number(fromCategoryId);
+      const toId = Number(toCategoryId);
+      if (fromId === toId) {
+        return res.status(400).json({ success: false, error: "As categorias de origem e destino devem ser diferentes." });
+      }
+
+      const pool = getDbPool();
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        // Verify categories exist
+        const catsRes = await client.query("SELECT id, name FROM pl_categories WHERE id IN ($1, $2)", [fromId, toId]);
+        if (catsRes.rows.length < 2) {
+          await client.query("ROLLBACK");
+          return res.status(404).json({ success: false, error: "Uma ou ambas as categorias não foram encontradas." });
+        }
+
+        // Find all tasks associated with fromCategoryId
+        const tasksRes = await client.query("SELECT task_id FROM pl_task_categories WHERE category_id = $1", [fromId]);
+        const taskIds = tasksRes.rows.map(r => Number(r.task_id));
+
+        if (taskIds.length > 0) {
+          // Remove fromCategoryId
+          await client.query("DELETE FROM pl_task_categories WHERE category_id = $1", [fromId]);
+
+          // Link to toCategoryId (avoiding duplicates)
+          for (const tid of taskIds) {
+            await client.query("INSERT INTO pl_task_categories (task_id, category_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", [tid, toId]);
+          }
+
+          // Touch task timestamps
+          await client.query("UPDATE pl_tasks SET updated_at = NOW(), updated_by = $1 WHERE id = ANY($2::int[])", [updatedBy || "SGI Pro", taskIds]);
+        }
+
+        await client.query("COMMIT");
+        res.json({ success: true, count: taskIds.length, taskIds });
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (error: any) {
+      console.error("Erro ao migrar tarefas de categoria:", error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
@@ -4953,6 +5112,9 @@ export async function startServer(isVercel = false) {
           categories: dbCategories.rows.map(c => ({
             id: Number(c.id),
             name: c.name,
+            isArchived: !!c.is_archived,
+            archivedAt: c.archived_at,
+            archivedBy: c.archived_by,
             areaIds: categoryAreasMap[Number(c.id)] || [],
             createdAt: c.created_at,
             createdBy: c.created_by,

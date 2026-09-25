@@ -43,6 +43,7 @@ import {
   FolderKanban,
   Info
 } from "lucide-react";
+import { calculateDurationInDays } from "../utils/durationUtils";
 
 interface Task {
   id: number;
@@ -1425,6 +1426,23 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
                                   </div>
                                   <div className="text-sm font-black text-slate-800">{formatDate(task.endDate) || "Não definido"}</div>
                                 </div>
+                                {(() => {
+                                  const dur = calculateDurationInDays(task.startDate, task.endDate);
+                                  if (!dur) return null;
+                                  return (
+                                    <>
+                                      <div className="w-px h-8 bg-slate-100"></div>
+                                      <div className="flex flex-col items-start gap-1">
+                                        <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                                          <Clock size={12} className="text-adasa-mid" /> Duração
+                                        </div>
+                                        <div className="text-sm font-black text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200" title={`${dur} dias corridos`}>
+                                          {dur} {dur === 1 ? "dia corrido" : "dias corridos"}
+                                        </div>
+                                      </div>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             </div>
 
@@ -1783,6 +1801,11 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
                                     <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-slate-400 font-bold uppercase tracking-wider" style={{ paddingLeft: `${Math.min(depth * 0.75, 4)}rem` }}>
                                       {task.startDate ? <span>Início: {task.startDate.split("T")[0].split("-").reverse().join("/")}</span> : null}
                                       {task.endDate ? <span>Término: {task.endDate.split("T")[0].split("-").reverse().join("/")}</span> : null}
+                                      {(() => {
+                                        const dur = calculateDurationInDays(task.startDate, task.endDate);
+                                        if (!dur) return null;
+                                        return <span>Duração: {dur} {dur === 1 ? "dia" : "dias"}</span>;
+                                      })()}
                                       {!hasDates && <span className="text-amber-500 font-bold normal-case">Período não definido</span>}
                                     </div>
                                   </div>
