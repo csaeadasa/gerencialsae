@@ -348,7 +348,7 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
                                   className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-1.5 focus:outline-none"
                                 >
                                   {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                                  {associatedTasks.length} {associatedTasks.length === 1 ? "tarefa associada" : "tarefas associadas"}
+                                  {associatedTasks.length} {associatedTasks.length === 1 ? "atividade associada" : "atividades associadas"}
                                 </button>
                               )}
                             </div>
@@ -545,10 +545,10 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
               {/* Ações Regulatórias (Tasks Association) */}
               <div className="space-y-2 text-left border-t border-slate-100 pt-4">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  Ações Regulatórias Vinculadas (Tarefas)
+                  Ações Regulatórias Vinculadas (Atividades)
                 </label>
                 <p className="text-[10px] text-slate-400 font-medium">
-                  Selecione as tarefas do sistema que pertencem a este cronograma de trabalho da agenda.
+                  Selecione as atividades do sistema que pertencem a este cronograma de trabalho da agenda.
                 </p>
 
                 {/* SubSearch inside checkboxes list */}
@@ -557,7 +557,7 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
                     type="text"
                     value={taskSearchQuery}
                     onChange={(e) => setTaskSearchQuery(e.target.value)}
-                    placeholder="Filtrar tarefas..."
+                    placeholder="Filtrar atividades..."
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 focus:border-indigo-500 outline-none transition-all"
                   />
                   <Search className="absolute right-3 top-2.5 text-slate-400" size={14} />
@@ -566,7 +566,7 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
                 {/* Checklist container */}
                 <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 max-h-48 overflow-y-auto space-y-2">
                   {filteredTaskOptions.length === 0 ? (
-                    <p className="text-xs text-slate-400 text-center font-medium py-4">Nenhuma tarefa cadastrada ou encontrada.</p>
+                    <p className="text-xs text-slate-400 text-center font-medium py-4">Nenhuma atividade cadastrada ou encontrada.</p>
                   ) : (
                     filteredTaskOptions.map(tk => {
                       const isChecked = selectedTaskIds.includes(tk.id);
@@ -597,12 +597,12 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
                 {selectedTaskIds.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-[10px] text-indigo-600 font-bold">
-                      {selectedTaskIds.length} {selectedTaskIds.length === 1 ? "tarefa selecionada" : "tarefas selecionadas"}.
+                      {selectedTaskIds.length} {selectedTaskIds.length === 1 ? "atividade selecionada" : "atividades selecionadas"}.
                     </p>
 
                     <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
                       <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest text-left">
-                        Configuração Individual de cada Tarefa Selecionada
+                        Configuração Individual de cada Atividade Selecionada
                       </label>
                       <div className="space-y-4 max-h-80 overflow-y-auto p-1 pr-2">
                         {selectedTaskIds.map(taskId => {

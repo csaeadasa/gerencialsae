@@ -856,6 +856,7 @@ async function runStartupMigration() {
 
       try {
         await client.query("ALTER TABLE pl_responsibles ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES au_users(id) ON DELETE SET NULL;");
+        await client.query("ALTER TABLE pl_responsibles ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;");
       } catch (err) {
         // ignore if already exists or schema issue
       }
@@ -2171,8 +2172,13 @@ export async function startServer(isVercel = false) {
             name: r.name,
             email: r.email,
             role: r.role,
+            isActive: r.is_active !== false,
             areaIds: responsibleAreasMap[Number(r.id)] || [],
-            userId: r.user_id ? Number(r.user_id) : null
+            userId: r.user_id ? Number(r.user_id) : null,
+            createdAt: r.created_at,
+            createdBy: r.created_by,
+            updatedAt: r.updated_at,
+            updatedBy: r.updated_by
           })),
           categories: dbCategories.rows.map(c => {
             const cid = Number(c.id);
@@ -3460,6 +3466,7 @@ export async function startServer(isVercel = false) {
         email: r.email,
         role: r.role,
         userId: r.user_id,
+        isActive: r.is_active !== false,
         areaIds: responsibleAreasMap[Number(r.id)] || [],
         createdAt: r.created_at,
         createdBy: r.created_by,
@@ -3486,7 +3493,7 @@ export async function startServer(isVercel = false) {
 
   app.post("/api/responsibles", async (req, res) => {
     try {
-      const { name, email, role, areaIds, updatedBy, createdBy } = req.body;
+      const { name, email, role, areaIds, isActive, updatedBy, createdBy } = req.body;
       const pool = getDbPool();
       let createdId;
       let finalResult;
@@ -3504,9 +3511,10 @@ export async function startServer(isVercel = false) {
           }
         }
 
+        const finalIsActive = isActive !== false;
         const result = await pool.query(
-          "INSERT INTO pl_responsibles (name, email, role, user_id, created_at, created_by, updated_at, updated_by) VALUES ($1, $2, $3, $4, NOW(), $5, NOW(), $6) RETURNING *",
-          [name || "Responsável Sem Nome", email || "", role || "", userId, createdBy || "SGI Pro", updatedBy || "SGI Pro"]
+          "INSERT INTO pl_responsibles (name, email, role, user_id, is_active, created_at, created_by, updated_at, updated_by) VALUES ($1, $2, $3, $4, $5, NOW(), $6, NOW(), $7) RETURNING *",
+          [name || "Responsável Sem Nome", email || "", role || "", userId, finalIsActive, createdBy || "SGI Pro", updatedBy || "SGI Pro"]
         );
         createdId = result.rows[0].id;
         finalResult = result;
@@ -3529,6 +3537,7 @@ export async function startServer(isVercel = false) {
           email: finalResult.rows[0].email, 
           role: finalResult.rows[0].role, 
           userId: finalResult.rows[0].user_id,
+          isActive: finalResult.rows[0].is_active !== false,
           areaIds: areaIds || [], 
           createdAt: finalResult.rows[0].created_at, 
           createdBy: finalResult.rows[0].created_by, 
@@ -3545,22 +3554,29 @@ export async function startServer(isVercel = false) {
   app.put("/api/responsibles/:id", async (req, res) => {
     try {
       const respId = parseInt(req.params.id);
-      const { name, email, role, areaIds, updatedBy } = req.body;
+      const { name, email, role, areaIds, isActive, updatedBy } = req.body;
       const pool = getDbPool();
       let result;
       try {
         await pool.query("BEGIN");
-        result = await pool.query(
-          "UPDATE pl_responsibles SET name = $1, email = $2, role = $3, updated_at = NOW(), updated_by = $4 WHERE id = $5 RETURNING *",
-          [name, email, role, updatedBy || "SGI Pro", respId]
-        );
-        if (result.rows.length === 0) {
+        const currentRespRes = await pool.query("SELECT * FROM pl_responsibles WHERE id = $1", [respId]);
+        if (currentRespRes.rows.length === 0) {
           await pool.query("ROLLBACK");
           return res.status(404).json({ success: false, error: "Responsável não encontrado" });
         }
+        const currentResp = currentRespRes.rows[0];
+        const newName = name !== undefined ? name : currentResp.name;
+        const newEmail = email !== undefined ? email : currentResp.email;
+        const newRole = role !== undefined ? role : currentResp.role;
+        const newIsActive = isActive !== undefined ? (isActive === true || isActive === "true") : (currentResp.is_active !== false);
+
+        result = await pool.query(
+          "UPDATE pl_responsibles SET name = $1, email = $2, role = $3, is_active = $4, updated_at = NOW(), updated_by = $5 WHERE id = $6 RETURNING *",
+          [newName, newEmail, newRole, newIsActive, updatedBy || "SGI Pro", respId]
+        );
         
-        await pool.query("DELETE FROM pl_responsible_areas WHERE responsible_id = $1", [respId]);
-        if (Array.isArray(areaIds) && areaIds.length > 0) {
+        if (Array.isArray(areaIds)) {
+          await pool.query("DELETE FROM pl_responsible_areas WHERE responsible_id = $1", [respId]);
           for (const aId of areaIds) {
             await pool.query("INSERT INTO pl_responsible_areas (responsible_id, area_id) VALUES ($1, $2)", [respId, aId]);
           }
@@ -3570,9 +3586,31 @@ export async function startServer(isVercel = false) {
         await pool.query("ROLLBACK");
         throw err;
       }
-      res.json({ success: true, data: { id: Number(result.rows[0].id), name: result.rows[0].name, email: result.rows[0].email, role: result.rows[0].role, areaIds: areaIds || [], createdAt: result.rows[0].created_at, createdBy: result.rows[0].created_by, updatedAt: result.rows[0].updated_at, updatedBy: result.rows[0].updated_by } });
+      const finalAreas = Array.isArray(areaIds) ? areaIds : (await pool.query("SELECT area_id FROM pl_responsible_areas WHERE responsible_id = $1", [respId])).rows.map(r => Number(r.area_id));
+      res.json({ success: true, data: { id: Number(result.rows[0].id), name: result.rows[0].name, email: result.rows[0].email, role: result.rows[0].role, isActive: result.rows[0].is_active !== false, areaIds: finalAreas, createdAt: result.rows[0].created_at, createdBy: result.rows[0].created_by, updatedAt: result.rows[0].updated_at, updatedBy: result.rows[0].updated_by } });
     } catch (error: any) {
       console.error("Erro ao atualizar responsável:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.patch("/api/responsibles/:id/toggle-active", async (req, res) => {
+    try {
+      const respId = parseInt(req.params.id);
+      const { updatedBy } = req.body;
+      const pool = getDbPool();
+      const currentRespRes = await pool.query("SELECT is_active FROM pl_responsibles WHERE id = $1", [respId]);
+      if (currentRespRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: "Responsável não encontrado" });
+      }
+      const nextActive = !(currentRespRes.rows[0].is_active !== false);
+      const result = await pool.query(
+        "UPDATE pl_responsibles SET is_active = $1, updated_at = NOW(), updated_by = $2 WHERE id = $3 RETURNING *",
+        [nextActive, updatedBy || "SGI Pro", respId]
+      );
+      res.json({ success: true, data: { id: respId, isActive: result.rows[0].is_active !== false } });
+    } catch (error: any) {
+      console.error("Erro ao alternar status do responsável:", error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
@@ -5133,6 +5171,7 @@ export async function startServer(isVercel = false) {
             name: r.name,
             email: r.email,
             role: r.role,
+            isActive: r.is_active !== false,
             areaIds: responsibleAreasMap[Number(r.id)] || [],
             createdAt: r.created_at,
             createdBy: r.created_by,
@@ -6020,10 +6059,9 @@ export async function startServer(isVercel = false) {
         }
 
         // Save task_responsibles
-        if (Array.isArray(responsibleIds) && responsibleIds.length > 0) {
-          for (const rid of responsibleIds) {
-            await client.query("INSERT INTO pl_task_responsibles (task_id, responsible_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", [createdTaskId, rid]);
-          }
+        const cleanRespIds = Array.isArray(responsibleIds) ? responsibleIds.map(Number).filter(n => !isNaN(n) && n > 0) : [];
+        for (const rid of cleanRespIds) {
+          await client.query("INSERT INTO pl_task_responsibles (task_id, responsible_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", [createdTaskId, rid]);
         }
 
         // Save task_categories
@@ -6034,14 +6072,14 @@ export async function startServer(isVercel = false) {
         }
 
         // Format and update assignedTo string based on actual responsible names
-        let finalAssignedTo = assignedTo || "";
-        if (Array.isArray(responsibleIds) && responsibleIds.length > 0) {
-          const respNamesRes = await client.query("SELECT name FROM pl_responsibles WHERE id = ANY($1::integer[])", [responsibleIds]);
+        let finalAssignedTo = "";
+        if (cleanRespIds.length > 0) {
+          const respNamesRes = await client.query("SELECT name FROM pl_responsibles WHERE id = ANY($1::integer[]) ORDER BY name ASC", [cleanRespIds]);
           if (respNamesRes.rows.length > 0) {
             finalAssignedTo = respNamesRes.rows.map(r => r.name).join(", ");
           }
-          await client.query("UPDATE pl_tasks SET assigned_to = $1 WHERE id = $2", [finalAssignedTo, createdTaskId]);
         }
+        await client.query("UPDATE pl_tasks SET assigned_to = $1 WHERE id = $2", [finalAssignedTo, createdTaskId]);
         
         if (dependsOnTaskId) {
             const existingDepsRes = await client.query("SELECT id FROM pl_tasks WHERE depends_on_task_id = $1 AND id != $2", [dependsOnTaskId, createdTaskId]);
@@ -6110,7 +6148,7 @@ export async function startServer(isVercel = false) {
             recursoData: finalSaved.ouvidoria_data,
             recursoRevData: finalSaved.recurso_rev_data,
             areaIds: areaIds || [],
-            responsibleIds: responsibleIds || [],
+            responsibleIds: cleanRespIds,
             categoryIds: categoryIds || [],
             updatedAt: finalSaved.updated_at,
             updatedBy: finalSaved.updated_by
@@ -6199,6 +6237,7 @@ export async function startServer(isVercel = false) {
         const rawWeight = req.body.weight;
         const parsedWeight = (rawWeight !== undefined && rawWeight !== null && rawWeight !== "") ? parseFloat(rawWeight) : 1.0;
         const finalWeight = isNaN(parsedWeight) ? 1.0 : parsedWeight;
+
         const result = await client.query(
           `UPDATE pl_tasks 
            SET title = $1, description = $2, start_date = $3, end_date = $4, status = $5, progress = $6, priority = $7, category = $8, assigned_to = $9, notes = $10, parent_id = $11, plan_id = $12, depends_on_task_id = $13, updated_at = NOW(), updated_by = $14, sei_process = $16, weight = $17, type = $18, fiscalizacao_data = $19, ouvidoria_data = $20, recurso_rev_data = $21, checklist = $22, links = $23, comments = $24, is_programmed = $25
@@ -6252,10 +6291,11 @@ export async function startServer(isVercel = false) {
 
         // Reset and save task_responsibles
         await client.query("DELETE FROM pl_task_responsibles WHERE task_id = $1", [taskId]);
-        if (Array.isArray(responsibleIds) && responsibleIds.length > 0) {
-          for (const rid of responsibleIds) {
-            await client.query("INSERT INTO pl_task_responsibles (task_id, responsible_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", [taskId, rid]);
-          }
+        const cleanRespIds = Array.isArray(responsibleIds) 
+          ? responsibleIds.map(Number).filter(n => !isNaN(n) && n > 0) 
+          : [];
+        for (const rid of cleanRespIds) {
+          await client.query("INSERT INTO pl_task_responsibles (task_id, responsible_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", [taskId, rid]);
         }
 
         // Reset and save task_categories
@@ -6267,14 +6307,14 @@ export async function startServer(isVercel = false) {
         }
 
         // Format and update assignedTo string based on actual responsible names
-        let finalAssignedTo = assignedTo || "";
-        if (Array.isArray(responsibleIds) && responsibleIds.length > 0) {
-          const respNamesRes = await client.query("SELECT name FROM pl_responsibles WHERE id = ANY($1::integer[])", [responsibleIds]);
+        let finalAssignedTo = "";
+        if (cleanRespIds.length > 0) {
+          const respNamesRes = await client.query("SELECT name FROM pl_responsibles WHERE id = ANY($1::integer[]) ORDER BY name ASC", [cleanRespIds]);
           if (respNamesRes.rows.length > 0) {
             finalAssignedTo = respNamesRes.rows.map(r => r.name).join(", ");
           }
-          await client.query("UPDATE pl_tasks SET assigned_to = $1 WHERE id = $2", [finalAssignedTo, taskId]);
         }
+        await client.query("UPDATE pl_tasks SET assigned_to = $1 WHERE id = $2", [finalAssignedTo, taskId]);
 
         // Trigger cascade to override children
         await cascadeAreasAndCategories(client, taskId, finalAreaIds, finalCategoryIds);
@@ -6355,7 +6395,7 @@ export async function startServer(isVercel = false) {
             recursoData: finalSaved.ouvidoria_data,
             recursoRevData: finalSaved.recurso_rev_data,
             areaIds: finalAreaIds,
-            responsibleIds: responsibleIds || [],
+            responsibleIds: cleanRespIds,
             categoryIds: finalCategoryIds,
             updatedAt: finalSaved.updated_at,
             updatedBy: finalSaved.updated_by

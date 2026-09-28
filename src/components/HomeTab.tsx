@@ -320,8 +320,8 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
               <ListTodo size={18} />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-slate-800 group-hover:text-blue-800 transition-colors">Atividades & Tarefas</h4>
-              <p className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5">Cadastrar, gerenciar e editar tarefas e cronogramas detalhados.</p>
+              <h4 className="text-xs font-bold text-slate-800 group-hover:text-blue-800 transition-colors">Cadastrar Atividades</h4>
+              <p className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5">Cadastrar, gerenciar e editar atividades e cronogramas detalhados.</p>
             </div>
           </div>
 
@@ -362,7 +362,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
               <Tags size={18} />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-slate-800 group-hover:text-blue-800 transition-colors">Categorias de Tarefas</h4>
+              <h4 className="text-xs font-bold text-slate-800 group-hover:text-blue-800 transition-colors">Categorias de Atividades</h4>
               <p className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5">Categorizar as atividades para rotular e analisar relatórios.</p>
             </div>
           </div>

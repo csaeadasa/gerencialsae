@@ -64,6 +64,9 @@ import {
   Download,
   UserPlus,
   UserCheck,
+  UserX,
+  CheckCircle,
+  XCircle,
   Shield,
   Lock,
   Unlock,
@@ -310,8 +313,8 @@ const CustomAreaTooltip = ({ active, payload }: any) => {
         </div>
         
         <div className="flex justify-between items-center gap-6">
-          <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wider">Total de Tarefas</span>
-          <span className="text-white font-black text-xs">{data["Total de Tarefas"]}</span>
+          <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wider">Total de Atividades</span>
+          <span className="text-white font-black text-xs">{data["Total de Atividades"]}</span>
         </div>
         
         <div className="flex justify-between items-center gap-6">
@@ -472,7 +475,7 @@ const ImportPanel = ({ areas, showToast, onSuccess }: { areas: any[], showToast:
             onChange={(e) => setSelectedArea(e.target.value)}
             className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 bg-white outline-none focus:border-indigo-500 transition-colors"
           >
-            <option value="">Selecione a área para vincular as tarefas importadas...</option>
+            <option value="">Selecione a área para vincular as atividades importadas...</option>
             {[...areas].sort((a,b) => a.name.localeCompare(b.name)).map((a: any) => (
               <option key={a.id} value={a.id}>{a.name}</option>
             ))}
@@ -925,6 +928,9 @@ export function PlanningTab({
   const [categoryTabFilter, setCategoryTabFilter] = useState<"all" | "active" | "archived">("active");
   const [categorySearchTerm, setCategorySearchTerm] = useState<string>("");
   const [collapsedCategoryAreas, setCollapsedCategoryAreas] = useState<Record<string, boolean>>({});
+  const [collapsedResponsibleAreas, setCollapsedResponsibleAreas] = useState<Record<string, boolean>>({});
+  const [responsibleSearchTerm, setResponsibleSearchTerm] = useState<string>("");
+  const [responsibleStatusFilter, setResponsibleStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [isMigrateCatModalOpen, setIsMigrateCatModalOpen] = useState<boolean>(false);
   const [migrateCatSourceId, setMigrateCatSourceId] = useState<number | null>(null);
   const [migrateCatTargetId, setMigrateCatTargetId] = useState<number | null>(null);
@@ -1000,21 +1006,7 @@ export function PlanningTab({
         setEditingTask(prev => ({ ...prev, categoryIds: updatedCategoryIds }));
       }
     }
-
-    // Synchronize Responsibles for editingTask
-    if (editingTask && editingTask.responsibleIds) {
-      const activeAreaIds = editingTask.areaIds || [];
-      const updatedResponsibleIds = editingTask.responsibleIds.filter(rid => {
-        const resp = responsibles.find(r => r.id === rid);
-        if (!resp) return false;
-        if (activeAreaIds.length === 0) return true;
-        return resp.areaIds?.some(aid => activeAreaIds.includes(aid));
-      });
-      if (JSON.stringify(updatedResponsibleIds) !== JSON.stringify(editingTask.responsibleIds)) {
-        setEditingTask(prev => ({ ...prev, responsibleIds: updatedResponsibleIds }));
-      }
-    }
-  }, [editingTask.areaIds, categories, responsibles]);
+  }, [editingTask.areaIds, categories]);
 
   // Synchronize Fiscalizacao Code
   useEffect(() => {
@@ -1838,7 +1830,8 @@ export function PlanningTab({
           name: currentName, 
           email: currentEmail, 
           role: currentRole, 
-          areaIds: currentAreaIds, 
+          areaIds: currentAreaIds,
+          isActive: regIsActive,
           createdBy: userSignature,
           updatedBy: userSignature 
         })
@@ -1850,6 +1843,7 @@ export function PlanningTab({
         setRegEmail("");
         setRegRole("");
         setRegAreaIds([]);
+        setRegIsActive(true);
         setEditingRegId(null);
         setIsRegModalOpen(false);
         await loadRegistriesOnly();
@@ -1876,6 +1870,37 @@ export function PlanningTab({
       }
     } catch (err) {
       showToast("Erro", "Erro ao salvar responsável.", "error");
+    }
+  };
+
+  // Alternar ativação / inativação de um responsável
+  const handleToggleResponsibleActive = async (resp: Responsible) => {
+    const nextStatus = !(resp.isActive !== false);
+    const userSignature = currentUser?.name || currentUser?.email || "SGI Pro";
+    try {
+      const res = await fetch(`/api/responsibles/${resp.id}/toggle-active`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ updatedBy: userSignature })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(
+          "Status Atualizado",
+          `Responsável "${resp.name}" foi ${nextStatus ? "ativado" : "inativado"} com sucesso.`,
+          "success"
+        );
+        setResponsibles(prev => prev.map(r => r.id === resp.id ? { ...r, isActive: nextStatus } : r));
+        if (setResponsiblesProp) {
+          setResponsiblesProp(prev => prev.map(r => r.id === resp.id ? { ...r, isActive: nextStatus } : r));
+        }
+        await loadRegistriesOnly();
+        await reloadTasks();
+      } else {
+        showToast("Erro", data.error || "Erro ao atualizar status do responsável.", "error");
+      }
+    } catch (err: any) {
+      showToast("Erro", "Falha de rede ao alterar status do responsável.", "error");
     }
   };
 
@@ -2641,12 +2666,12 @@ export function PlanningTab({
         name: area.name,
         fullName: area.name,
         "Progresso Médio (%)": avgProg,
-        "Total de Tarefas": total,
+        "Total de Atividades": total,
         "Não iniciada": pending,
         "Em andamento": inProgress,
         "Concluídas": completed
       };
-    }).filter(d => d["Total de Tarefas"] > 0);
+    }).filter(d => d["Total de Atividades"] > 0);
   }, [filteredTasks, areas, selectedAreaIds]);
 
   // Chart data 3: Priority breakdown
@@ -3781,8 +3806,8 @@ export function PlanningTab({
         if (!isEdit) {
           window.dispatchEvent(new CustomEvent('adasa_notify', {
             detail: {
-              title: `Nova Tarefa: ${editingTask.title}`,
-              message: `Você foi designado para uma nova tarefa.`,
+              title: `Nova Atividade: ${editingTask.title}`,
+              message: `Você foi designado para uma nova atividade.`,
               type: 'info',
               relatedTaskId: resData.data.id
             }
@@ -3817,6 +3842,16 @@ export function PlanningTab({
         });
         setNewAddedComments([]);
         
+        // Immediately update tasks state in parent component
+        if (setTasks && returnedData?.id) {
+          setTasks(prev => prev.map(t => t.id === returnedData.id ? {
+            ...t,
+            ...returnedData,
+            responsibleIds: returnedData.responsibleIds || [],
+            assignedTo: returnedData.assignedTo || ""
+          } : t));
+        }
+
         // Force refresh all tasks to ensure correct state and Rollup updates are loaded
         await reloadTasks();
         
@@ -3956,19 +3991,19 @@ export function PlanningTab({
     
     const subtaskCount = countSubtasks(id);
     const subtaskMessage = subtaskCount > 0 
-      ? `Esta tarefa possui ${subtaskCount} tarefa(s) filha(s) que também será(ão) excluída(s).\n\nDeseja realmente excluir a tarefa e suas subtarefas?` 
-      : "Deseja realmente excluir a tarefa?";
+      ? `Esta atividade possui ${subtaskCount} atividade(s) filha(s) que também será(ão) excluída(s).\n\nDeseja realmente excluir a atividade e suas subatividades?` 
+      : "Deseja realmente excluir a atividade?";
 
     setConfirmState({
       type: "confirm",
-      title: "Excluir Tarefa",
+      title: "Excluir Atividade",
       message: `Atenção: A exclusão é permanente.\n\n${subtaskMessage}`,
       onConfirm: async () => {
         try {
           const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
           const resData = await res.json();
           if (resData.success) {
-            showToast("Sucesso", "Tarefa excluída do banco.", "success");
+            showToast("Sucesso", "Atividade excluída do banco.", "success");
             await reloadTasks();
           } else {
             showToast("Erro", resData.error || "Ocorreu uma falha ao remover a tarefa.", "error");
@@ -4252,7 +4287,7 @@ export function PlanningTab({
       const excelData = rows.map(r => ({
         "Área Temática": r.areaName,
         [areaTableGroupMode === "category" ? "Categoria" : "Status"]: r.groupName,
-        "Título da Tarefa": r.depth > 0 ? `${"   ".repeat(r.depth)}↳ ${r.task.title}` : r.task.title,
+        "Título da Atividade": r.depth > 0 ? `${"   ".repeat(r.depth)}↳ ${r.task.title}` : r.task.title,
         "Início": r.formattedStartDate,
         "Prazo": r.formattedEndDate,
         "Trimestre": r.quarter,
@@ -4267,7 +4302,7 @@ export function PlanningTab({
       ws["!cols"] = [
         { wch: 28 }, // Área Temática
         { wch: 22 }, // Categoria / Status
-        { wch: 45 }, // Título da Tarefa
+        { wch: 45 }, // Título da Atividade
         { wch: 14 }, // Início
         { wch: 14 }, // Prazo
         { wch: 14 }, // Trimestre
@@ -4276,10 +4311,10 @@ export function PlanningTab({
         { wch: 22 }, // Situação
         { wch: 14 }  // Progresso (%)
       ];
-      XLSX.utils.book_append_sheet(wb, ws, "Tarefas por Área");
+      XLSX.utils.book_append_sheet(wb, ws, "Atividades por Área");
 
       const dateStr = new Date().toISOString().split("T")[0];
-      XLSX.writeFile(wb, `Tarefas_Por_Area_Tematica_${dateStr}.xlsx`);
+      XLSX.writeFile(wb, `Atividades_Por_Area_Tematica_${dateStr}.xlsx`);
       showToast?.("Exportação Concluída", "Planilha Excel gerada com sucesso!", "success");
     } catch (err) {
       console.error("Erro ao exportar Excel:", err);
@@ -4372,7 +4407,7 @@ export function PlanningTab({
         <html>
         <head>
           <meta charset="utf-8" />
-          <title>Tarefas Agrupadas por Área Temática - ADASA</title>
+          <title>Atividades Agrupadas por Área Temática - ADASA</title>
           <style>
             @page {
               size: landscape;
@@ -4502,19 +4537,19 @@ export function PlanningTab({
         <body>
           <div class="header">
             <div class="header-left">
-              <h1>Tarefas Agrupadas por Área Temática</h1>
+              <h1>Atividades Agrupadas por Área Temática</h1>
               <p>ADASA - Sistema de Gestão do Planejamento e Acompanhamento de Atividades</p>
             </div>
             <div class="header-right">
               <div>Gerado em: <strong>${generationDate}</strong></div>
-              <div>Total de tarefas listadas: <strong>${rows.length}</strong></div>
+              <div>Total de atividades listadas: <strong>${rows.length}</strong></div>
             </div>
           </div>
 
           <table>
             <thead>
               <tr>
-                <th style="width: 36%;">Título da Tarefa</th>
+                <th style="width: 36%;">Título da Atividade</th>
                 <th class="center" style="width: 9%;">Início</th>
                 <th class="center" style="width: 9%;">Prazo</th>
                 <th class="center" style="width: 10%;">Trimestre</th>
@@ -4589,7 +4624,7 @@ export function PlanningTab({
                 setRegName("");
                 setRegAbbreviation("");
                 setRegDesc("");
-                setRegIsActive(false);
+                setRegIsActive(activeSubTab === 'responsibles' ? true : false);
                 setRegEmail("");
                 setRegRole("");
                 setRegAreaIds([]);
@@ -4808,7 +4843,7 @@ export function PlanningTab({
                       snapshotActiveTab === "tasks" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
                     )}
                   >
-                    Tarefas Registradas ({snap.tasks?.length || 0})
+                    Atividades Registradas ({snap.tasks?.length || 0})
                   </button>
                 </div>
 
@@ -4818,7 +4853,7 @@ export function PlanningTab({
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 text-center">
-                          <span className="text-[10px] font-black uppercase text-slate-400 block tracking-wider">Total de Tarefas</span>
+                          <span className="text-[10px] font-black uppercase text-slate-400 block tracking-wider">Total de Atividades</span>
                           <span className="text-2xl font-black text-slate-800 mt-1 block">{snap.totalTasks}</span>
                         </div>
                         <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-100 text-center">
@@ -4895,7 +4930,7 @@ export function PlanningTab({
                         <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black uppercase text-[10px]">
                           <tr>
                             <th className="px-4 py-3">Área Temática</th>
-                            <th className="px-4 py-3 text-center">Total Tarefas</th>
+                            <th className="px-4 py-3 text-center">Total Atividades</th>
                             <th className="px-4 py-3 text-center">Concluídas</th>
                             <th className="px-4 py-3 text-center">Progresso Oficial</th>
                           </tr>
@@ -4932,7 +4967,7 @@ export function PlanningTab({
                       <table className="w-full text-left text-xs">
                         <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black uppercase text-[10px]">
                           <tr>
-                            <th className="px-4 py-3">Tarefa Congelada</th>
+                            <th className="px-4 py-3">Atividade Congelada</th>
                             <th className="px-4 py-3">Área</th>
                             <th className="px-4 py-3">Responsável</th>
                             <th className="px-4 py-3 text-center">Status</th>
@@ -5031,7 +5066,7 @@ export function PlanningTab({
                   </div>
                   <div>
                     <h3 className="text-lg font-black text-slate-800 tracking-tight">
-                      Migrar Tarefas Pendentes para Novo Plano
+                      Migrar Atividades Pendentes para Novo Plano
                     </h3>
                     <p className="text-xs font-semibold text-slate-500">
                       Origem: {migratePlanModalPlan.name} (Homologado)
@@ -5049,14 +5084,14 @@ export function PlanningTab({
 
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
                     <div className="flex justify-between items-center text-xs font-black text-slate-700">
-                      <span>Tarefas Pendentes a Migrar</span>
+                      <span>Atividades Pendentes a Migrar</span>
                       <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 border border-amber-200 text-xs">
-                        {pendingTasks.length} tarefas
+                        {pendingTasks.length} atividades
                       </span>
                     </div>
                     {pendingTasks.length === 0 ? (
                       <p className="text-xs text-slate-400 italic py-2">
-                        Não há tarefas pendentes neste plano. Todas as tarefas vinculadas já constam como Concluídas.
+                        Não há atividades pendentes neste plano. Todas as atividades vinculadas já constam como Concluídas.
                       </p>
                     ) : (
                       <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1.5 pt-1">
@@ -5068,7 +5103,7 @@ export function PlanningTab({
                         ))}
                         {pendingTasks.length > 8 && (
                           <div className="text-[10px] text-slate-400 text-center italic">
-                            + {pendingTasks.length - 8} outras tarefas...
+                            + {pendingTasks.length - 8} outras atividades...
                           </div>
                         )}
                       </div>
@@ -5254,7 +5289,7 @@ export function PlanningTab({
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-bold text-slate-600">Atividades a serem migradas:</span>
                         <span className="font-black text-slate-800 text-sm bg-white px-2.5 py-0.5 rounded-lg border border-slate-200 shadow-2xs">
-                          {sourceTasks.length} {sourceTasks.length === 1 ? 'tarefa' : 'tarefas'}
+                          {sourceTasks.length} {sourceTasks.length === 1 ? 'atividade' : 'atividades'}
                         </span>
                       </div>
 
@@ -5277,7 +5312,7 @@ export function PlanningTab({
 
                           {/* Preview list */}
                           <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Prévia das Tarefas da Área:</span>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Prévia das Atividades da Área:</span>
                             {sourceTasks.slice(0, 4).map(t => (
                               <div key={t.id} className="text-[11px] font-semibold text-slate-600 bg-white px-2.5 py-1.5 rounded-lg border border-slate-100 flex items-center justify-between gap-2">
                                 <span className="truncate">{t.title}</span>
@@ -5292,7 +5327,7 @@ export function PlanningTab({
                             ))}
                             {sourceTasks.length > 4 && (
                               <span className="text-[10px] text-slate-400 font-bold italic block text-center">
-                                + {sourceTasks.length - 4} outra(s) tarefa(s)...
+                                + {sourceTasks.length - 4} outra(s) atividade(s)...
                               </span>
                             )}
                           </div>
@@ -5664,6 +5699,23 @@ export function PlanningTab({
                       {areas.length === 0 && <span className="text-xs text-slate-500 italic block">Nenhuma área cadastrada.</span>}
                     </div>
                   </div>
+                  <div className="flex items-center justify-between p-3.5 bg-slate-50 border-2 border-slate-200 rounded-xl">
+                    <div>
+                      <span className="text-xs font-black text-slate-700 uppercase tracking-wider block">Status do Responsável</span>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        {regIsActive ? "Ativo (disponível para atribuição em atividades)" : "Inativo (não listado para novas atribuições)"}
+                      </span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer select-none">
+                      <input 
+                        type="checkbox" 
+                        checked={regIsActive} 
+                        onChange={(e) => setRegIsActive(e.target.checked)} 
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                  </div>
                   <button type="submit" className="w-full py-3.5 mt-2 font-black text-xs text-white bg-adasa-mid hover:bg-adasa-dark rounded-xl transition shadow-md">{editingRegId !== null ? "Salvar Alterações" : "Cadastrar Responsável"}</button>
                 </form>
               )}
@@ -5863,7 +5915,7 @@ export function PlanningTab({
                     <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase tracking-widest font-black">
                       <th className="px-5 py-4">Plano</th>
                       <th className="px-5 py-4 w-56 text-center">Exercício / Snapshot</th>
-                      <th className="px-5 py-4 w-40 text-center">Tarefas Atuais</th>
+                      <th className="px-5 py-4 w-40 text-center">Atividades Atuais</th>
                       <th className="px-5 py-4 w-48 hidden sm:table-cell">Histórico</th>
                       <th className="px-5 py-4 w-48 text-right">Ações</th>
                     </tr>
@@ -5929,13 +5981,13 @@ export function PlanningTab({
                         <td className="px-5 py-3.5 align-middle text-center">
                           <div className="flex flex-col items-center justify-center gap-1">
                             <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 text-[10px] font-black text-slate-600 uppercase w-fit mx-auto">
-                              <ListTodo size={12} /> {currentTasks.length} Tarefas
+                              <ListTodo size={12} /> {currentTasks.length} Atividades
                             </div>
                             {p.isClosed && pendingInDb > 0 && (
                               <button
                                 onClick={() => { setMigratePlanModalPlan(p); setMigrateTargetPlanId(null); }}
                                 className="text-[10px] font-black text-amber-700 hover:text-amber-900 flex items-center gap-1 hover:underline"
-                                title="Clique para migrar tarefas pendentes para outro plano"
+                                title="Clique para migrar atividades pendentes para outro plano"
                               >
                                 <ArrowRightLeft size={10} /> {pendingInDb} a migrar
                               </button>
@@ -5975,7 +6027,7 @@ export function PlanningTab({
                                  <button 
                                    onClick={() => { setMigratePlanModalPlan(p); setMigrateTargetPlanId(null); }} 
                                    className="p-2 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-colors" 
-                                   title="Migrar tarefas pendentes para outro plano"
+                                   title="Migrar atividades pendentes para outro plano"
                                  >
                                    <ArrowRightLeft size={16} />
                                  </button>
@@ -6602,7 +6654,7 @@ export function PlanningTab({
                                                 title={
                                                   canArchive
                                                     ? `Arquivar Categoria nesta área (Todas as ${total} atividades ${group.area ? `em ${group.area.abbreviation || group.area.name} ` : ""}concluídas)`
-                                                    : `Bloqueado: Existem ${pending + inProg} tarefa(s) pendentes ou em andamento ${group.area ? `na área ${group.area.abbreviation || group.area.name}` : ""}`
+                                                    : `Bloqueado: Existem ${pending + inProg} atividade(s) pendentes ou em andamento ${group.area ? `na área ${group.area.abbreviation || group.area.name}` : ""}`
                                                 }
                                               >
                                                 <Archive size={16} />
@@ -6651,78 +6703,391 @@ export function PlanningTab({
             );
           })()}
 
-          {configActiveTab === "responsibles" && (
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
-              <div className="overflow-x-auto min-h-[300px]">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase tracking-widest font-black">
-                      <th className="px-5 py-4">Responsável</th>
-                      <th className="px-5 py-4 w-52 hidden sm:table-cell">Histórico</th>
-                      <th className="px-5 py-4 w-32 text-center">Tarefas</th>
-                      <th className="px-5 py-4 w-28 text-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-sm">
-                    {[...responsibles].sort((a,b) => a.name.localeCompare(b.name)).map(r => (
-                      <tr key={r.id} className="hover:bg-slate-50/50 transition-colors group">
-                        <td className="px-5 py-3 align-middle">
-                          <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black text-sm shrink-0 shadow-sm uppercase tracking-tighter group-hover:bg-indigo-700 transition-colors">
-                              {r.name.substring(0, 2)}
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="font-extrabold text-slate-700">{r.name}</span>
-                              <div className="flex items-center gap-1.5 mt-0.5 text-slate-400 font-bold text-[10px] uppercase tracking-wider">
-                                <Briefcase size={10} /> {r.role || "REGULADOR"}
+          {configActiveTab === "responsibles" && (() => {
+            const query = responsibleSearchTerm.toLowerCase().trim();
+
+            const filterResp = (r: Responsible) => {
+              if (responsibleStatusFilter === "active" && r.isActive === false) return false;
+              if (responsibleStatusFilter === "inactive" && r.isActive !== false) return false;
+              if (!query) return true;
+              const nameMatch = (r.name || "").toLowerCase().includes(query);
+              const emailMatch = (r.email || "").toLowerCase().includes(query);
+              const roleMatch = (r.role || "").toLowerCase().includes(query);
+              return nameMatch || emailMatch || roleMatch;
+            };
+
+            const areaGroups: Array<{ area: Area | null; responsibles: Responsible[] }> = [];
+
+            areas.forEach(area => {
+              const matched = responsibles
+                .filter(r => r.areaIds?.includes(area.id))
+                .filter(filterResp)
+                .sort((a, b) => a.name.localeCompare(b.name));
+              areaGroups.push({ area, responsibles: matched });
+            });
+
+            const unassigned = responsibles
+              .filter(r => !r.areaIds || r.areaIds.length === 0)
+              .filter(filterResp)
+              .sort((a, b) => a.name.localeCompare(b.name));
+
+            if (unassigned.length > 0) {
+              areaGroups.push({ area: null, responsibles: unassigned });
+            }
+
+            const totalFilteredCount = areaGroups.reduce((acc, g) => acc + g.responsibles.length, 0);
+
+            const toggleAreaCollapse = (key: string) => {
+              setCollapsedResponsibleAreas(prev => ({ ...prev, [key]: !prev[key] }));
+            };
+
+            const expandAll = () => {
+              const next: Record<string, boolean> = {};
+              areaGroups.forEach(g => {
+                const k = g.area ? `area-${g.area.id}` : "area-none";
+                next[k] = false;
+              });
+              setCollapsedResponsibleAreas(next);
+            };
+
+            const collapseAll = () => {
+              const next: Record<string, boolean> = {};
+              areaGroups.forEach(g => {
+                const k = g.area ? `area-${g.area.id}` : "area-none";
+                next[k] = true;
+              });
+              setCollapsedResponsibleAreas(next);
+            };
+
+            const totalActives = responsibles.filter(r => r.isActive !== false).length;
+            const totalInactives = responsibles.filter(r => r.isActive === false).length;
+
+            return (
+              <div className="space-y-4">
+                {/* Search & Status Filters */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-3">
+                  <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                    {/* Search Input */}
+                    <div className="relative flex-1">
+                      <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={responsibleSearchTerm}
+                        onChange={(e) => setResponsibleSearchTerm(e.target.value)}
+                        placeholder="Buscar responsável por nome, e-mail ou cargo..."
+                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 placeholder:text-slate-400 focus:border-indigo-600 outline-none transition"
+                      />
+                      {responsibleSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={() => setResponsibleSearchTerm("")}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Status Filter Buttons */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setResponsibleStatusFilter("all")}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                          responsibleStatusFilter === "all"
+                            ? "bg-slate-800 text-white shadow-2xs"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        Todos <span className="text-[10px] font-black opacity-80">({responsibles.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setResponsibleStatusFilter("active")}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                          responsibleStatusFilter === "active"
+                            ? "bg-emerald-600 text-white shadow-2xs"
+                            : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
+                        }`}
+                      >
+                        <CheckCircle size={12} /> Ativos <span className="text-[10px] font-black opacity-80">({totalActives})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setResponsibleStatusFilter("inactive")}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                          responsibleStatusFilter === "inactive"
+                            ? "bg-slate-700 text-white shadow-2xs"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200"
+                        }`}
+                      >
+                        <XCircle size={12} /> Inativos <span className="text-[10px] font-black opacity-80">({totalInactives})</span>
+                      </button>
+
+                      <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block" />
+
+                      <button
+                        type="button"
+                        onClick={expandAll}
+                        className="px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition cursor-pointer"
+                        title="Expandir todas as áreas"
+                      >
+                        Expandir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={collapseAll}
+                        className="px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition cursor-pointer"
+                        title="Recolher todas as áreas"
+                      >
+                        Recolher
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Grouped by Thematic Area Sections */}
+                {totalFilteredCount === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-400">
+                    <Users size={36} className="mx-auto text-slate-300 mb-3" />
+                    <p className="font-bold text-base text-slate-600">Nenhum responsável encontrado.</p>
+                    <p className="text-xs text-slate-400 mt-1">Verifique os filtros selecionados ou cadastre um novo responsável técnico.</p>
+                  </div>
+                ) : (
+                  areaGroups.map(group => {
+                    const areaKey = group.area ? `area-${group.area.id}` : "area-none";
+                    const isCollapsed = collapsedResponsibleAreas[areaKey] || false;
+                    const areaName = group.area ? group.area.name : "Responsáveis sem Área Vinculada";
+                    const areaAbbr = group.area?.abbreviation;
+
+                    const totalInGroup = group.responsibles.length;
+                    const activesInGroup = group.responsibles.filter(r => r.isActive !== false).length;
+                    const inactivesInGroup = group.responsibles.filter(r => r.isActive === false).length;
+
+                    return (
+                      <div
+                        key={areaKey}
+                        className="bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden transition-all"
+                      >
+                        {/* Area Group Header */}
+                        <div
+                          onClick={() => toggleAreaCollapse(areaKey)}
+                          className="px-5 py-3.5 bg-gradient-to-r from-slate-50 to-indigo-50/30 border-b border-slate-200/80 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-100/70 transition-colors select-none"
+                        >
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 bg-white border border-slate-200 shadow-2xs cursor-pointer"
+                            >
+                              {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                            </button>
+
+                            <div className="flex items-center gap-2">
+                              {group.area ? (
+                                <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-2xs">
+                                  <Briefcase size={14} />
+                                </div>
+                              ) : (
+                                <div className="w-7 h-7 rounded-lg bg-slate-500 text-white font-black text-xs flex items-center justify-center shadow-2xs">
+                                  <Users size={14} />
+                                </div>
+                              )}
+
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-extrabold text-sm text-slate-800">{areaName}</span>
+                                  {areaAbbr && (
+                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-700 border border-indigo-200">
+                                      {areaAbbr}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </td>
-                        <td className="px-5 py-3 align-middle hidden sm:table-cell">
-                          <div className="flex flex-col gap-1 justify-center">
-                            {r.createdAt ? (
-                              <div className="text-[10px] text-slate-500 font-semibold">
-                                <span className="flex items-center gap-1 text-emerald-600"><Plus size={10} /> Criado</span>
-                                <span className="text-[10px] text-slate-400 font-medium block">{formatDateTime(r.createdAt)} por {r.createdBy || 'Sistema'}</span>
-                              </div>
-                            ) : null}
-                            {r.updatedAt ? (
-                              <div className="text-[10px] text-slate-500 font-semibold border-t border-slate-100 pt-1">
-                                <span className="flex items-center gap-1 text-amber-600"><Clock size={10} /> Atualizado</span>
-                                <span className="text-[10px] text-slate-400 font-medium block">{formatDateTime(r.updatedAt)} por {r.updatedBy || 'Sistema'}</span>
-                              </div>
-                            ) : null}
-                            {!r.createdAt && !r.updatedAt && (
-                              <span className="text-slate-400 text-xs">--</span>
+
+                          {/* Header Count Badges */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-800 text-white shadow-2xs">
+                              {totalInGroup} {totalInGroup === 1 ? "Responsável" : "Responsáveis"}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              {activesInGroup} ativo(s)
+                            </span>
+                            {inactivesInGroup > 0 && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                                {inactivesInGroup} inativo(s)
+                              </span>
                             )}
                           </div>
-                        </td>
-                        <td className="px-5 py-3 align-middle text-center">
-                          <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 text-[10px] font-black text-slate-600 uppercase w-fit mx-auto">
-                            <FileText size={12} /> {tasks.filter(t => t.responsibleIds?.includes(r.id)).length} Atribuídas
+                        </div>
+
+                        {/* Group Table */}
+                        {!isCollapsed && (
+                          <div className="overflow-x-auto">
+                            {group.responsibles.length === 0 ? (
+                              <div className="px-5 py-6 text-center text-slate-400 text-xs font-medium italic">
+                                Nenhum responsável vinculado a esta área temática com os filtros atuais.
+                              </div>
+                            ) : (
+                              <table className="w-full text-left border-collapse">
+                                <thead>
+                                  <tr className="bg-slate-50/60 border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-widest font-black">
+                                    <th className="px-5 py-3">Responsável</th>
+                                    <th className="px-5 py-3 w-40">Status</th>
+                                    <th className="px-5 py-3 w-36 text-center">Atividades</th>
+                                    <th className="px-5 py-3 w-52 hidden lg:table-cell">Histórico</th>
+                                    <th className="px-5 py-3 w-36 text-right">Ações</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 text-sm">
+                                  {group.responsibles.map(r => {
+                                    const isRespActive = r.isActive !== false;
+                                    const assignedTasksCount = tasks.filter(t => t.responsibleIds?.includes(r.id)).length;
+
+                                    return (
+                                      <tr
+                                        key={`${areaKey}-${r.id}`}
+                                        className={`hover:bg-slate-50/50 transition-colors group ${
+                                          !isRespActive ? "bg-slate-50/40 opacity-75" : ""
+                                        }`}
+                                      >
+                                        {/* Responsável */}
+                                        <td className="px-5 py-3.5 align-middle">
+                                          <div className="flex items-center gap-3">
+                                            <div className="relative">
+                                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-2xs uppercase tracking-tighter transition-colors ${
+                                                isRespActive ? "bg-indigo-600 text-white group-hover:bg-indigo-700" : "bg-slate-300 text-slate-600"
+                                              }`}>
+                                                {r.name.substring(0, 2)}
+                                              </div>
+                                              <span
+                                                className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
+                                                  isRespActive ? "bg-emerald-500" : "bg-slate-400"
+                                                }`}
+                                                title={isRespActive ? "Ativo" : "Inativo"}
+                                              />
+                                            </div>
+                                            <div className="flex flex-col">
+                                              <div className="flex items-center gap-2">
+                                                <span className="font-extrabold text-slate-800">{r.name}</span>
+                                                {r.role && (
+                                                  <span className="text-[9px] text-slate-500 font-black uppercase bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                                    {r.role}
+                                                  </span>
+                                                )}
+                                              </div>
+                                              {r.email && (
+                                                <span className="text-xs text-slate-400 font-medium">
+                                                  {r.email}
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </td>
+
+                                        {/* Status */}
+                                        <td className="px-5 py-3.5 align-middle">
+                                          {isRespActive ? (
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                                              <CheckCircle size={11} className="text-emerald-600" /> Ativo
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-200 shadow-2xs">
+                                              <XCircle size={11} className="text-slate-400" /> Inativo
+                                            </span>
+                                          )}
+                                        </td>
+
+                                        {/* Atividades */}
+                                        <td className="px-5 py-3.5 align-middle text-center">
+                                          <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 text-[10px] font-black text-slate-600 uppercase w-fit mx-auto">
+                                            <FileText size={12} className="text-slate-400" /> {assignedTasksCount} {assignedTasksCount === 1 ? "Atribuída" : "Atribuídas"}
+                                          </div>
+                                        </td>
+
+                                        {/* Histórico */}
+                                        <td className="px-5 py-3.5 align-middle hidden lg:table-cell">
+                                          <div className="flex flex-col gap-1 justify-center">
+                                            {r.createdAt ? (
+                                              <div className="text-[10px] text-slate-500 font-semibold">
+                                                <span className="flex items-center gap-1 text-emerald-600"><Plus size={10} /> Criado</span>
+                                                <span className="text-[10px] text-slate-400 font-medium block">{formatDateTime(r.createdAt)} por {r.createdBy || 'Sistema'}</span>
+                                              </div>
+                                            ) : null}
+                                            {r.updatedAt ? (
+                                              <div className="text-[10px] text-slate-500 font-semibold border-t border-slate-100 pt-1">
+                                                <span className="flex items-center gap-1 text-amber-600"><Clock size={10} /> Atualizado</span>
+                                                <span className="text-[10px] text-slate-400 font-medium block">{formatDateTime(r.updatedAt)} por {r.updatedBy || 'Sistema'}</span>
+                                              </div>
+                                            ) : null}
+                                            {!r.createdAt && !r.updatedAt && (
+                                              <span className="text-slate-400 text-xs">--</span>
+                                            )}
+                                          </div>
+                                        </td>
+
+                                        {/* Ações */}
+                                        <td className="px-5 py-3.5 align-middle text-right">
+                                          <div className="flex gap-1 justify-end items-center">
+                                            {/* Ativar / Inativar button */}
+                                            <button
+                                              type="button"
+                                              onClick={() => handleToggleResponsibleActive(r)}
+                                              className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                                                isRespActive
+                                                  ? "text-emerald-600 hover:text-amber-700 hover:bg-amber-50"
+                                                  : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+                                              }`}
+                                              title={isRespActive ? "Inativar Responsável" : "Ativar Responsável"}
+                                            >
+                                              {isRespActive ? <UserCheck size={16} /> : <UserX size={16} />}
+                                            </button>
+
+                                            {/* Editar */}
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setEditingRegId(r.id);
+                                                setRegName(r.name);
+                                                setRegEmail(r.email || "");
+                                                setRegRole(r.role || "");
+                                                setRegAreaIds(r.areaIds || []);
+                                                setRegIsActive(r.isActive !== false);
+                                                setIsRegModalOpen(true);
+                                              }}
+                                              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                                              title="Editar Responsável"
+                                            >
+                                              <Edit2 size={16} />
+                                            </button>
+
+                                            {/* Excluir */}
+                                            <button
+                                              type="button"
+                                              onClick={() => handleResponsibleDelete(r.id)}
+                                              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                              title="Excluir Responsável"
+                                            >
+                                              <Trash2 size={16} />
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            )}
                           </div>
-                        </td>
-                        <td className="px-5 py-3 align-middle text-right">
-                          <div className="flex gap-1 justify-end">
-                             <button onClick={() => { setEditingRegId(r.id); setRegName(r.name); setRegEmail(r.email || ""); setRegRole(r.role || ""); setRegAreaIds(r.areaIds || []); setIsRegModalOpen(true); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Editar"><Edit2 size={16} /></button>
-                             <button onClick={() => handleResponsibleDelete(r.id)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Excluir"><Trash2 size={16} /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {responsibles.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="px-5 py-8 text-center text-slate-400 text-sm font-medium">
-                          Nenhum responsável cadastrado.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </div>
     );
@@ -6902,7 +7267,7 @@ export function PlanningTab({
             {/* Row 3: Tipo, Status, Situation, Priority and Programmed */}
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
               <div className="flex flex-col gap-1.5">
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Tarefa</span>
+                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Atividade</span>
                 <select
                   value={taskTypeFilter}
                   onChange={(e) => setTaskTypeFilter(e.target.value)}
@@ -7133,7 +7498,7 @@ export function PlanningTab({
           {/* Global Progress Card (Highlighted on its own line) */}
           <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm flex items-center justify-between text-left">
             <div className="space-y-1 w-full mr-4">
-              <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase flex items-center gap-1.5 w-max" title="Média ponderada do progresso de todas as tarefas de acordo com os filtros selecionados, refletindo o andamento geral.">
+              <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase flex items-center gap-1.5 w-max" title="Média ponderada do progresso de todas as atividades de acordo com os filtros selecionados, refletindo o andamento geral.">
                 Percentual de Conclusão
                 <Info size={12} className="text-indigo-400 hover:text-indigo-600 cursor-help transition-colors" />
               </span>
@@ -7159,7 +7524,7 @@ export function PlanningTab({
             <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm flex items-center justify-between text-left transition-all hover:-translate-y-1 hover:shadow-md hover:scale-[1.02] cursor-default duration-300">
               <div className="space-y-1">
                 <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase flex items-center gap-1.5 w-max" title="Número total de atividades contabilizadas (filhas ou não agrupadas) dentro dos filtros atuais.">
-                  Total de Tarefas
+                  Total de Atividades
                   <Info size={12} className="text-indigo-400 hover:text-indigo-600 cursor-help transition-colors" />
                 </span>
                 <p className="text-3xl font-black text-slate-800">{dashboardStats.total}</p>
@@ -7173,12 +7538,12 @@ export function PlanningTab({
             {/* Actions in queue Card - Not Started */}
             <div className="bg-slate-100 rounded-3xl border border-slate-200/80 p-5 shadow-sm flex items-center justify-between text-left transition-all hover:-translate-y-1 hover:shadow-md hover:scale-[1.02] cursor-default duration-300">
               <div className="space-y-1">
-                <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase flex items-center gap-1.5 w-max" title="Quantidade de tarefas com progresso igual a 0%. Indicativo de passivo de execução inicial.">
+                <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase flex items-center gap-1.5 w-max" title="Quantidade de atividades com progresso igual a 0%. Indicativo de passivo de execução inicial.">
                   Não Iniciadas
                   <Info size={12} className="text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
                 </span>
                 <p className="text-3xl font-black text-slate-800">{dashboardStats.pending}</p>
-                <p className="text-[10px] text-slate-500 font-bold">tarefas pendentes</p>
+                <p className="text-[10px] text-slate-500 font-bold">atividades pendentes</p>
               </div>
               <div className="p-3.5 bg-white rounded-2xl text-slate-500 shadow-sm border border-slate-200/40">
                 <Clock size={22} />
@@ -7188,12 +7553,12 @@ export function PlanningTab({
             {/* Actions in queue Card - In Progress */}
             <div className="bg-blue-100 rounded-3xl border border-blue-200/80 p-5 shadow-sm flex items-center justify-between text-left transition-all hover:-translate-y-1 hover:shadow-md hover:scale-[1.02] cursor-default duration-300">
               <div className="space-y-1">
-                <span className="text-[10px] font-black tracking-widest text-blue-500 uppercase flex items-center gap-1.5 w-max" title="Quantidade de tarefas sendo executadas no momento (progresso > 0% e < 100%).">
+                <span className="text-[10px] font-black tracking-widest text-blue-500 uppercase flex items-center gap-1.5 w-max" title="Quantidade de atividades sendo executadas no momento (progresso > 0% e < 100%).">
                   Em Andamento
                   <Info size={12} className="text-blue-400 hover:text-blue-600 cursor-help transition-colors" />
                 </span>
                 <p className="text-3xl font-black text-blue-900">{dashboardStats.inProgress}</p>
-                <p className="text-[10px] text-blue-500 font-bold">tarefas iniciadas</p>
+                <p className="text-[10px] text-blue-500 font-bold">atividades iniciadas</p>
               </div>
               <div className="p-3.5 bg-white rounded-2xl text-blue-600 shadow-sm border border-blue-200/40">
                 <Activity size={22} />
@@ -7203,12 +7568,12 @@ export function PlanningTab({
             {/* Completed Card */}
             <div className="bg-emerald-100 rounded-3xl border border-emerald-200/80 p-5 shadow-sm flex items-center justify-between text-left transition-all hover:-translate-y-1 hover:shadow-md hover:scale-[1.02] cursor-default duration-300">
               <div className="space-y-1">
-                <span className="text-[10px] font-black tracking-widest text-emerald-600 uppercase flex items-center gap-1.5 w-max" title="Quantidade de tarefas plenamente executadas e finalizadas com sucesso (100% de progresso).">
+                <span className="text-[10px] font-black tracking-widest text-emerald-600 uppercase flex items-center gap-1.5 w-max" title="Quantidade de atividades plenamente executadas e finalizadas com sucesso (100% de progresso).">
                   Concluídas
                   <Info size={12} className="text-emerald-400 hover:text-emerald-600 cursor-help transition-colors" />
                 </span>
                 <p className="text-3xl font-black text-emerald-900">{dashboardStats.completed}</p>
-                <p className="text-[10px] text-emerald-600 font-bold">tarefas finalizadas</p>
+                <p className="text-[10px] text-emerald-600 font-bold">atividades finalizadas</p>
               </div>
               <div className="p-3.5 bg-white rounded-2xl text-emerald-600 shadow-sm border border-emerald-200/40">
                 <CheckCircle2 size={22} />
@@ -7514,7 +7879,7 @@ export function PlanningTab({
                     <thead>
                       <tr className="bg-slate-50 text-slate-400 border-b border-slate-100">
                         <th className="px-3.5 py-2 font-black uppercase text-[9px] tracking-wider">Área</th>
-                        <th className="px-3.5 py-2 font-black uppercase text-[9px] tracking-wider">Total Tarefas</th>
+                        <th className="px-3.5 py-2 font-black uppercase text-[9px] tracking-wider">Total Atividades</th>
                         <th className="px-3.5 py-2 font-black uppercase text-[9px] tracking-wider">Qtde Não Iniciada</th>
                         <th className="px-3.5 py-2 font-black uppercase text-[9px] tracking-wider">Qtde Em Andamento</th>
                         <th className="px-3.5 py-2 font-black uppercase text-[9px] tracking-wider">Qtde Concluídas</th>
@@ -7525,7 +7890,7 @@ export function PlanningTab({
                       {areaChartData.slice(0, 5).map((row, idx) => (
                         <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-3.5 py-2 font-black text-slate-800 uppercase" title={row.fullName}>{row.name}</td>
-                          <td className="px-3.5 py-2 font-bold">{row["Total de Tarefas"]}</td>
+                          <td className="px-3.5 py-2 font-bold">{row["Total de Atividades"]}</td>
                           <td className="px-3.5 py-2 font-bold text-slate-500">{row["Não iniciada"]}</td>
                           <td className="px-3.5 py-2 font-bold text-blue-500">{row["Em andamento"]}</td>
                           <td className="px-3.5 py-2 font-bold text-emerald-600">{row["Concluídas"]}</td>
@@ -7575,7 +7940,7 @@ export function PlanningTab({
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-4">
                 <div>
                   <dt className="text-xs font-black tracking-widest text-slate-400 uppercase">Acompanhamento de Status</dt>
-                  <h4 className="text-lg font-black text-slate-800 mt-1 font-sans">Status das Tarefas por Área e Trimestre</h4>
+                  <h4 className="text-lg font-black text-slate-800 mt-1 font-sans">Status das Atividades por Área e Trimestre</h4>
                   <p className="text-xs font-medium text-slate-500 mt-0.5 leading-snug">
                     Quantidade de tarefas Não Iniciadas, Em Andamento e Concluídas agrupadas por Área e separadas por trimestre.
                   </p>
@@ -7859,7 +8224,7 @@ export function PlanningTab({
                                       {row.name} - Trimestre {q}
                                     </p>
                                     <div className="flex justify-between items-center text-xs">
-                                      <span className="text-slate-400 font-medium tracking-wider text-[10px] uppercase">Total de Tarefas</span>
+                                      <span className="text-slate-400 font-medium tracking-wider text-[10px] uppercase">Total de Atividades</span>
                                       <span className="text-white font-black">{stats.total}</span>
                                     </div>
                                     <div className="flex justify-between items-center text-xs">
@@ -8018,7 +8383,7 @@ export function PlanningTab({
                       <th className="px-4 py-3.5 min-w-[280px]">Grupo / Nome</th>
                       <th className="px-4 py-3.5 text-center min-w-[110px]">Data Início</th>
                       <th className="px-4 py-3.5 text-center min-w-[110px]">Data Fim</th>
-                      <th className="px-4 py-3.5 text-center">Qtde Tarefa</th>
+                      <th className="px-4 py-3.5 text-center">Qtde Atividades</th>
                       <th className="px-4 py-3.5 text-center text-slate-400">Qtde Não Iniciada</th>
                       <th className="px-4 py-3.5 text-center text-blue-500">Qtde Em Andamento</th>
                       <th className="px-4 py-3.5 text-center text-emerald-600">Qtde Concluídas</th>
@@ -8379,7 +8744,7 @@ export function PlanningTab({
               <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-4 border-b border-slate-100 pb-4">
                 <div>
                   <dt className="text-xs font-black tracking-widest text-slate-400 uppercase">Detalhamento Operacional</dt>
-                  <h4 className="text-lg font-black text-slate-800 mt-1 font-sans">Tarefas Agrupadas por Área Temática</h4>
+                  <h4 className="text-lg font-black text-slate-800 mt-1 font-sans">Atividades Agrupadas por Área Temática</h4>
                   <p className="text-xs font-medium text-slate-500 mt-0.5 leading-snug">
                     Relação de atividades com referência na data fim, consolidando trimestre, mês e progresso atual, agrupadas por área/setor.
                   </p>
@@ -8956,7 +9321,7 @@ export function PlanningTab({
                           onClick={() => handleAreaTableSort("title")}
                           className="px-4 py-3.5 min-w-[280px] cursor-pointer hover:bg-slate-100/80 transition-colors"
                         >
-                          Título da Tarefa <AreaTableSortIcon field="title" />
+                          Título da Atividade <AreaTableSortIcon field="title" />
                         </th>
                         <th 
                           onClick={() => handleAreaTableSort("start")}
@@ -9089,7 +9454,7 @@ export function PlanningTab({
                                         toggleExpand(t.id);
                                       }}
                                       className="p-1 mr-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 transition"
-                                      title={isExpanded ? "Recolher subtarefas" : "Expandir subtarefas"}
+                                      title={isExpanded ? "Recolher subatividades" : "Expandir subatividades"}
                                     >
                                       {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                     </button>
@@ -9229,7 +9594,7 @@ export function PlanningTab({
                                   <div className="flex items-center gap-2">
                                     {isAreaCollapsed ? <ChevronRight size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
                                     <span>{area.name}</span>
-                                    <span className="text-[10px] text-slate-500 font-bold ml-2 bg-slate-200 px-2 py-0.5 rounded-full">{areaTasks.length} TAREFA(S)</span>
+                                    <span className="text-[10px] text-slate-500 font-bold ml-2 bg-slate-200 px-2 py-0.5 rounded-full">{areaTasks.length} ATIVIDADE(S)</span>
                                   </div>
                                 </td>
                               </tr>
@@ -9278,7 +9643,7 @@ export function PlanningTab({
                                             {areaTableGroupMode === "category" ? "Categoria:" : "Status:"}
                                           </span>
                                           <span className="text-xs font-black text-slate-700">{groupDesc.name}</span>
-                                          <span className="text-[9px] text-slate-500 font-bold ml-1.5 bg-slate-200/60 border border-slate-200/60 px-1.5 py-0.5 rounded-full">{groupTasks.length} TAREFA(S)</span>
+                                          <span className="text-[9px] text-slate-500 font-bold ml-1.5 bg-slate-200/60 border border-slate-200/60 px-1.5 py-0.5 rounded-full">{groupTasks.length} ATIVIDADE(S)</span>
                                         </div>
                                       </td>
                                     </tr>
@@ -9374,7 +9739,7 @@ export function PlanningTab({
                   onClick={reloadTasks}
                   disabled={isSyncing}
                   className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all flex items-center justify-center animate-none shadow-sm"
-                  title="Sincronizar tarefas"
+                  title="Sincronizar atividades"
                 >
                   <RefreshCw size={14} className={isSyncing ? "animate-spin" : ""} />
                 </button>
@@ -9406,9 +9771,9 @@ export function PlanningTab({
                       </select>
                     </div>
 
-                    {/* Tipo de Tarefa */}
+                    {/* Tipo de Atividade */}
                     <div className="flex flex-col gap-1.5">
-                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Tarefa</span>
+                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Atividade</span>
                       <select
                         value={taskTypeFilter}
                         onChange={(e) => setTaskTypeFilter(e.target.value)}
@@ -9478,7 +9843,7 @@ export function PlanningTab({
 
                   {/* Search bar layout */}
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🔍 Buscar por tarefa, descrição ou tags</span>
+                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🔍 Buscar por atividade, descrição ou tags</span>
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                       <div className="relative flex-1">
                         <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -9497,7 +9862,7 @@ export function PlanningTab({
                           onChange={(e) => setHasSubtasksFilter(e.target.checked)}
                           className="w-4 h-4 rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid"
                         />
-                        <span className="text-xs font-bold text-slate-700 select-none whitespace-nowrap">Tarefas com Subtarefas</span>
+                        <span className="text-xs font-bold text-slate-700 select-none whitespace-nowrap">Atividades com Subtarefas</span>
                       </label>
                     </div>
                   </div>
@@ -9537,7 +9902,7 @@ export function PlanningTab({
                       onClick={() => handleAddNewTask(null)}
                       className="flex items-center justify-center gap-2 px-6 py-2.5 whitespace-nowrap bg-adasa-mid text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-adasa-hover transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
                     >
-                      <Plus size={18} /> Nova Tarefa
+                      <Plus size={18} /> Nova Atividade
                     </button>
                   </div>
                 </div>
@@ -9682,7 +10047,7 @@ export function PlanningTab({
               {/* Row 3: Tipo, Status, Situation, Priority and Classification Select filters */}
               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Tarefa</span>
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📝 Tipo de Atividade</span>
                   <select
                     value={taskTypeFilter}
                     onChange={(e) => setTaskTypeFilter(e.target.value)}
@@ -9777,7 +10142,7 @@ export function PlanningTab({
 
               {/* Row 3: Search layout */}
               <div className="flex flex-col gap-1.5">
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🔍 Buscar por tarefa, descrição ou tags</span>
+                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🔍 Buscar por atividade, descrição ou tags</span>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                   <div className="relative flex-1">
                     <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -9796,7 +10161,7 @@ export function PlanningTab({
                       onChange={(e) => setHasSubtasksFilter(e.target.checked)}
                       className="w-4 h-4 rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid"
                     />
-                    <span className="text-xs font-bold text-slate-700 select-none whitespace-nowrap">Tarefas com Subtarefas</span>
+                    <span className="text-xs font-bold text-slate-700 select-none whitespace-nowrap">Atividades com Subtarefas</span>
                   </label>
                 </div>
               </div>
@@ -9839,7 +10204,7 @@ export function PlanningTab({
                    onClick={() => handleAddNewTask(null)}
                    className="flex items-center justify-center gap-2 px-6 py-2.5 whitespace-nowrap bg-adasa-mid text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-adasa-hover transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
                  >
-                   <Plus size={18} /> Nova Tarefa
+                   <Plus size={18} /> Nova Atividade
                  </button>
               </div>
 
@@ -9922,7 +10287,7 @@ export function PlanningTab({
                   onClick={() => { setViewMode("recurso"); setTimelineTaskId(null); }}
                   className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "recurso" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                 >
-                  <Layers size={16} /> Tipo de Tarefa
+                  <Layers size={16} /> Tipo de Atividade
                 </button>
                 {timelineTaskId !== null && (
                   <button
@@ -9999,7 +10364,7 @@ export function PlanningTab({
                 
                 <div className="col-span-1 bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col justify-center">
                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                     <LayoutGrid size={12} className="text-indigo-500" /> Tarefas por Status
+                     <LayoutGrid size={12} className="text-indigo-500" /> Atividades por Status
                    </h4>
                    <div className="grid grid-cols-3 gap-2">
                      <div className="bg-slate-50 rounded-xl p-2.5 flex flex-col items-center justify-center border border-slate-100 shadow-xs">
@@ -10019,7 +10384,7 @@ export function PlanningTab({
 
                 <div className="col-span-1 bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col justify-center">
                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                     <AlertCircle size={12} className="text-rose-500" /> Tarefas por Situação
+                     <AlertCircle size={12} className="text-rose-500" /> Atividades por Situação
                    </h4>
                    <div className="grid grid-cols-3 gap-2">
                      <div className="bg-emerald-50/50 rounded-xl p-2.5 flex flex-col items-center justify-center border border-emerald-100 shadow-xs">
@@ -10048,7 +10413,7 @@ export function PlanningTab({
                       <ListTodo size={20} />
                     </div>
                     <div className="flex flex-col">
-                       <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 leading-none mb-1">Tarefas Listadas / Filtradas</span>
+                       <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 leading-none mb-1">Atividades Listadas / Filtradas</span>
                        <span className="text-lg font-extrabold text-slate-800 leading-none">{enhancedTasks.filter(t => matchesFilters(t)).length} <span className="text-xs font-semibold text-slate-400">tarefas</span></span>
                     </div>
                 </div>
@@ -10059,7 +10424,7 @@ export function PlanningTab({
                     className="flex items-center justify-center gap-2 px-5 py-2.5 whitespace-nowrap bg-adasa-mid text-white text-xs sm:text-sm font-black uppercase tracking-wider rounded-xl hover:bg-adasa-dark transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 cursor-pointer w-full sm:w-auto"
                     title="Criar fluxo estruturado de atividades a partir de um modelo de processo"
                   >
-                    <Copy size={16} /> Criar Tarefa Via Modelo
+                    <Copy size={16} /> Criar Atividade Via Modelo
                   </button>
                 </div>
               </div>
@@ -10068,7 +10433,7 @@ export function PlanningTab({
                 <div className="flex flex-col sm:flex-row items-center gap-3 justify-between bg-slate-50 border border-slate-200/80 rounded-2xl p-3 px-4 shadow-xs mt-2 select-none">
                   <div className="flex items-center gap-2">
                     <Layers size={15} className="text-indigo-500" />
-                    <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">{viewMode === "tree" ? "Painel de Tarefas Mais Recentes (CRIADAS OU EDITADAS)" : `Painel de Agrupamento (${viewMode === "status" ? "Status" : viewMode === "category" ? "Categorias" : viewMode === "area" ? "Áreas" : viewMode === "recurso" ? "Tipo de Tarefa" : "Responsáveis"})`}</span>
+                    <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">{viewMode === "tree" ? "Painel de Atividades Mais Recentes (CRIADAS OU EDITADAS)" : `Painel de Agrupamento (${viewMode === "status" ? "Status" : viewMode === "category" ? "Categorias" : viewMode === "area" ? "Áreas" : viewMode === "recurso" ? "Tipo de Atividade" : "Responsáveis"})`}</span>
                   </div>
                   <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                     <button
@@ -10264,7 +10629,7 @@ export function PlanningTab({
                          <thead>
                             <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-black">
                               <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none min-w-[500px]" onClick={() => handleSort("title")}>
-                                <div className="flex items-center gap-1.5">Tarefa <SortIcon field="title" /></div>
+                                <div className="flex items-center gap-1.5">Atividade <SortIcon field="title" /></div>
                               </th>
                               <th className="px-4 py-3 text-center w-24">Timeline</th>
                               <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center whitespace-nowrap min-w-[110px]" onClick={() => handleSort("situation")}>
@@ -10696,7 +11061,7 @@ export function PlanningTab({
                          <div className="flex items-center gap-2 flex-wrap">
                            <span className="text-xs font-black text-slate-500 uppercase tracking-wider px-2 flex items-center gap-1.5">
                              <Filter size={14} className="text-indigo-600" />
-                             Etapas por Tipo de Tarefa:
+                             Etapas por Tipo de Atividade:
                            </span>
                            <div className="flex flex-wrap items-center gap-1.5 bg-slate-200/60 p-1 rounded-xl">
                              <button
@@ -10759,10 +11124,10 @@ export function PlanningTab({
                            </div>
                            <div className="space-y-1">
                              <h4 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">
-                               Nenhuma tarefa de {labelType} Cadastrada
+                               Nenhuma atividade de {labelType} Cadastrada
                              </h4>
                              <p className="text-xs text-slate-500 max-w-sm">
-                               Atualmente não há nenhuma tarefa classificada como {labelType}.
+                               Atualmente não há nenhuma atividade classificada como {labelType}.
                              </p>
                            </div>
                          </div>
@@ -11524,7 +11889,7 @@ export function PlanningTab({
                             Acompanhamento Temporal das Atividades (Gantt)
                           </h4>
                           <p className="text-[11px] font-semibold text-slate-400 mt-1">
-                            Acompanhe os prazos de início, término e o progresso (%) de cada tarefa ao longo do tempo.
+                            Acompanhe os prazos de início, término e o progresso (%) de cada atividade ao longo do tempo.
                           </p>
                         </div>
                         
@@ -12339,7 +12704,7 @@ export function PlanningTab({
               <div className="p-5 md:p-7 overflow-y-auto space-y-5 text-xs font-semibold text-slate-800 custom-scrollbar text-left">
                 {/* Select Task Model */}
                 <div className="space-y-1">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Selecione o modelo cadastrado para gerar as tarefas">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Selecione o modelo cadastrado para gerar as atividades">
                     <FolderKanban size={14} className="text-emerald-500 shrink-0" />
                     Selecione o Modelo de Processo
                   </label>
@@ -12355,7 +12720,7 @@ export function PlanningTab({
                   </select>
                   {taskModels.length === 0 && (
                     <p className="text-[10px] text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100 mt-1">
-                      Nenhum modelo de tarefa encontrado. Cadastre um modelo primeiro na aba "Modelos de Tarefas".
+                      Nenhum modelo de atividade encontrado. Cadastre um modelo primeiro na aba "Modelos de Atividades".
                     </p>
                   )}
                 </div>
@@ -12380,7 +12745,7 @@ export function PlanningTab({
                         />
                         <Calendar size={14} className="absolute left-3.5 top-2.5 text-slate-400 font-normal" />
                       </div>
-                      <p className="text-[9px] text-slate-400 font-medium leading-normal">As datas das próximas etapas serão geradas proporcionalmente usando os dias de cada tarefa modelo.</p>
+                      <p className="text-[9px] text-slate-400 font-medium leading-normal">As datas das próximas etapas serão geradas proporcionalmente usando os dias de cada atividade modelo.</p>
                     </div>
 
                     {/* Plan selection */}
@@ -12403,7 +12768,7 @@ export function PlanningTab({
 
                     {/* Parent task option for nested workflows */}
                     <div className="space-y-1.5 mt-2 min-w-0">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Indique uma atividade mãe caso queira que o modelo seja aninhado como tarefas filhas de outra tarefa">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Indique uma atividade mãe caso queira que o modelo seja aninhado como atividades filhas de outra atividade">
                         <Layers size={14} className="text-emerald-500 shrink-0" />
                         Gerar como subatividades de (Opcional)
                       </label>
@@ -12436,7 +12801,7 @@ export function PlanningTab({
                       >
                         {renderTaskOptionsForGen()}
                       </select>
-                      <p className="text-[9px] text-slate-400 font-medium leading-normal">Selecione uma atividade para aninhar as tarefas como subatividades do processo. {parentTaskSearch ? "Lista filtrada pela busca." : ""}</p>
+                      <p className="text-[9px] text-slate-400 font-medium leading-normal">Selecione uma atividade para aninhar as etapas como subatividades do processo. {parentTaskSearch ? "Lista filtrada pela busca." : ""}</p>
                     </div>
 
                     {/* Dependence checkboxes */}
@@ -12454,7 +12819,7 @@ export function PlanningTab({
                             <Link2 size={13} className="text-orange-500 shrink-0" />
                             Fluxo Sequencial Automático
                           </span>
-                          Quando ativado, a Tarefa N só inicia quando a Tarefa N-1 é concluída, gerando dependência formal (`depends_on_task_id`) e escalonando as datas.
+                          Quando ativado, a Atividade N só inicia quando a Atividade N-1 é concluída, gerando dependência formal (`depends_on_task_id`) e escalonando as datas.
                         </label>
                       </div>
 
@@ -12483,7 +12848,7 @@ export function PlanningTab({
 
                     {/* Priority select */}
                     <div className="space-y-1">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Prioridade para todas as tarefas geradas">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Prioridade para todas as atividades geradas">
                         <AlertTriangle size={14} className="text-rose-500 shrink-0" />
                         Prioridade Coletiva
                       </label>
@@ -12568,15 +12933,15 @@ export function PlanningTab({
 
                     {/* Multiple Responsibles */}
                     <div className="space-y-1">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Designar responsáveis técnicos que receberão a atribuição original das tarefas">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5" title="Designar responsáveis técnicos que receberão a atribuição original das atividades">
                         <Users size={14} className="text-sky-500 shrink-0" /> 
                         Responsáveis Designados (Filtrados por Área)
                       </label>
                       <div className="bg-slate-50/50 border-2 border-slate-200 rounded-xl p-2.5 max-h-[160px] overflow-y-auto space-y-1.5 custom-scrollbar">
-                        {responsibles.filter(r => !genAreaIds || genAreaIds.length === 0 || r.areaIds?.some(aid => genAreaIds.includes(aid))).length === 0 ? (
-                          <span className="block text-xs text-slate-400 italic font-medium">Nenhum responsável encontrado para as áreas selecionadas.</span>
+                        {responsibles.filter(r => r.isActive !== false && (!genAreaIds || genAreaIds.length === 0 || r.areaIds?.some(aid => genAreaIds.includes(aid)))).length === 0 ? (
+                          <span className="block text-xs text-slate-400 italic font-medium">Nenhum responsável ativo encontrado para as áreas selecionadas.</span>
                         ) : (
-                          responsibles.filter(r => !genAreaIds || genAreaIds.length === 0 || r.areaIds?.some(aid => genAreaIds.includes(aid))).sort((a,b) => a.name.localeCompare(b.name)).map(r => (
+                          responsibles.filter(r => r.isActive !== false && (!genAreaIds || genAreaIds.length === 0 || r.areaIds?.some(aid => genAreaIds.includes(aid)))).sort((a,b) => a.name.localeCompare(b.name)).map(r => (
                             <label key={r.id} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-600 hover:text-slate-800 select-none justify-between pr-2">
                               <div>
                                 <span className="truncate pr-2 font-bold text-slate-700">{r.name}</span>
@@ -12771,11 +13136,11 @@ export function PlanningTab({
                   </select>
                 </div>
 
-                {/* Tipo de Tarefa */}
+                {/* Tipo de Atividade */}
                 <div className="space-y-1.5">
                   <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Define o tipo de atividade para campos específicos">
                     <Layers size={15} className="text-adasa-mid shrink-0" />
-                    Tipo de Tarefa
+                    Tipo de Atividade
                   </label>
                   <select
                     value={editingTask.type === "recurso" ? "demanda_ouvidoria" : (editingTask.type || "default")}
@@ -12845,9 +13210,9 @@ export function PlanningTab({
 
                 {/* Title */}
                 <div className="space-y-1.5 md:col-span-2">
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Nome identificador da tarefa, etapa ou processo">
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Nome identificador da atividade, etapa ou processo">
                     <Type size={15} className="text-purple-500 shrink-0" />
-                    Título da Tarefa/Etapa
+                    Título da Atividade/Etapa
                   </label>
                   <input
                     type="text"
@@ -12859,11 +13224,11 @@ export function PlanningTab({
                   />
                 </div>
 
-                {/* Tarefa Pai */}
+                {/* Atividade Pai */}
                 <div className="space-y-1.5 min-w-0">
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center justify-between gap-1.5" title="Define a hierarquia. Se preenchido, esta se tornará uma subtarefa">
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center justify-between gap-1.5" title="Define a hierarquia. Se preenchido, esta se tornará uma subatividade">
                     <span className="flex items-center gap-1.5">
-                      <Layers size={15} className="text-emerald-500 shrink-0" /> Tarefa Pai
+                      <Layers size={15} className="text-emerald-500 shrink-0" /> Atividade Pai
                     </span>
                     {editTaskParentSearch && (
                       <span className="text-xs font-bold text-slate-400 lowercase font-normal">
@@ -12876,7 +13241,7 @@ export function PlanningTab({
                   <div className="relative">
                     <input
                       type="text"
-                      placeholder="Buscar / filtrar tarefa pai por nome ou SEI..."
+                      placeholder="Buscar / filtrar atividade pai por nome ou SEI..."
                       value={editTaskParentSearch}
                       onChange={(e) => setEditTaskParentSearch(e.target.value)}
                       className="w-full pl-8 pr-14 py-2 text-sm font-semibold text-slate-700 border-2 border-slate-200 rounded-xl outline-none focus:border-adasa-mid bg-slate-50/10 focus:bg-white"
@@ -12917,7 +13282,7 @@ export function PlanningTab({
                     }}
                     className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none bg-slate-50/10 focus:bg-white truncate"
                   >
-                    <option value="">Nenhuma (Tarefa Raiz)</option>
+                    <option value="">Nenhuma (Atividade Raiz)</option>
                     {tasks
                       .filter(t => {
                         if (!editingTask.id) return true;
@@ -13104,7 +13469,7 @@ export function PlanningTab({
                   </div>
 
                   <div className="space-y-1.5 font-semibold leading-normal">
-                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Status atual da tarefa (Calculado automaticamente com base no progresso)">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Status atual da atividade (Calculado automaticamente com base no progresso)">
                       <Activity size={15} className="text-cyan-500 shrink-0" />
                       Status
                     </label>
@@ -13181,7 +13546,7 @@ export function PlanningTab({
                   </div>
                   
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Peso de relevância para o cálculo do progresso da tarefa pai ou plano">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Peso de relevância para o cálculo do progresso da atividade pai ou plano">
                       <Scale size={15} className="text-violet-500 shrink-0" />
                       Peso Relativo
                     </label>
@@ -13205,7 +13570,7 @@ export function PlanningTab({
                   <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Setores organizacionais responsáveis por esta atividade">
                     <Briefcase size={15} className="text-lime-500 shrink-0" />
                     Áreas de Vinculação
-                    {editingTask.parentId && taskById[editingTask.parentId]?.areaIds?.length ? " (Herdado e bloqueado pela Tarefa Pai)" : ""}
+                    {editingTask.parentId && taskById[editingTask.parentId]?.areaIds?.length ? " (Herdado e bloqueado pela Atividade Pai)" : ""}
                   </label>
                   <div className={`bg-slate-50 border-2 border-slate-200 rounded-xl p-3.5 min-h-[180px] max-h-80 overflow-y-auto space-y-2 custom-scrollbar ${editingTask.parentId && taskById[editingTask.parentId]?.areaIds?.length ? "opacity-60 pointer-events-none" : ""}`}>
                     {[...areas].sort((a,b) => a.name.localeCompare(b.name)).map(a => {
@@ -13244,7 +13609,7 @@ export function PlanningTab({
                   <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Assuntos temáticos aos quais a atividade se relaciona, agrupados pelas áreas selecionadas">
                     <ListTree size={15} className="text-amber-500 shrink-0" />
                     Categorias (Agrupadas por Área)
-                    {editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length ? " (Herdado e bloqueado pela Tarefa Pai)" : ""}
+                    {editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length ? " (Herdado e bloqueado pela Atividade Pai)" : ""}
                   </label>
                   <div className={`bg-slate-50 border-2 border-slate-200 rounded-xl p-3 min-h-[180px] max-h-80 overflow-y-auto space-y-3 custom-scrollbar ${editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length ? "opacity-60 pointer-events-none" : ""}`}>
                     {(!editingTask.areaIds || editingTask.areaIds.length === 0) ? (
@@ -13335,46 +13700,200 @@ export function PlanningTab({
                   </div>
                 </div>
 
-                {/* Designated Responsibles (One or More) */}
+                {/* Designated Responsibles (Grouped by Area) */}
                 <div className="space-y-1.5 md:col-span-2">
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Profissionais ou equipes que atuarão na execução da atividade">
-                    <Users size={15} className="text-sky-500 shrink-0" />
-                    Responsáveis Designados (Filtrados por Área)
-                  </label>
-                  <div className="bg-slate-50 border-2 border-slate-200 rounded-xl p-3.5 min-h-[160px] max-h-72 overflow-y-auto space-y-2 custom-scrollbar">
-                    {responsibles.filter(r => !editingTask.areaIds || editingTask.areaIds.length === 0 || r.areaIds?.some(aid => editingTask.areaIds?.includes(aid))).length === 0 ? (
-                      <div className="py-6 px-4 text-center">
-                        <span className="block text-xs text-slate-400 italic font-medium">Nenhum responsável encontrado para as áreas selecionadas.</span>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Profissionais ou equipes que atuarão na execução da atividade, agrupados pelas áreas selecionadas">
+                      <Users size={15} className="text-sky-500 shrink-0" />
+                      Responsáveis Designados (Agrupados por Área)
+                    </label>
+                    {editingTask.responsibleIds && editingTask.responsibleIds.length > 0 && (
+                      <span className="text-[10px] font-black text-slate-500 bg-slate-200/80 px-2 py-0.5 rounded-full">
+                        {editingTask.responsibleIds.length} {editingTask.responsibleIds.length === 1 ? "selecionado" : "selecionados"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="bg-slate-50 border-2 border-slate-200 rounded-xl p-3 min-h-[180px] max-h-80 overflow-y-auto space-y-3 custom-scrollbar">
+                    {(!editingTask.areaIds || editingTask.areaIds.length === 0) ? (
+                      <div className="py-8 px-4 text-center">
+                        <span className="block text-xs text-slate-400 font-medium italic">
+                          Selecione ao menos uma Área de Vinculação para visualizar os responsáveis disponíveis.
+                        </span>
                       </div>
                     ) : (
-                      responsibles.filter(r => !editingTask.areaIds || editingTask.areaIds.length === 0 || r.areaIds?.some(aid => editingTask.areaIds?.includes(aid))).sort((a,b) => a.name.localeCompare(b.name)).map(r => {
-                      const isChecked = editingTask.responsibleIds?.includes(r.id);
-                      return (
-                        <label key={r.id} className="flex items-center gap-2.5 cursor-pointer text-sm font-semibold text-slate-700 hover:text-slate-900 select-none py-0.5">
-                          <input
-                            type="checkbox"
-                            checked={!!isChecked}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              setEditingTask(prev => {
-                                const current = prev.responsibleIds || [];
-                                const next = checked 
-                                  ? [...current, r.id] 
-                                  : current.filter(id => id !== r.id);
-                                return { ...prev, responsibleIds: next };
-                              });
-                            }}
-                            className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0 cursor-pointer"
-                          />
-                          <div>
-                            <span className="font-bold text-slate-800">{r.name}</span>
-                            {r.role && <span className="text-[10px] text-slate-500 font-black ml-2 uppercase bg-slate-200 px-2 py-0.5 rounded">{r.role}</span>}
-                          </div>
-                        </label>
-                      );
-                    }))}
-                    {responsibles.length === 0 && (
-                      <span className="block text-sm text-slate-400 italic font-medium">Nenhum responsável cadastrado sob o cadastro auxiliar.</span>
+                      (() => {
+                        const selectedAreas = areas
+                          .filter(a => editingTask.areaIds?.includes(a.id))
+                          .sort((a, b) => a.name.localeCompare(b.name));
+
+                        let totalActiveResponsiblesCount = 0;
+
+                        const renderedGroups = selectedAreas.map(area => {
+                          // Filtrar apenas responsáveis ativos vinculados a esta área
+                          const areaResponsibles = responsibles
+                            .filter(r => r.isActive !== false && r.areaIds?.includes(area.id))
+                            .sort((a, b) => a.name.localeCompare(b.name));
+
+                          totalActiveResponsiblesCount += areaResponsibles.length;
+
+                          return (
+                            <div key={area.id} className="border border-slate-200/90 rounded-xl p-2.5 bg-white shadow-2xs space-y-2">
+                              {/* Area Group Header */}
+                              <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 text-xs font-bold text-slate-800">
+                                <span className="flex items-center gap-1.5 text-adasa-dark truncate pr-2">
+                                  <Briefcase size={13} className="text-lime-600 shrink-0" />
+                                  {area.name} {area.abbreviation ? `(${area.abbreviation})` : ""}
+                                </span>
+                                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded-full shrink-0">
+                                  {areaResponsibles.length} {areaResponsibles.length === 1 ? "responsável ativo" : "responsáveis ativos"}
+                                </span>
+                              </div>
+
+                              {/* Responsibles under this Area */}
+                              {areaResponsibles.length === 0 ? (
+                                <span className="block text-[11px] text-slate-400 italic px-1 py-1">
+                                  Nenhum responsável ativo vinculado a esta área.
+                                </span>
+                              ) : (
+                                <div className="space-y-1.5 pl-1">
+                                  {areaResponsibles.map(r => {
+                                    const isChecked = editingTask.responsibleIds?.includes(r.id);
+                                    return (
+                                      <label key={`${area.id}-${r.id}`} className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 hover:text-slate-900 select-none py-0.5">
+                                        <input
+                                          type="checkbox"
+                                          checked={!!isChecked}
+                                          onChange={(e) => {
+                                            const checked = e.target.checked;
+                                            setEditingTask(prev => {
+                                              const current = prev.responsibleIds || [];
+                                              const next = checked 
+                                                ? Array.from(new Set([...current, r.id]))
+                                                : current.filter(id => id !== r.id);
+                                              return { ...prev, responsibleIds: next };
+                                            });
+                                          }}
+                                          className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0 cursor-pointer"
+                                        />
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-bold text-slate-800">{r.name}</span>
+                                          {r.role && (
+                                            <span className="text-[9px] text-slate-500 font-black uppercase bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                              {r.role}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        });
+
+                        // Responsáveis atualmente atribuídos à tarefa que pertencem a outra área não selecionada ou estão inativos
+                        const alreadyAssignedOtherArea = (editingTask.responsibleIds || [])
+                          .map(id => responsibles.find(r => r.id === id))
+                          .filter((r): r is Responsible => {
+                            if (!r) return false;
+                            const belongsToSelectedArea = r.areaIds?.some(aid => editingTask.areaIds?.includes(aid));
+                            return !belongsToSelectedArea || r.isActive === false;
+                          });
+
+                        return (
+                          <>
+                            {renderedGroups}
+
+                            {/* Grupo especial para permitir visualizar e desatribuir responsáveis de outras áreas ou inativos já vinculados */}
+                            {alreadyAssignedOtherArea.length > 0 && (
+                              <div className="border border-amber-200 rounded-xl p-2.5 bg-amber-50/40 shadow-2xs space-y-2 mt-2">
+                                <div className="flex items-center justify-between pb-1.5 border-b border-amber-200 text-xs font-bold text-amber-900">
+                                  <span className="flex items-center gap-1.5 truncate pr-2">
+                                    <AlertCircle size={13} className="text-amber-600 shrink-0" />
+                                    Responsáveis Vinculados (Outras Áreas ou Inativos)
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const otherIds = new Set(alreadyAssignedOtherArea.map(x => x.id));
+                                        setEditingTask(prev => ({
+                                          ...prev,
+                                          responsibleIds: (prev.responsibleIds || []).filter(id => !otherIds.has(id))
+                                        }));
+                                      }}
+                                      className="text-[10px] font-bold text-amber-800 hover:text-amber-950 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-2 py-0.5 rounded-lg transition-colors cursor-pointer"
+                                      title="Desatribuir todos os responsáveis que não pertencem às áreas selecionadas"
+                                    >
+                                      Desatribuir Todos
+                                    </button>
+                                    <span className="text-[10px] font-semibold text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full shrink-0">
+                                      {alreadyAssignedOtherArea.length} vinculado(s)
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="space-y-1.5 pl-1">
+                                  {alreadyAssignedOtherArea.map(r => (
+                                    <div key={`other-${r.id}`} className="flex items-center justify-between gap-2.5 py-0.5 hover:bg-amber-50 rounded-lg px-1 transition-colors">
+                                      <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 hover:text-slate-900 select-none flex-1">
+                                        <input
+                                          type="checkbox"
+                                          checked={true}
+                                          onChange={() => {
+                                            setEditingTask(prev => {
+                                              const current = prev.responsibleIds || [];
+                                              return { ...prev, responsibleIds: current.filter(id => id !== r.id) };
+                                            });
+                                          }}
+                                          className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0 cursor-pointer"
+                                        />
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-bold text-slate-800">{r.name}</span>
+                                          {r.role && (
+                                            <span className="text-[9px] text-slate-500 font-black uppercase bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                              {r.role}
+                                            </span>
+                                          )}
+                                          {r.isActive === false && (
+                                            <span className="text-[9px] text-rose-600 font-bold uppercase bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                                              Inativo
+                                            </span>
+                                          )}
+                                          <span className="text-[10px] text-slate-400 italic">
+                                            ({r.areaIds?.map(aid => areas.find(a => a.id === aid)?.abbreviation || areas.find(a => a.id === aid)?.name).filter(Boolean).join(", ") || "Sem área"})
+                                          </span>
+                                        </div>
+                                      </label>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingTask(prev => {
+                                            const current = prev.responsibleIds || [];
+                                            return { ...prev, responsibleIds: current.filter(id => id !== r.id) };
+                                          });
+                                        }}
+                                        className="text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:bg-rose-100/60 px-2 py-0.5 rounded transition cursor-pointer shrink-0"
+                                        title={`Desatribuir ${r.name}`}
+                                      >
+                                        Desatribuir
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {totalActiveResponsiblesCount === 0 && alreadyAssignedOtherArea.length === 0 && (
+                              <div className="py-6 px-4 text-center">
+                                <span className="block text-xs text-slate-400 italic font-medium">
+                                  Nenhum responsável ativo encontrado para as áreas selecionadas.
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()
                     )}
                   </div>
                 </div>
@@ -14203,7 +14722,7 @@ export function PlanningTab({
                     ? "bg-[#1A3E8A] text-white hover:bg-blue-900 ring-2 ring-[#1A3E8A]/30"
                     : "bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white border-2 border-indigo-500 hover:border-indigo-600"
                 }`}
-                title={isExpanded ? `Recolher subtarefas (${taskChildren.length})` : `Expandir ${taskChildren.length} subtarefas`}
+                title={isExpanded ? `Recolher subatividades (${taskChildren.length})` : `Expandir ${taskChildren.length} subatividades`}
               >
                 {isExpanded ? <Minus size={18} className="stroke-[3]" /> : <Plus size={18} className="stroke-[3]" />}
               </button>

@@ -424,6 +424,7 @@ export interface Responsible {
   email?: string;
   role?: string;
   areaIds: number[];
+  isActive?: boolean;
   createdAt?: string | null;
   createdBy?: string | null;
   updatedAt?: string | null;

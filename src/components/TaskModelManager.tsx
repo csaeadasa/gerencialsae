@@ -129,7 +129,7 @@ export const TaskModelManager: React.FC<TaskModelManagerProps> = ({
     setEditingModelId(null);
     setModelName("");
     setModelItems([
-      { name: "Tarefa Inicial Exemplo", durationDays: 5, weight: 1 }
+      { name: "Atividade Inicial Exemplo", durationDays: 5, weight: 1 }
     ]);
     setEditingItemIdx(null);
     setIsFormOpen(true);
@@ -146,7 +146,7 @@ export const TaskModelManager: React.FC<TaskModelManagerProps> = ({
 
   const addModelItem = () => {
     if (!newItemName.trim()) {
-      showToast("Validação", "Digite o nome da tarefa modelo.", "warning");
+      showToast("Validação", "Digite o nome da atividade modelo.", "warning");
       return;
     }
     
@@ -199,7 +199,7 @@ export const TaskModelManager: React.FC<TaskModelManagerProps> = ({
 
   const saveEditedModelItem = (idx: number) => {
     if (!editingItemForm.name.trim()) {
-      showToast("Validação", "O nome da tarefa modelo não pode ser vazio.", "warning");
+      showToast("Validação", "O nome da atividade modelo não pode ser vazio.", "warning");
       return;
     }
 
@@ -232,7 +232,7 @@ export const TaskModelManager: React.FC<TaskModelManagerProps> = ({
       return;
     }
     if (modelItems.length === 0) {
-      showToast("Validação", "Adicione pelo menos uma tarefa modelo a este modelo.", "warning");
+      showToast("Validação", "Adicione pelo menos uma atividade modelo a este modelo.", "warning");
       return;
     }
 
@@ -266,7 +266,7 @@ export const TaskModelManager: React.FC<TaskModelManagerProps> = ({
   };
 
   const deleteModel = async (id: number) => {
-    if (!confirm("Tem certeza que deseja excluir permanentemente este modelo de processo e todas as suas tarefas modelo associadas?")) {
+    if (!confirm("Tem certeza que deseja excluir permanentemente este modelo de processo e todas as suas atividades modelo associadas?")) {
       return;
     }
 
@@ -317,7 +317,7 @@ export const TaskModelManager: React.FC<TaskModelManagerProps> = ({
               </div>
             ) : models.length === 0 ? (
               <div className="p-12 text-center text-slate-400 text-sm font-medium">
-                Nenhum modelo de tarefa de processo cadastrado para a ADASA.
+                Nenhum modelo de atividade de processo cadastrado para a ADASA.
               </div>
             ) : (
               <table className="w-full text-left border-collapse">
@@ -447,12 +447,12 @@ export const TaskModelManager: React.FC<TaskModelManagerProps> = ({
 
                 {/* Items manager component */}
                 <div className="space-y-4">
-                  <span className="text-xs font-black text-slate-700 uppercase tracking-widest block">Definir Tarefas Modelo</span>
+                  <span className="text-xs font-black text-slate-700 uppercase tracking-widest block">Definir Atividades Modelo</span>
                   
                   {/* Add form row - MOVED HERE */}
                   <div className="bg-indigo-50/20 border border-indigo-100 rounded-2xl p-4 gap-4 grid grid-cols-1 md:grid-cols-12 items-end">
                     <div className="md:col-span-6 space-y-1.5 text-left">
-                      <label className="text-[10px] font-black text-indigo-700 uppercase tracking-wider block">Nome da Tarefa Modelo</label>
+                      <label className="text-[10px] font-black text-indigo-700 uppercase tracking-wider block">Nome da Atividade Modelo</label>
                       <input
                         type="text"
                         value={newItemName}
@@ -517,7 +517,7 @@ export const TaskModelManager: React.FC<TaskModelManagerProps> = ({
                   {/* Inline list of items with EDITING capabilities - MOVED BELOW AND BG COLOR TO LIGHT GRAY */}
                   <div className="border border-slate-200 bg-slate-100/55 rounded-2xl p-4 space-y-2 max-h-[260px] overflow-y-auto">
                     {modelItems.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic text-center py-4 font-bold">Nenhuma tarefa adicionada ainda. Adicione acima.</p>
+                      <p className="text-xs text-slate-400 italic text-center py-4 font-bold">Nenhuma atividade adicionada ainda. Adicione acima.</p>
                     ) : (
                       modelItems.map((item, idx) => (
                         editingItemIdx === idx ? (
@@ -529,7 +529,7 @@ export const TaskModelManager: React.FC<TaskModelManagerProps> = ({
                                 value={editingItemForm.name}
                                 onChange={(e) => setEditingItemForm({ ...editingItemForm, name: e.target.value })}
                                 className="px-2.5 py-1.5 border border-slate-200 outline-none focus:border-indigo-500 rounded-lg text-xs font-semibold text-slate-800 bg-white grow"
-                                placeholder="Nome da tarefa modelo"
+                                placeholder="Nome da atividade modelo"
                               />
                               <div className="flex gap-2 shrink-0">
                                 <div className="flex items-center gap-1">

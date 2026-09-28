@@ -39,7 +39,7 @@ import { calculateDurationInDays } from "../utils/durationUtils";
 interface TaskTimelineModalProps {
   taskId: number | null;
   onClose: () => void;
-  onEditTask: (task: Task) => void;
+  onEditTask?: (task: Task) => void;
   tasks: Task[];
   taskById: Record<number, Task>;
   childrenMap: Record<number, Task[]>;
@@ -711,8 +711,10 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
                                 : "bg-white border-slate-200 hover:border-adasa-mid/60"
                             )}
                             onClick={() => {
-                              onClose();
-                              onEditTask(task);
+                              if (onEditTask) {
+                                onClose();
+                                onEditTask(task);
+                              }
                             }}
                             style={{ marginLeft: `${depth > 0 ? Math.min(depth * 1.5, 6) : 0}rem` }}
                           >
@@ -926,7 +928,7 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
                                       </span>
                                       {isTarget && (
                                         <span className="text-[9px] font-black uppercase text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                          <Sparkles size={10} /> Tarefa Pai Selecionada
+                                          <Sparkles size={10} /> Atividade Pai Selecionada
                                         </span>
                                       )}
                                       {!isTarget && (
@@ -1102,7 +1104,7 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
 
                     {timelineTasks.length === 0 && (
                       <div className="text-center py-12 text-slate-400 font-semibold italic text-sm">
-                        Nenhuma tarefa encontrada na linha do tempo.
+                        Nenhuma atividade encontrada na linha do tempo.
                       </div>
                     )}
                   </div>
@@ -1417,8 +1419,10 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
                                   isTarget ? "text-indigo-950 font-black" : "text-slate-800"
                                 )}
                                 onClick={() => {
-                                  onClose();
-                                  onEditTask(task);
+                                  if (onEditTask) {
+                                    onClose();
+                                    onEditTask(task);
+                                  }
                                 }}
                                 title={task.title}
                               >
@@ -1468,8 +1472,10 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
                                 <div
                                   style={{ marginLeft: `${leftPct}%`, width: `${widthPct}%` }}
                                   onClick={() => {
-                                    onClose();
-                                    onEditTask(task);
+                                    if (onEditTask) {
+                                      onClose();
+                                      onEditTask(task);
+                                    }
                                   }}
                                   className="flex flex-col gap-1 justify-center py-1 group/bar cursor-pointer select-none"
                                   title={`${getTaskDisplayName(task)}\n• Progresso Real: ${realProg}%\n• Progresso Ideal (Hoje): ${idealProg}%\n• Período: ${formatDate(task.startDate)} a ${formatDate(task.endDate)}`}
@@ -1554,7 +1560,7 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs font-bold text-slate-500">Tarefa em Análise:</span>
+                    <span className="text-xs font-bold text-slate-500">Atividade em Análise:</span>
                     <span className="text-xs font-black text-slate-800 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
                       [ID: {currentTargetTask.id}] {currentTargetTask.title}
                     </span>
@@ -1568,18 +1574,20 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
                       Datas de Início e Prazo Final Necessárias
                     </h5>
                     <p className="text-xs text-amber-700 max-w-xl mx-auto font-medium">
-                      Para calcular o progresso ideal esperado, o índice de ritmo (IDP) e a probabilidade estatística de cumprimento do prazo, é necessário definir a <strong>Data de Início</strong> e o <strong>Prazo Final</strong> na tarefa pai ou em suas subatividades.
+                      Para calcular o progresso ideal esperado, o índice de ritmo (IDP) e a probabilidade estatística de cumprimento do prazo, é necessário definir a <strong>Data de Início</strong> e o <strong>Prazo Final</strong> na atividade pai ou em suas subatividades.
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onClose();
-                        onEditTask(currentTargetTask);
-                      }}
-                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all cursor-pointer inline-flex items-center gap-1.5"
-                    >
-                      Editar Datas no Formulário da Tarefa
-                    </button>
+                    {onEditTask && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onEditTask(currentTargetTask);
+                        }}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        Editar Datas no Formulário da Atividade
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-6">
@@ -1981,7 +1989,7 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
                                   <td className="p-3">
                                     <div className="flex items-center gap-1.5 font-bold text-slate-800">
                                       <span className="text-[10px] text-slate-400 font-mono">#{sub.task.id}</span>
-                                      <span className="hover:text-adasa-mid transition-colors cursor-pointer" onClick={() => { onClose(); onEditTask(sub.task); }}>
+                                      <span className={cn(onEditTask ? "hover:text-adasa-mid transition-colors cursor-pointer" : "")} onClick={() => { if (onEditTask) { onClose(); onEditTask(sub.task); } }}>
                                         {sub.task.title}
                                       </span>
                                     </div>

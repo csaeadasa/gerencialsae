@@ -399,6 +399,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
           email: respFormEmail.trim(),
           role: respFormRole.trim(),
           areaIds: respFormAreaIds,
+          isActive: true,
           createdBy: userSignature,
           updatedBy: userSignature
         })
@@ -1467,7 +1468,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
                 </div>
                 <div>
                   <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Cadastro de Responsável</h3>
-                  <p className="text-xs text-slate-400 font-medium">Habilitar atribuição de tarefas no Módulo Atividades</p>
+                  <p className="text-xs text-slate-400 font-medium">Habilitar atribuição de atividades no Módulo Atividades</p>
                 </div>
               </div>
               <button

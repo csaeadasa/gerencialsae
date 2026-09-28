@@ -1241,8 +1241,8 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
             className="flex items-center gap-1.5 px-3.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
             title={
               activeTab === "recurso_revisao"
-                ? "Importar ou atualizar tarefas com a planilha de recursos de revisão"
-                : "Importar ou atualizar tarefas com a planilha de demandas de ouvidoria"
+                ? "Importar ou atualizar atividades com a planilha de recursos de revisão"
+                : "Importar ou atualizar atividades com a planilha de demandas de ouvidoria"
             }
           >
             <Upload size={14} />
@@ -2682,7 +2682,7 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
                       onChange={(e) => setCreateMissingTasks(e.target.checked)}
                       className="w-4 h-4 text-indigo-600 rounded-md border-slate-300 focus:ring-indigo-500 cursor-pointer"
                     />
-                    <span>Cadastrar automaticamente tarefas para os registros não localizados no banco</span>
+                    <span>Cadastrar automaticamente atividades para os registros não localizados no banco</span>
                   </label>
                 )}
 
@@ -2704,7 +2704,7 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
                     {isImporting ? (
                       <>
                         <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        <span>Processando tarefas...</span>
+                        <span>Processando atividades...</span>
                       </>
                     ) : (
                       <>
