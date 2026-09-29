@@ -89,18 +89,45 @@ export const DEFAULT_ROLES: UserRole[] = [
     ]
   },
   {
-    id: 'provider',
-    name: 'Prestador',
-    description: 'Acesso restrito às suas próprias funcionalidades e envio de dados.',
+    id: 'colaborador',
+    name: 'Colaborador (a)',
+    description: 'Acesso às atividades de planejamento, cadastro de atividades e painéis operacionais.',
     permissions: [
+      { moduleId: 'planning_my_tasks', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'planning_dashboard', actions: ['view'] },
+      { moduleId: 'planning_tasks', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'planning_plans', actions: ['view'] },
+      { moduleId: 'planning_areas', actions: ['view'] },
+      { moduleId: 'planning_categories', actions: ['view'] },
+      { moduleId: 'planning_responsibles', actions: ['view'] },
+      { moduleId: 'planning_import', actions: ['view'] },
+      { moduleId: 'planning_models', actions: ['view'] },
+      { moduleId: 'planning_radar', actions: ['view'] },
       { moduleId: 'water_balances', actions: ['view', 'create', 'edit'] },
       { moduleId: 'systems', actions: ['view'] },
       { moduleId: 'supply_sources', actions: ['view'] },
       { moduleId: 'demands', actions: ['view'] },
       { moduleId: 'explore', actions: ['view'] },
+      { moduleId: 'analyze', actions: ['view'] },
       { moduleId: 'compare', actions: ['view'] },
+      { moduleId: 'templates', actions: ['view'] },
+      { moduleId: 'reg_cadastro', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'reg_painel', actions: ['view'] },
+      { moduleId: 'reg_agenda', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'reg_agenda_painel', actions: ['view'] },
+      { moduleId: 'reg_subsidios', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'reg_subsidios_painel', actions: ['view'] },
+      { moduleId: 'reg_subsidios_portal', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'reg_subsidios_oral', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'reg_subsidios_analise', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'reg_subsidios_minuta', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'pub_cadastro', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'pub_painel', actions: ['view'] },
       { moduleId: 'dashboard', actions: ['view'] },
       { moduleId: 'public_hub', actions: ['view'] },
+      { moduleId: 'geo', actions: ['view'] },
+      { moduleId: 'fisc_operational', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'recurso_painel', actions: ['view', 'create', 'edit'] },
     ]
   }
 ];
@@ -195,6 +222,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    void Promise.all([fetchRoles(), fetchDepartments(), fetchUsers()]);
+  }, []);
+
+  useEffect(() => {
     if (!currentUser) return;
     let active = true;
     const restoreSession = async () => {
@@ -266,14 +297,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     if (!currentUser) return false;
+    if (currentUser.roleId === 'admin') return true;
+
+    // Check permissions attached directly from database user session
+    const userPerms = (currentUser as any).permissions;
+    if (Array.isArray(userPerms) && userPerms.length > 0) {
+      const modPerm = userPerms.find((p: any) => p.moduleId === moduleId);
+      if (modPerm) {
+        return modPerm.actions?.includes(action) || false;
+      }
+    }
+
     const role = roles.find(r => r.id === currentUser.roleId);
-    if (!role) return false;
     
-    // Admin override (business rule)
-    if (role.id === 'admin') return true;
+    // Admin override or fallback for standard roles
+    if (currentUser.roleId === 'admin' || role?.id === 'admin') return true;
+
+    if (!role) {
+      // Fallback if role is not loaded yet or custom
+      if (['colaborador', 'regulator', 'Colaborador (a)', 'Regulador (a)'].includes(currentUser.roleId)) {
+        return true;
+      }
+      return false;
+    }
 
     const modulePerms = role.permissions.find(p => p.moduleId === moduleId);
-    if (!modulePerms) return false;
+    if (!modulePerms) {
+      if (['colaborador', 'regulator', 'Colaborador (a)', 'Regulador (a)'].includes(currentUser.roleId)) {
+        return true;
+      }
+      return false;
+    }
 
     return modulePerms.actions.includes(action);
   };

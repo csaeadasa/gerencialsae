@@ -5963,7 +5963,7 @@ const renderSupplyTable = () => {
                     {currentUser?.name || "Usuário não logado"}
                   </p>
                   <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-wider font-semibold">
-                    {currentUser?.agency ? `${roles.find(r => r.id === currentUser.roleId)?.name || 'N/A'} - ${currentUser.agency}` : roles.find(r => r.id === currentUser?.roleId)?.name || 'N/A'}
+                    {currentUser?.agency ? `${currentUser?.roleName || roles.find(r => r.id === currentUser?.roleId)?.name || currentUser?.roleId || 'Colaborador'} - ${currentUser.agency}` : currentUser?.roleName || roles.find(r => r.id === currentUser?.roleId)?.name || currentUser?.roleId || 'Colaborador'}
                   </p>
                 </div>
                 <div className="w-10 h-10 bg-adasa-light/10 rounded-xl flex items-center justify-center text-adasa-dark font-black text-sm shadow-inner shrink-0 leading-none">
@@ -6033,7 +6033,13 @@ const renderSupplyTable = () => {
                 setActivePlanningSubTab={setActivePlanningSubTab as any}
                 tasks={tasks} 
                 areas={areas} 
+                checkPermission={checkPermission}
+                showToast={showToast}
                 onMyTasksSelect={() => {
+                  if (checkPermission && !checkPermission('planning_my_tasks', 'view')) {
+                    showToast("Acesso Negado", "Você não possui permissão para acessar este módulo.", "error");
+                    return;
+                  }
                   setIsMyTasksSelected(true);
                   setMyTasksFilterTrigger(prev => prev + 1);
                   setActivePlanningSubTab("tasks");

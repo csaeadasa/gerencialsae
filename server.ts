@@ -227,6 +227,7 @@ async function authenticateApiRequest(req: express.Request, res: express.Respons
     const result = await getDbPool().query(
       `SELECT u.id, u.name, u.email, u.role_id, u.status, u.department_id,
               d.sigla AS department_sigla, d.nome AS department_nome,
+              r.name AS role_name,
               COALESCE(r.permissions, '[]'::jsonb) AS permissions
        FROM au_sessions s
        JOIN au_users u ON u.id = s.user_id
@@ -774,18 +775,45 @@ async function runStartupMigration() {
               ]
             },
             {
-              id: 'provider',
-              name: 'Prestador',
-              description: 'Acesso restrito às suas próprias funcionalidades e envio de dados.',
+              id: 'colaborador',
+              name: 'Colaborador (a)',
+              description: 'Acesso às atividades de planejamento, cadastro de atividades e painéis operacionais.',
               permissions: [
+                { moduleId: 'planning_my_tasks', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'planning_dashboard', actions: ['view'] },
+                { moduleId: 'planning_tasks', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'planning_plans', actions: ['view'] },
+                { moduleId: 'planning_areas', actions: ['view'] },
+                { moduleId: 'planning_categories', actions: ['view'] },
+                { moduleId: 'planning_responsibles', actions: ['view'] },
+                { moduleId: 'planning_import', actions: ['view'] },
+                { moduleId: 'planning_models', actions: ['view'] },
+                { moduleId: 'planning_radar', actions: ['view'] },
                 { moduleId: 'water_balances', actions: ['view', 'create', 'edit'] },
                 { moduleId: 'systems', actions: ['view'] },
                 { moduleId: 'supply_sources', actions: ['view'] },
                 { moduleId: 'demands', actions: ['view'] },
                 { moduleId: 'explore', actions: ['view'] },
+                { moduleId: 'analyze', actions: ['view'] },
                 { moduleId: 'compare', actions: ['view'] },
+                { moduleId: 'templates', actions: ['view'] },
+                { moduleId: 'reg_cadastro', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'reg_painel', actions: ['view'] },
+                { moduleId: 'reg_agenda', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'reg_agenda_painel', actions: ['view'] },
+                { moduleId: 'reg_subsidios', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'reg_subsidios_painel', actions: ['view'] },
+                { moduleId: 'reg_subsidios_portal', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'reg_subsidios_oral', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'reg_subsidios_analise', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'reg_subsidios_minuta', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'pub_cadastro', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'pub_painel', actions: ['view'] },
                 { moduleId: 'dashboard', actions: ['view'] },
-                { moduleId: 'public_hub', actions: ['view'] }
+                { moduleId: 'public_hub', actions: ['view'] },
+                { moduleId: 'geo', actions: ['view'] },
+                { moduleId: 'fisc_operational', actions: ['view', 'create', 'edit'] },
+                { moduleId: 'recurso_painel', actions: ['view', 'create', 'edit'] }
               ]
             }
           ];
@@ -3839,9 +3867,12 @@ export async function startServer(isVercel = false) {
       const pool = getDbPool();
       let result = await pool.query(
         `SELECT u.id, u.name, u.email, u.password, u.role_id, u.status, u.department_id,
-                d.sigla AS department_sigla, d.nome AS department_nome
+                d.sigla AS department_sigla, d.nome AS department_nome,
+                r.name AS role_name,
+                COALESCE(r.permissions, '[]'::jsonb) AS permissions
          FROM au_users u
          LEFT JOIN au_departments d ON u.department_id = d.id
+         LEFT JOIN au_roles r ON r.id = u.role_id
          WHERE LOWER(u.email) = LOWER($1)`,
         [email.trim()]
       );
@@ -3871,6 +3902,49 @@ export async function startServer(isVercel = false) {
         [hashSessionToken(sessionToken), user.id, expiresAt],
       );
       setSessionCookie(req, res, sessionToken, SESSION_DURATION_MS);
+
+      let userPermissions = user.permissions;
+      if (!Array.isArray(userPermissions) || userPermissions.length === 0) {
+        userPermissions = [
+          { moduleId: 'planning_my_tasks', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'planning_dashboard', actions: ['view'] },
+          { moduleId: 'planning_tasks', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'planning_plans', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'planning_areas', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'planning_categories', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'planning_responsibles', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'planning_import', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'planning_models', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'planning_radar', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'water_balances', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'systems', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'supply_sources', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'demands', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'explore', actions: ['view'] },
+          { moduleId: 'analyze', actions: ['view'] },
+          { moduleId: 'compare', actions: ['view'] },
+          { moduleId: 'templates', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'reg_cadastro', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'reg_painel', actions: ['view'] },
+          { moduleId: 'reg_agenda', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'reg_agenda_painel', actions: ['view'] },
+          { moduleId: 'reg_subsidios', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'reg_subsidios_painel', actions: ['view'] },
+          { moduleId: 'reg_subsidios_portal', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'reg_subsidios_oral', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'reg_subsidios_analise', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'reg_subsidios_minuta', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'pub_cadastro', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'pub_painel', actions: ['view'] },
+          { moduleId: 'dashboard', actions: ['view'] },
+          { moduleId: 'public_hub', actions: ['view'] },
+          { moduleId: 'geo', actions: ['view'] },
+          { moduleId: 'users', actions: ['view'] },
+          { moduleId: 'fisc_operational', actions: ['view', 'create', 'edit'] },
+          { moduleId: 'recurso_painel', actions: ['view', 'create', 'edit'] }
+        ];
+      }
+
       res.json({
         success: true,
         user: {
@@ -3878,7 +3952,9 @@ export async function startServer(isVercel = false) {
           name: user.name,
           email: user.email,
           roleId: user.role_id,
+          roleName: user.role_name || user.role_id,
           status: user.status,
+          permissions: userPermissions,
           departmentId: user.department_id || null,
           department: user.department_id ? {
             id: user.department_id,
@@ -3904,6 +3980,47 @@ export async function startServer(isVercel = false) {
 
   app.get("/api/auth/me", (req, res) => {
     const user = (req as any).authUser;
+    let userPermissions = user.permissions;
+    if (!Array.isArray(userPermissions) || userPermissions.length === 0) {
+      userPermissions = [
+        { moduleId: 'planning_my_tasks', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'planning_dashboard', actions: ['view'] },
+        { moduleId: 'planning_tasks', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'planning_plans', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'planning_areas', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'planning_categories', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'planning_responsibles', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'planning_import', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'planning_models', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'planning_radar', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'water_balances', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'systems', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'supply_sources', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'demands', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'explore', actions: ['view'] },
+        { moduleId: 'analyze', actions: ['view'] },
+        { moduleId: 'compare', actions: ['view'] },
+        { moduleId: 'templates', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'reg_cadastro', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'reg_painel', actions: ['view'] },
+        { moduleId: 'reg_agenda', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'reg_agenda_painel', actions: ['view'] },
+        { moduleId: 'reg_subsidios', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'reg_subsidios_painel', actions: ['view'] },
+        { moduleId: 'reg_subsidios_portal', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'reg_subsidios_oral', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'reg_subsidios_analise', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'reg_subsidios_minuta', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'pub_cadastro', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'pub_painel', actions: ['view'] },
+        { moduleId: 'dashboard', actions: ['view'] },
+        { moduleId: 'public_hub', actions: ['view'] },
+        { moduleId: 'geo', actions: ['view'] },
+        { moduleId: 'users', actions: ['view'] },
+        { moduleId: 'fisc_operational', actions: ['view', 'create', 'edit'] },
+        { moduleId: 'recurso_painel', actions: ['view', 'create', 'edit'] }
+      ];
+    }
     res.json({
       success: true,
       user: {
@@ -3911,7 +4028,9 @@ export async function startServer(isVercel = false) {
         name: user.name,
         email: user.email,
         roleId: user.role_id,
+        roleName: user.role_name || user.role_id,
         status: user.status,
+        permissions: userPermissions,
         departmentId: user.department_id || null,
         department: user.department_id ? {
           id: user.department_id,

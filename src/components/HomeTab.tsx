@@ -29,14 +29,23 @@ interface HomeTabProps {
   tasks: Task[];
   areas: Area[];
   onMyTasksSelect?: () => void;
+  checkPermission?: (moduleId: any, action: any) => boolean;
+  showToast?: (title: string, message: string, type?: 'success' | 'warning' | 'error' | 'info') => void;
 }
 
-export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, onMyTasksSelect }: HomeTabProps) {
+export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, onMyTasksSelect, checkPermission, showToast }: HomeTabProps) {
   
-  // Quick navigation helper to switch tab + subtab
-  const navigateToPlanning = (subTab: "tasks" | "dashboard" | "plans" | "areas" | "categories" | "responsibles") => {
-    setActivePlanningSubTab(subTab);
-    setActiveTab("planning");
+  const handleProtectedNavigate = (tab: string, subTab?: any, requiredModule?: string) => {
+    if (requiredModule && checkPermission && !checkPermission(requiredModule, 'view')) {
+      if (showToast) {
+        showToast("Acesso Negado", "Você não possui permissão para acessar este módulo.", "error");
+      }
+      return;
+    }
+    if (subTab) {
+      setActivePlanningSubTab(subTab);
+    }
+    setActiveTab(tab);
   };
 
   return (
@@ -77,10 +86,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
             {/* Painel de Atividades Card */}
             <motion.div 
               whileHover={{ y: -2 }}
-              onClick={() => {
-                setActivePlanningSubTab("dashboard");
-                setActiveTab("planning");
-              }}
+              onClick={() => handleProtectedNavigate("planning", "dashboard", "planning_dashboard")}
               className="p-6 rounded-2xl border border-blue-200 bg-gradient-to-br from-white to-blue-50/20 shadow-sm cursor-pointer hover:shadow-md transition-all duration-300 flex flex-col justify-between group text-left h-full"
             >
               <div>
@@ -100,7 +106,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
             {/* Painel de Resoluções Card */}
             <motion.div 
               whileHover={{ y: -2 }}
-              onClick={() => setActiveTab("reg_painel")}
+              onClick={() => handleProtectedNavigate("reg_painel", undefined, "reg_painel")}
               className="p-6 rounded-2xl border border-blue-200 bg-gradient-to-br from-white to-blue-50/20 shadow-sm cursor-pointer hover:shadow-md transition-all duration-300 flex flex-col justify-between group text-left h-full"
             >
               <div>
@@ -120,7 +126,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
             {/* Painel da Agenda Regulatória Card */}
             <motion.div 
               whileHover={{ y: -2 }}
-              onClick={() => setActiveTab("reg_agenda_painel")}
+              onClick={() => handleProtectedNavigate("reg_agenda_painel", undefined, "reg_agenda_painel")}
               className="p-6 rounded-2xl border border-blue-200 bg-gradient-to-br from-white to-blue-50/20 shadow-sm cursor-pointer hover:shadow-md transition-all duration-300 flex flex-col justify-between group text-left h-full"
             >
               <div>
@@ -140,7 +146,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
             {/* Painel de Participação Social Card */}
             <motion.div 
               whileHover={{ y: -2 }}
-              onClick={() => setActiveTab("reg_subsidios_painel")}
+              onClick={() => handleProtectedNavigate("reg_subsidios_painel", undefined, "reg_subsidios_painel")}
               className="p-6 rounded-2xl border border-blue-200 bg-gradient-to-br from-white to-blue-50/20 shadow-sm cursor-pointer hover:shadow-md transition-all duration-300 flex flex-col justify-between group text-left h-full"
             >
               <div>
@@ -160,7 +166,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
             {/* Painel do Balanço Hídrico Card */}
             <motion.div 
               whileHover={{ y: -2 }}
-              onClick={() => setActiveTab("analyze")}
+              onClick={() => handleProtectedNavigate("analyze", undefined, "analyze")}
               className="p-6 rounded-2xl border border-blue-200 bg-gradient-to-br from-white to-blue-50/20 shadow-sm cursor-pointer hover:shadow-md transition-all duration-300 flex flex-col justify-between group text-left h-full"
             >
               <div>
@@ -180,7 +186,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
             {/* Painel de Fiscalização Card */}
             <motion.div 
               whileHover={{ y: -2 }}
-              onClick={() => setActiveTab("fisc_operational")}
+              onClick={() => handleProtectedNavigate("fisc_operational", undefined, "fisc_operational")}
               className="p-6 rounded-2xl border border-blue-200 bg-gradient-to-br from-white to-blue-50/20 shadow-sm cursor-pointer hover:shadow-md transition-all duration-300 flex flex-col justify-between group text-left h-full"
             >
               <div>
@@ -200,7 +206,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
             {/* Painel Demanda Ouvidoria Card */}
             <motion.div 
               whileHover={{ y: -2 }}
-              onClick={() => setActiveTab("recurso_painel")}
+              onClick={() => handleProtectedNavigate("recurso_painel", undefined, "recurso_painel")}
               className="p-6 rounded-2xl border border-blue-200 bg-gradient-to-br from-white to-blue-50/20 shadow-sm cursor-pointer hover:shadow-md transition-all duration-300 flex flex-col justify-between group text-left h-full"
             >
               <div>
@@ -220,7 +226,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
             {/* Painel de Publicações Card */}
             <motion.div 
               whileHover={{ y: -2 }}
-              onClick={() => setActiveTab("pub_painel")}
+              onClick={() => handleProtectedNavigate("pub_painel", undefined, "pub_painel")}
               className="p-6 rounded-2xl border border-indigo-200 bg-gradient-to-br from-white to-indigo-50/20 shadow-sm cursor-pointer hover:shadow-md transition-all duration-300 flex flex-col justify-between group text-left h-full"
             >
               <div>
@@ -276,7 +282,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
           {/* Painel de Atividades Card */}
           <motion.div 
             whileHover={{ y: -2 }}
-            onClick={() => navigateToPlanning("dashboard")}
+            onClick={() => handleProtectedNavigate("planning", "dashboard", "planning_dashboard")}
             className="p-6 rounded-2xl border border-blue-200 bg-gradient-to-br from-white to-blue-50/20 shadow-sm cursor-pointer hover:shadow-md transition-all duration-300 flex flex-col justify-between group"
           >
             <div>
@@ -299,7 +305,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
           
           {/* Shortcut A: Painel de Atividades */}
           <div 
-            onClick={() => navigateToPlanning("dashboard")}
+            onClick={() => handleProtectedNavigate("planning", "dashboard", "planning_dashboard")}
             className="p-4 bg-white border border-slate-200 hover:border-blue-300 rounded-xl cursor-pointer group transition-all duration-200 flex items-start gap-3"
           >
             <div className="p-2 bg-slate-50 text-slate-600 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors mt-0.5">
@@ -313,7 +319,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
 
           {/* Shortcut B: Atividades e Tarefas */}
           <div 
-            onClick={() => navigateToPlanning("tasks")}
+            onClick={() => handleProtectedNavigate("planning", "tasks", "planning_tasks")}
             className="p-4 bg-white border border-slate-200 hover:border-blue-300 rounded-xl cursor-pointer group transition-all duration-200 flex items-start gap-3"
           >
             <div className="p-2 bg-slate-50 text-slate-600 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors mt-0.5">
@@ -327,7 +333,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
 
           {/* Shortcut C: Planos de Trabalho */}
           <div 
-            onClick={() => navigateToPlanning("plans")}
+            onClick={() => handleProtectedNavigate("planning", "plans", "planning_plans")}
             className="p-4 bg-white border border-slate-200 hover:border-blue-300 rounded-xl cursor-pointer group transition-all duration-200 flex items-start gap-3"
           >
             <div className="p-2 bg-slate-50 text-slate-600 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors mt-0.5">
@@ -341,7 +347,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
 
           {/* Shortcut D: Areas Tematicas */}
           <div 
-            onClick={() => navigateToPlanning("areas")}
+            onClick={() => handleProtectedNavigate("planning", "areas", "planning_areas")}
             className="p-4 bg-white border border-slate-200 hover:border-blue-300 rounded-xl cursor-pointer group transition-all duration-200 flex items-start gap-3"
           >
             <div className="p-2 bg-slate-50 text-slate-600 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors mt-0.5">
@@ -355,7 +361,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
 
           {/* Shortcut E: Categorias */}
           <div 
-            onClick={() => navigateToPlanning("categories")}
+            onClick={() => handleProtectedNavigate("planning", "categories", "planning_categories")}
             className="p-4 bg-white border border-slate-200 hover:border-blue-300 rounded-xl cursor-pointer group transition-all duration-200 flex items-start gap-3"
           >
             <div className="p-2 bg-slate-50 text-slate-600 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors mt-0.5">
@@ -369,7 +375,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
 
           {/* Shortcut F: Responsáveis */}
           <div 
-            onClick={() => navigateToPlanning("responsibles")}
+            onClick={() => handleProtectedNavigate("planning", "responsibles", "planning_responsibles")}
             className="p-4 bg-white border border-slate-200 hover:border-blue-300 rounded-xl cursor-pointer group transition-all duration-200 flex items-start gap-3"
           >
             <div className="p-2 bg-slate-50 text-slate-600 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors mt-0.5">
@@ -408,7 +414,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
               {/* Item 2.1.1: Cadastrar Resoluções */}
               <motion.div 
                 whileHover={{ y: -3 }}
-                onClick={() => setActiveTab("reg_cadastro")}
+                onClick={() => handleProtectedNavigate("reg_cadastro", undefined, "reg_cadastro")}
                 className="p-6 rounded-2xl border border-slate-200 hover:border-blue-300 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
               >
                 <div>
@@ -428,7 +434,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
               {/* Item 2.1.2: Painel de Resoluções */}
               <motion.div 
                 whileHover={{ y: -3 }}
-                onClick={() => setActiveTab("reg_painel")}
+                onClick={() => handleProtectedNavigate("reg_painel", undefined, "reg_painel")}
                 className="p-6 rounded-2xl border border-indigo-200 hover:border-indigo-300 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
               >
                 <div>
@@ -448,7 +454,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
               {/* Item 2.1.3: Participação Social */}
               <motion.div 
                 whileHover={{ y: -3 }}
-                onClick={() => setActiveTab("reg_subsidios")}
+                onClick={() => handleProtectedNavigate("reg_subsidios", undefined, "reg_subsidios")}
                 className="p-6 rounded-2xl border border-slate-200 hover:border-blue-300 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
               >
                 <div>
@@ -468,7 +474,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
               {/* Item 2.1.4: Painel de Participação Social */}
               <motion.div 
                 whileHover={{ y: -3 }}
-                onClick={() => setActiveTab("reg_subsidios_painel")}
+                onClick={() => handleProtectedNavigate("reg_subsidios_painel", undefined, "reg_subsidios_painel")}
                 className="p-6 rounded-2xl border border-indigo-200 hover:border-indigo-300 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
               >
                 <div>
@@ -499,7 +505,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
               {/* Item 2.2.1: Cadastrar Agenda Regulatória */}
               <motion.div 
                 whileHover={{ y: -3 }}
-                onClick={() => setActiveTab("reg_agenda")}
+                onClick={() => handleProtectedNavigate("reg_agenda", undefined, "reg_agenda")}
                 className="p-6 rounded-2xl border border-slate-200 hover:border-blue-300 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
               >
                 <div>
@@ -519,7 +525,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
               {/* Item 2.2.2: Painel da Agenda Regulatória */}
               <motion.div 
                 whileHover={{ y: -3 }}
-                onClick={() => setActiveTab("reg_agenda_painel")}
+                onClick={() => handleProtectedNavigate("reg_agenda_painel", undefined, "reg_agenda_painel")}
                 className="p-6 rounded-2xl border border-indigo-200 hover:border-indigo-300 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
               >
                 <div>
@@ -563,7 +569,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
           {/* Item 3.1: Gerenciar Balancos */}
           <motion.div 
             whileHover={{ y: -3 }}
-            onClick={() => setActiveTab("manage")}
+            onClick={() => handleProtectedNavigate("manage", undefined, "water_balances")}
             className="p-6 rounded-2xl border border-slate-200 hover:border-blue-300 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
           >
             <div>
@@ -583,7 +589,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
           {/* Item 3.2: Análise Individual */}
           <motion.div 
             whileHover={{ y: -3 }}
-            onClick={() => setActiveTab("analyze")}
+            onClick={() => handleProtectedNavigate("analyze", undefined, "analyze")}
             className="p-6 rounded-2xl border border-slate-200 hover:border-emerald-300 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
           >
             <div>
@@ -603,7 +609,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
           {/* Item 3.3: Comparar Balanços */}
           <motion.div 
             whileHover={{ y: -3 }}
-            onClick={() => setActiveTab("compare")}
+            onClick={() => handleProtectedNavigate("compare", undefined, "compare")}
             className="p-6 rounded-2xl border border-slate-200 hover:border-purple-300 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
           >
             <div>
@@ -632,7 +638,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
           {/* Sub-Módulo 3.2.1: Painel de Fiscalização */}
           <motion.div 
             whileHover={{ y: -3 }}
-            onClick={() => setActiveTab("fisc_operational")}
+            onClick={() => handleProtectedNavigate("fisc_operational", undefined, "fisc_operational")}
             className="p-6 rounded-2xl border border-blue-200 hover:border-blue-400 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
           >
             <div>
@@ -652,7 +658,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
           {/* Sub-Módulo 3.2.2: Painel Demanda Ouvidoria */}
           <motion.div 
             whileHover={{ y: -3 }}
-            onClick={() => setActiveTab("recurso_painel")}
+            onClick={() => handleProtectedNavigate("recurso_painel", undefined, "recurso_painel")}
             className="p-6 rounded-2xl border border-indigo-200 hover:border-indigo-400 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
           >
             <div>
@@ -688,7 +694,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
             {/* Sub-Módulo 4.1: Cadastrar Publicações */}
             <motion.div 
               whileHover={{ y: -3 }}
-              onClick={() => setActiveTab("pub_cadastro")}
+              onClick={() => handleProtectedNavigate("pub_cadastro", undefined, "pub_cadastro")}
               className="p-6 rounded-2xl border border-slate-200 hover:border-blue-300 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
             >
               <div>
@@ -708,7 +714,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
             {/* Sub-Módulo 4.2: Painel de Publicações */}
             <motion.div 
               whileHover={{ y: -3 }}
-              onClick={() => setActiveTab("pub_painel")}
+              onClick={() => handleProtectedNavigate("pub_painel", undefined, "pub_painel")}
               className="p-6 rounded-2xl border border-indigo-200 hover:border-indigo-300 bg-white cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
             >
               <div>
@@ -739,7 +745,7 @@ export function HomeTab({ setActiveTab, setActivePlanningSubTab, tasks, areas, o
 
         <motion.div 
           whileHover={{ y: -2 }}
-          onClick={() => setActiveTab("templates")}
+          onClick={() => handleProtectedNavigate("templates", undefined, "templates")}
           className="p-5 rounded-2xl border border-slate-200 hover:border-rose-300 bg-white cursor-pointer group shadow-sm transition-all duration-200 flex items-center justify-between"
         >
           <div className="flex items-center gap-4">
