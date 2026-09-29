@@ -309,25 +309,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const role = roles.find(r => r.id === currentUser.roleId);
-    
-    // Admin override or fallback for standard roles
-    if (currentUser.roleId === 'admin' || role?.id === 'admin') return true;
-
-    if (!role) {
-      // Fallback if role is not loaded yet or custom
-      if (['colaborador', 'regulator', 'Colaborador (a)', 'Regulador (a)'].includes(currentUser.roleId)) {
-        return true;
-      }
-      return false;
-    }
+    if (role?.id === 'admin') return true;
+    if (!role) return false;
 
     const modulePerms = role.permissions.find(p => p.moduleId === moduleId);
-    if (!modulePerms) {
-      if (['colaborador', 'regulator', 'Colaborador (a)', 'Regulador (a)'].includes(currentUser.roleId)) {
-        return true;
-      }
-      return false;
-    }
+    if (!modulePerms) return false;
 
     return modulePerms.actions.includes(action);
   };
