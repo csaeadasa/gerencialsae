@@ -298,6 +298,7 @@ export interface Task {
   weight?: number;
   isProgrammed?: boolean;
   seiProcess?: string;
+  relatedSeiProcesses?: string[];
   priority?: string;
   categoryIds?: number[];
   assignedTo?: string;
@@ -353,6 +354,7 @@ export interface PlanTaskSnapshotItem {
   startDate?: string | null;
   endDate?: string | null;
   seiProcess?: string | null;
+  relatedSeiProcesses?: string[];
   areaNames?: string[];
 }
 

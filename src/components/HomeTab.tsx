@@ -34,6 +34,7 @@ import {
   Edit3,
   Calendar,
   User,
+  FileDigit,
   Filter
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -409,7 +410,9 @@ export function HomeTab({
         t.title?.toLowerCase().includes(term) ||
         t.code?.toLowerCase().includes(term) ||
         t.description?.toLowerCase().includes(term) ||
-        t.assignedTo?.toLowerCase().includes(term)
+        t.assignedTo?.toLowerCase().includes(term) ||
+        t.seiProcess?.toLowerCase().includes(term) ||
+        t.relatedSeiProcesses?.some(s => s.toLowerCase().includes(term))
       );
     }
 
@@ -2237,6 +2240,23 @@ export function HomeTab({
                               <div className="flex items-center gap-1.5">
                                 <User size={13} className="text-slate-400" />
                                 <span className="text-slate-700 font-semibold">{task.assignedTo}</span>
+                              </div>
+                            )}
+
+                            {(task.seiProcess || (task.relatedSeiProcesses && task.relatedSeiProcesses.length > 0)) && (
+                              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                {task.seiProcess && (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
+                                    <FileDigit size={12} className="text-slate-400" />
+                                    {task.seiProcess}
+                                  </span>
+                                )}
+                                {task.relatedSeiProcesses && task.relatedSeiProcesses.map((relSei, rIdx) => (
+                                  <span key={rIdx} className="inline-flex items-center gap-1 text-[10.5px] font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md" title="Processo SEI Relacionado">
+                                    <FileDigit size={11} className="text-indigo-400" />
+                                    {relSei}
+                                  </span>
+                                ))}
                               </div>
                             )}
                           </div>

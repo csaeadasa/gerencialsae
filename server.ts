@@ -951,6 +951,7 @@ async function runStartupMigration() {
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS checklist JSONB;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS links JSONB DEFAULT '[]'::jsonb;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS comments JSONB DEFAULT '[]'::jsonb;`);
+      await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS related_sei_processes JSONB DEFAULT '[]'::jsonb;`);
 
       // Ensure pl_task_models and pl_model_tasks tables exist for task templates
       await client.query(`
@@ -2247,6 +2248,7 @@ export async function startServer(isVercel = false) {
             updatedAt: t.updated_at,
             updatedBy: t.updated_by,
             seiProcess: t.sei_process || null,
+            relatedSeiProcesses: Array.isArray(t.related_sei_processes) ? t.related_sei_processes : [],
             weight: t.weight !== undefined && t.weight !== null ? Number(t.weight) : 1,
             isProgrammed: t.is_programmed !== false,
             type: t.type === 'recurso' ? 'demanda_ouvidoria' : t.type,
@@ -3250,6 +3252,7 @@ export async function startServer(isVercel = false) {
             startDate: t.start_date,
             endDate: t.end_date,
             seiProcess: t.sei_process,
+            relatedSeiProcesses: Array.isArray(t.related_sei_processes) ? t.related_sei_processes : [],
             areaNames: (Array.isArray(t.area_ids) ? t.area_ids : []).map(id => areaMap[Number(id)]).filter(Boolean)
           }))
         };
@@ -5235,6 +5238,7 @@ export async function startServer(isVercel = false) {
           parentId: t.parent_id ? Number(t.parent_id) : null,
           progress: Number(t.progress) || 0,
           seiProcess: t.sei_process,
+          relatedSeiProcesses: Array.isArray(t.related_sei_processes) ? t.related_sei_processes : [],
           priority: t.priority,
           category: t.category,
           assignedTo: t.assigned_to,
@@ -6136,8 +6140,8 @@ export async function startServer(isVercel = false) {
         const parsedWeight = (rawWeight !== undefined && rawWeight !== null && rawWeight !== "") ? parseFloat(rawWeight) : 1.0;
         const finalWeight = isNaN(parsedWeight) ? 1.0 : parsedWeight;
         const result = await client.query(
-          `INSERT INTO pl_tasks (title, description, start_date, end_date, status, parent_id, progress, priority, category, assigned_to, notes, plan_id, depends_on_task_id, updated_at, updated_by, sei_process, weight, type, fiscalizacao_data, ouvidoria_data, recurso_rev_data, checklist, links, comments, is_programmed)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+          `INSERT INTO pl_tasks (title, description, start_date, end_date, status, parent_id, progress, priority, category, assigned_to, notes, plan_id, depends_on_task_id, updated_at, updated_by, sei_process, weight, type, fiscalizacao_data, ouvidoria_data, recurso_rev_data, checklist, links, comments, is_programmed, related_sei_processes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
            RETURNING *`,
           [
             title || "Sem título",
@@ -6163,7 +6167,8 @@ export async function startServer(isVercel = false) {
             checklist ? JSON.stringify(checklist) : null,
             links ? JSON.stringify(links) : JSON.stringify([]),
             comments ? JSON.stringify(comments) : JSON.stringify([]),
-            finalIsProgrammed
+            finalIsProgrammed,
+            JSON.stringify(Array.isArray(req.body.relatedSeiProcesses) ? req.body.relatedSeiProcesses : [])
           ]
         );
         
@@ -6294,7 +6299,7 @@ export async function startServer(isVercel = false) {
       try {
         await client.query("BEGIN");
         
-        const currentTaskRes = await client.query("SELECT parent_id, start_date, end_date, progress, status, depends_on_task_id, links, comments, is_programmed FROM pl_tasks WHERE id = $1", [taskId]);
+        const currentTaskRes = await client.query("SELECT parent_id, start_date, end_date, progress, status, depends_on_task_id, links, comments, is_programmed, related_sei_processes FROM pl_tasks WHERE id = $1", [taskId]);
         if (currentTaskRes.rows.length === 0) {
           await client.query("ROLLBACK");
           return res.status(404).json({ success: false, error: "Tarefa não encontrada." });
@@ -6359,7 +6364,7 @@ export async function startServer(isVercel = false) {
 
         const result = await client.query(
           `UPDATE pl_tasks 
-           SET title = $1, description = $2, start_date = $3, end_date = $4, status = $5, progress = $6, priority = $7, category = $8, assigned_to = $9, notes = $10, parent_id = $11, plan_id = $12, depends_on_task_id = $13, updated_at = NOW(), updated_by = $14, sei_process = $16, weight = $17, type = $18, fiscalizacao_data = $19, ouvidoria_data = $20, recurso_rev_data = $21, checklist = $22, links = $23, comments = $24, is_programmed = $25
+           SET title = $1, description = $2, start_date = $3, end_date = $4, status = $5, progress = $6, priority = $7, category = $8, assigned_to = $9, notes = $10, parent_id = $11, plan_id = $12, depends_on_task_id = $13, updated_at = NOW(), updated_by = $14, sei_process = $16, weight = $17, type = $18, fiscalizacao_data = $19, ouvidoria_data = $20, recurso_rev_data = $21, checklist = $22, links = $23, comments = $24, is_programmed = $25, related_sei_processes = $26
            WHERE id = $15
            RETURNING *`,
           [
@@ -6387,7 +6392,8 @@ export async function startServer(isVercel = false) {
             checklist ? JSON.stringify(checklist) : null,
             links !== undefined ? JSON.stringify(links) : (currentTaskRes.rows[0].links ? JSON.stringify(currentTaskRes.rows[0].links) : JSON.stringify([])),
             comments !== undefined ? JSON.stringify(comments) : (currentTaskRes.rows[0].comments ? JSON.stringify(currentTaskRes.rows[0].comments) : JSON.stringify([])),
-            finalIsProgrammed
+            finalIsProgrammed,
+            JSON.stringify(req.body.relatedSeiProcesses !== undefined ? (Array.isArray(req.body.relatedSeiProcesses) ? req.body.relatedSeiProcesses : []) : (currentTaskRes.rows[0].related_sei_processes || []))
           ]
         );
 

@@ -1177,6 +1177,33 @@ export function PlanningTab({
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [editingTask, setEditingTask] = useState<Partial<Task>>({});
   const [editTaskParentSearch, setEditTaskParentSearch] = useState("");
+  const [newRelatedSeiInput, setNewRelatedSeiInput] = useState("");
+
+  const handleAddRelatedSei = () => {
+    const trimmed = newRelatedSeiInput.trim();
+    if (!trimmed) return;
+    const currentList = editingTask.relatedSeiProcesses || [];
+    if (currentList.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
+      showToast("Aviso", "Este processo SEI relacionado já foi adicionado.", "warning");
+      return;
+    }
+    if (editingTask.seiProcess && editingTask.seiProcess.trim().toLowerCase() === trimmed.toLowerCase()) {
+      showToast("Aviso", "Este processo já está cadastrado como o Processo SEI Principal.", "warning");
+      return;
+    }
+    setEditingTask(prev => ({
+      ...prev,
+      relatedSeiProcesses: [...(prev.relatedSeiProcesses || []), trimmed]
+    }));
+    setNewRelatedSeiInput("");
+  };
+
+  const handleRemoveRelatedSei = (index: number) => {
+    setEditingTask(prev => ({
+      ...prev,
+      relatedSeiProcesses: (prev.relatedSeiProcesses || []).filter((_, idx) => idx !== index)
+    }));
+  };
 
   useEffect(() => {
     // Synchronize Categories for editingTask
@@ -2323,8 +2350,10 @@ export function PlanningTab({
       const query = searchTerm.toLowerCase();
       const titleMatch = t.title?.toLowerCase().includes(query);
       const descMatch = t.description?.toLowerCase().includes(query);
+      const seiMatch = (t.seiProcess?.toLowerCase().includes(query)) ||
+        (t.relatedSeiProcesses && t.relatedSeiProcesses.some(s => s.toLowerCase().includes(query)));
       const categoryNamesMatch = t.categoryIds?.map(id => categories.find(c => c.id === id)?.name || "").some(name => name.toLowerCase().includes(query));
-      if (!titleMatch && !descMatch && !categoryNamesMatch) return false;
+      if (!titleMatch && !descMatch && !seiMatch && !categoryNamesMatch) return false;
     }
 
     // Check task type
@@ -4472,6 +4501,8 @@ export function PlanningTab({
       progress: 0,
       priority: "Média",
       isProgrammed: true,
+      seiProcess: "",
+      relatedSeiProcesses: [],
       weight: 1,
       categoryIds: defaultCategoryIds,
       assignedTo: "",
@@ -4503,6 +4534,7 @@ export function PlanningTab({
         resultado: 'Em Análise'
       } : undefined
     });
+    setNewRelatedSeiInput("");
     setTaskFormTab("form");
     setEditTaskParentSearch("");
     setIsFormOpen(true);
@@ -4512,6 +4544,7 @@ export function PlanningTab({
   const handleEditTask = (task: Task) => {
     setFormMode("edit");
     setEditTaskParentSearch("");
+    setNewRelatedSeiInput("");
 
     const isProgrammedValue = task.fiscalizacaoData?.programacao
       ? task.fiscalizacaoData.programacao !== "Não Programada"
@@ -4522,6 +4555,8 @@ export function PlanningTab({
       isProgrammed: isProgrammedValue,
       startDate: fmtDate(task.startDate),
       endDate: fmtDate(task.endDate),
+      seiProcess: task.seiProcess || "",
+      relatedSeiProcesses: Array.isArray(task.relatedSeiProcesses) ? task.relatedSeiProcesses : [],
       planId: task.planId || null,
       areaIds: task.areaIds || [],
       responsibleIds: task.responsibleIds || [],
@@ -13469,20 +13504,32 @@ export function PlanningTab({
                                         )}
 
                                         {/* SEI Process in Board */}
-                                        {task.seiProcess && (
-                                          <div className="flex items-center self-start text-[9px] font-bold text-slate-600 bg-slate-50/80 border border-slate-300 px-1.5 py-0.5 rounded-md max-w-full">
-                                            <span className="truncate mr-1 font-mono flex items-center gap-1 text-slate-600"><FileDigit size={10} className="text-slate-400" /> {task.seiProcess}</span>
-                                            <button 
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                navigator.clipboard.writeText(task.seiProcess || "");
-                                                showToast("Sucesso", "Processo SEI copiado", "success");
-                                              }}
-                                              className="p-1 hover:bg-slate-200/80 rounded text-slate-400 hover:text-adasa-mid transition-colors ml-auto flex-shrink-0"
-                                              title="Copiar Processo SEI"
-                                            >
-                                              <Copy size={10} />
-                                            </button>
+                                        {(task.seiProcess || (task.relatedSeiProcesses && task.relatedSeiProcesses.length > 0)) && (
+                                          <div className="flex flex-wrap items-center gap-1 self-start max-w-full">
+                                            {task.seiProcess && (
+                                              <div className="flex items-center text-[9px] font-bold text-slate-600 bg-slate-50/80 border border-slate-300 px-1.5 py-0.5 rounded-md max-w-full">
+                                                <span className="truncate mr-1 font-mono flex items-center gap-1 text-slate-600"><FileDigit size={10} className="text-slate-400" /> {task.seiProcess}</span>
+                                                <button 
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigator.clipboard.writeText(task.seiProcess || "");
+                                                    showToast("Sucesso", "Processo SEI copiado", "success");
+                                                  }}
+                                                  className="p-1 hover:bg-slate-200/80 rounded text-slate-400 hover:text-adasa-mid transition-colors ml-auto flex-shrink-0 cursor-pointer"
+                                                  title="Copiar Processo SEI Principal"
+                                                >
+                                                  <Copy size={10} />
+                                                </button>
+                                              </div>
+                                            )}
+                                            {task.relatedSeiProcesses && task.relatedSeiProcesses.length > 0 && (
+                                              <span 
+                                                className="text-[8.5px] font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-md cursor-help"
+                                                title={`Processos SEI Relacionados:\n${task.relatedSeiProcesses.join('\n')}`}
+                                              >
+                                                +{task.relatedSeiProcesses.length} SEI{task.relatedSeiProcesses.length > 1 ? "s" : ""}
+                                              </span>
+                                            )}
                                           </div>
                                         )}
 
@@ -15405,19 +15452,111 @@ export function PlanningTab({
                   </div>
                 </div>
 
-                {/* Technical Meta Filters */}
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Número de referência no Sistema Eletrônico de Informações (SEI)">
-                    <FileText size={15} className="text-red-500 shrink-0" />
-                    Processo SEI
-                  </label>
-                  <input
-                    type="text"
-                    value={editingTask.seiProcess || ""}
-                    onChange={(e) => setEditingTask(prev => ({ ...prev, seiProcess: e.target.value }))}
-                    placeholder="Ex: 00197-00001234/2024-56"
-                    className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none"
-                  />
+                {/* Processos SEI: Principal e Relacionados */}
+                <div className="space-y-3 md:col-span-2 bg-slate-50/80 border border-slate-200/80 p-3.5 sm:p-4 rounded-2xl">
+                  {/* SEI Principal */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5" title="Número de referência principal no Sistema Eletrônico de Informações (SEI)">
+                        <FileText size={15} className="text-red-500 shrink-0" />
+                        Processo SEI Principal
+                      </label>
+                      {editingTask.seiProcess && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(editingTask.seiProcess || "");
+                            showToast("Sucesso", "Processo SEI Principal copiado.", "success");
+                          }}
+                          className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Copy size={11} /> Copiar
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={editingTask.seiProcess || ""}
+                      onChange={(e) => setEditingTask(prev => ({ ...prev, seiProcess: e.target.value }))}
+                      placeholder="Ex: 00197-00001234/2024-56"
+                      className="w-full bg-white border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none transition-colors"
+                    />
+                  </div>
+
+                  {/* Processos SEI Relacionados */}
+                  <div className="space-y-2 pt-2 border-t border-slate-200/70">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5" title="Processos SEI correlatos, apensos, recursos ou processos vinculados a esta demanda">
+                        <FileDigit size={15} className="text-indigo-500 shrink-0" />
+                        Processos SEI Relacionados
+                        {editingTask.relatedSeiProcesses && editingTask.relatedSeiProcesses.length > 0 && (
+                          <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold ml-1">
+                            {editingTask.relatedSeiProcesses.length}
+                          </span>
+                        )}
+                      </label>
+                    </div>
+
+                    {/* Input + Botão Adicionar */}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newRelatedSeiInput}
+                        onChange={(e) => setNewRelatedSeiInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddRelatedSei();
+                          }
+                        }}
+                        placeholder="Ex: 00197-00005678/2024-99 (pressione Enter para adicionar)"
+                        className="flex-1 bg-white border-2 border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 focus:border-adasa-mid outline-none transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddRelatedSei}
+                        className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-black uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+                      >
+                        <Plus size={14} /> Adicionar
+                      </button>
+                    </div>
+
+                    {/* Lista de Processos Relacionados */}
+                    {editingTask.relatedSeiProcesses && editingTask.relatedSeiProcesses.length > 0 ? (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {editingTask.relatedSeiProcesses.map((sei, idx) => (
+                          <div
+                            key={idx}
+                            className="inline-flex items-center gap-1.5 bg-white border border-indigo-200 text-slate-700 text-xs px-2.5 py-1 rounded-xl shadow-2xs group"
+                          >
+                            <FileDigit size={12} className="text-indigo-500 shrink-0" />
+                            <span className="font-mono font-bold text-[11px]">{sei}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(sei);
+                                showToast("Sucesso", `Processo ${sei} copiado.`, "success");
+                              }}
+                              className="p-1 text-slate-400 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                              title="Copiar Processo"
+                            >
+                              <Copy size={11} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveRelatedSei(idx)}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
+                              title="Remover Processo Relacionado"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-400 font-medium">Nenhum processo SEI relacionado vinculado.</p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:col-span-2">
@@ -15857,91 +15996,129 @@ export function PlanningTab({
                     ></textarea>
                   </div>
                   
-                  <div className="space-y-3 pt-3 border-t border-slate-100">
-                    <label className="block text-xs font-black text-slate-600 uppercase tracking-wider font-semibold flex items-center gap-2">
-                      <ListTodo size={15} className="text-slate-400"/> 
-                      Lista de verificação ({(editingTask.checklist || []).filter(c => c.completed).length} de {(editingTask.checklist || []).length} itens concluídos)
-                    </label>
-                    
-                    <div className="space-y-2.5">
-                      {(editingTask.checklist || []).map((item, index) => (
-                        <div 
-                          key={item.id} 
-                          className="flex items-center gap-3 group"
-                          draggable
-                          onDragStart={(e) => e.dataTransfer.setData("text/plain", index.toString())}
-                          onDragOver={(e) => e.preventDefault()}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            const draggedIndex = parseInt(e.dataTransfer.getData("text/plain"));
-                            if (isNaN(draggedIndex) || draggedIndex === index) return;
-                            const newChecklist = [...(editingTask.checklist || [])];
-                            const [draggedItem] = newChecklist.splice(draggedIndex, 1);
-                            newChecklist.splice(index, 0, draggedItem);
-                            setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
-                          }}
-                        >
-                          <button 
-                            type="button"
-                            className="text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing"
-                            title="Arraste para reordenar"
-                          >
-                            <GripVertical size={15} />
-                          </button>
-                          
-                          <span className="text-xs font-bold text-slate-400 w-4 text-right select-none">{index + 1}.</span>
-                          
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newChecklist = [...(editingTask.checklist || [])];
-                              newChecklist[index] = { ...item, completed: !item.completed };
-                              setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
-                            }}
-                            className={item.completed ? "text-indigo-500" : "text-slate-300 hover:text-indigo-400"}
-                          >
-                            {item.completed ? <CheckCircle2 size={19} /> : <Circle size={19} />}
-                          </button>
-
-                          <input
-                            type="text"
-                            value={item.text}
-                            onChange={(e) => {
-                              const newChecklist = [...(editingTask.checklist || [])];
-                              newChecklist[index] = { ...item, text: e.target.value };
-                              setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
-                            }}
-                            className={`flex-1 bg-transparent border-none outline-none text-sm ${item.completed ? 'text-slate-400 line-through' : 'text-slate-700'}`}
-                            placeholder="Descrição do item..."
-                          />
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newChecklist = [...(editingTask.checklist || [])];
-                              newChecklist.splice(index, 1);
-                              setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
-                            }}
-                            className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="Remover item"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                  <div className="space-y-4 pt-4 border-t border-slate-200/80">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <label className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                        <ListTodo size={16} className="text-indigo-600" /> 
+                        Passo a Passo (Checklist)
+                        {(editingTask.checklist || []).length > 0 && (
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/60 ml-1">
+                            {(editingTask.checklist || []).filter(c => c.completed).length} de {(editingTask.checklist || []).length} concluídos
+                          </span>
+                        )}
+                      </label>
+                      {(editingTask.checklist || []).length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-slate-500">
+                            {Math.round(((editingTask.checklist || []).filter(c => c.completed).length / (editingTask.checklist || []).length) * 100)}%
+                          </span>
+                          <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/60">
+                            <div 
+                              className="h-full bg-emerald-500 transition-all duration-300 rounded-full" 
+                              style={{ width: `${((editingTask.checklist || []).filter(c => c.completed).length / (editingTask.checklist || []).length) * 100}%` }}
+                            />
+                          </div>
                         </div>
-                      ))}
+                      )}
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {(editingTask.checklist || []).map((item, index) => {
+                        const isDone = !!item.completed;
+                        return (
+                          <div 
+                            key={item.id} 
+                            className={`flex items-center gap-3 p-3 sm:p-3.5 rounded-xl border transition-all duration-150 shadow-2xs group ${
+                              isDone 
+                                ? "bg-emerald-50/30 border-emerald-200/80 hover:bg-emerald-50/50" 
+                                : "bg-white border-slate-200/90 hover:border-slate-300 hover:shadow-xs"
+                            }`}
+                            draggable
+                            onDragStart={(e) => e.dataTransfer.setData("text/plain", index.toString())}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const draggedIndex = parseInt(e.dataTransfer.getData("text/plain"));
+                              if (isNaN(draggedIndex) || draggedIndex === index) return;
+                              const newChecklist = [...(editingTask.checklist || [])];
+                              const [draggedItem] = newChecklist.splice(draggedIndex, 1);
+                              newChecklist.splice(index, 0, draggedItem);
+                              setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
+                            }}
+                          >
+                            <button 
+                              type="button"
+                              className="p-1 text-slate-300 hover:text-slate-600 rounded-md cursor-grab active:cursor-grabbing hover:bg-slate-100 transition-colors shrink-0"
+                              title="Arraste para reordenar o passo"
+                            >
+                              <GripVertical size={15} />
+                            </button>
+                            
+                            <span 
+                              className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center shrink-0 select-none transition-colors ${
+                                isDone 
+                                  ? "bg-emerald-100 text-emerald-800" 
+                                  : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {index + 1}
+                            </span>
+                            
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newChecklist = [...(editingTask.checklist || [])];
+                                newChecklist[index] = { ...item, completed: !item.completed };
+                                setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
+                              }}
+                              className={`shrink-0 transition-transform active:scale-95 cursor-pointer ${
+                                isDone ? "text-emerald-600" : "text-slate-300 hover:text-indigo-500"
+                              }`}
+                              title={isDone ? "Marcar como pendente" : "Marcar como concluído"}
+                            >
+                              {isDone ? <CheckCircle2 size={20} className="fill-emerald-50" /> : <Circle size={20} />}
+                            </button>
+
+                            <input
+                              type="text"
+                              value={item.text}
+                              onChange={(e) => {
+                                const newChecklist = [...(editingTask.checklist || [])];
+                                newChecklist[index] = { ...item, text: e.target.value };
+                                setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
+                              }}
+                              className={`flex-1 bg-transparent border-none outline-none text-sm font-semibold transition-colors placeholder:text-slate-300 ${
+                                isDone ? 'text-slate-400 line-through font-normal' : 'text-slate-800'
+                              }`}
+                              placeholder={`Descreva o passo ${index + 1}...`}
+                            />
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newChecklist = [...(editingTask.checklist || [])];
+                                newChecklist.splice(index, 1);
+                                setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
+                              }}
+                              className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg opacity-40 group-hover:opacity-100 transition-all cursor-pointer shrink-0"
+                              title="Remover este passo"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        );
+                      })}
                       
-                      <div className="flex items-center gap-3 pl-8">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newItem = { id: Date.now().toString() + Math.random().toString(36).substring(7), text: "", completed: false };
-                            setEditingTask(prev => ({ ...prev, checklist: [...(prev.checklist || []), newItem] }));
-                          }}
-                          className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-indigo-600 transition-colors cursor-pointer"
-                        >
-                          <Plus size={15} /> Adicionar um item
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newItem = { id: Date.now().toString() + Math.random().toString(36).substring(7), text: "", completed: false };
+                          setEditingTask(prev => ({ ...prev, checklist: [...(prev.checklist || []), newItem] }));
+                        }}
+                        className="w-full py-3 border-2 border-dashed border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40 text-slate-600 hover:text-indigo-700 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
+                      >
+                        <Plus size={15} /> Adicionar novo passo
+                      </button>
                     </div>
                   </div>
 
@@ -16652,7 +16829,7 @@ export function PlanningTab({
                   </div>
 
                   {/* Row 3: Processo SEI, Área Temática & Categorias */}
-                  {((task.seiProcess) || (task.areaIds && task.areaIds.length > 0) || (task.categoryIds && task.categoryIds.length > 0)) && (
+                  {((task.seiProcess) || (task.relatedSeiProcesses && task.relatedSeiProcesses.length > 0) || (task.areaIds && task.areaIds.length > 0) || (task.categoryIds && task.categoryIds.length > 0)) && (
                     <div className="flex items-center gap-1.5 flex-wrap pt-0.5 text-[9.5px]">
                       {task.seiProcess && (
                         <div className="inline-flex items-center text-[10px] font-bold text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md shadow-2xs">
@@ -16664,12 +16841,29 @@ export function PlanningTab({
                               showToast("Sucesso", "Processo SEI copiado para a área de transferência", "success");
                             }}
                             className="p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600 transition-colors ml-auto flex-shrink-0 cursor-pointer"
-                            title="Copiar Processo SEI"
+                            title="Copiar Processo SEI Principal"
                           >
                             <Copy size={11} />
                           </button>
                         </div>
                       )}
+
+                      {task.relatedSeiProcesses && task.relatedSeiProcesses.map((relSei, rIdx) => (
+                        <div key={rIdx} className="inline-flex items-center text-[9.5px] font-bold text-indigo-700 bg-indigo-50/80 border border-indigo-200 px-2 py-0.5 rounded-md shadow-2xs">
+                          <span className="truncate mr-1 font-mono flex items-center gap-1 text-indigo-700"><FileDigit size={11} className="text-indigo-400" /> {relSei}</span>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(relSei);
+                              showToast("Sucesso", `Processo SEI ${relSei} copiado`, "success");
+                            }}
+                            className="p-0.5 hover:bg-indigo-100 rounded text-indigo-400 hover:text-indigo-700 transition-colors ml-auto flex-shrink-0 cursor-pointer"
+                            title="Copiar Processo SEI Relacionado"
+                          >
+                            <Copy size={10} />
+                          </button>
+                        </div>
+                      ))}
 
                       {task.areaIds && task.areaIds.map(aid => {
                         const area = areas.find(a => a.id === aid);
