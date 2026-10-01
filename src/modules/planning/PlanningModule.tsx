@@ -21,6 +21,9 @@ interface PlanningModuleProps {
   setResponsiblesProp: React.Dispatch<React.SetStateAction<any[]>>;
   editingTaskIdFromPainel?: number | null;
   setEditingTaskIdFromPainel?: React.Dispatch<React.SetStateAction<number | null>>;
+  externalPlanFilter?: string | null;
+  externalAreaFilter?: number[] | null;
+  externalFilterTrigger?: number;
 }
 
 export const PlanningModule: React.FC<PlanningModuleProps> = (props) => {

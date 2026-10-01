@@ -390,6 +390,7 @@ export interface Area {
   id: number;
   name: string;
   abbreviation?: string;
+  description?: string;
   categoryIds?: number[];
   createdAt?: string | null;
   createdBy?: string | null;

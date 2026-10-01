@@ -636,6 +636,32 @@ export default function App() {
   const [categories, setCategories] = useState<any[]>([]);
   const [responsibles, setResponsibles] = useState<any[]>([]);
   
+  const [externalPlanFilter, setExternalPlanFilter] = useState<string | null>(null);
+  const [externalAreaFilter, setExternalAreaFilter] = useState<number[] | null>(null);
+  const [externalFilterTrigger, setExternalFilterTrigger] = useState(0);
+
+  const handleNavigateToPlanningWithFilter = (subTab: "tasks" | "dashboard", planId: number | string, areaId?: number, isMyTasks?: boolean) => {
+    const requiredModule = isMyTasks ? "planning_my_tasks" : (subTab === "tasks" ? "planning_tasks" : "planning_dashboard");
+    if (checkPermission && !checkPermission(requiredModule, 'view')) {
+      if (requiredModule === "planning_my_tasks" && checkPermission("planning_tasks", "view")) {
+        // permissão fallback de visualização de tarefas
+      } else {
+        showToast("Acesso Negado", "Você não possui permissão para acessar este módulo.", "error");
+        return;
+      }
+    }
+    setIsMyTasksSelected(!!isMyTasks);
+    setExternalPlanFilter(planId ? planId.toString() : null);
+    setExternalAreaFilter(areaId !== undefined && areaId !== null ? [Number(areaId)] : []);
+    if (isMyTasks) {
+      setMyTasksFilterTrigger(prev => prev + 1);
+    } else {
+      setExternalFilterTrigger(prev => prev + 1);
+    }
+    setActivePlanningSubTab(subTab);
+    handleTabChange("planning");
+  };
+  
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [manageSubTab, setManageSubTab] = useState<
     "list" | "balance" | "systems" | "demand" | "supply"
@@ -6032,15 +6058,22 @@ const renderSupplyTable = () => {
                 setActiveTab={setActiveTab as any} 
                 setActivePlanningSubTab={setActivePlanningSubTab as any}
                 tasks={tasks} 
-                areas={areas} 
+                areas={areas}
+                plans={plans}
+                responsibles={responsibles}
                 checkPermission={checkPermission}
                 showToast={showToast}
+                onNavigateToPlanningWithFilter={handleNavigateToPlanningWithFilter}
                 onMyTasksSelect={() => {
-                  if (checkPermission && !checkPermission('planning_my_tasks', 'view')) {
+                  if (checkPermission && !checkPermission('planning_my_tasks', 'view') && !checkPermission('planning_tasks', 'view')) {
                     showToast("Acesso Negado", "Você não possui permissão para acessar este módulo.", "error");
                     return;
                   }
                   setIsMyTasksSelected(true);
+                  const activeProj = plans?.find((p: any) => p.isActive);
+                  if (activeProj) {
+                    setExternalPlanFilter(activeProj.id.toString());
+                  }
                   setMyTasksFilterTrigger(prev => prev + 1);
                   setActivePlanningSubTab("tasks");
                   handleTabChange("planning");
@@ -9804,6 +9837,9 @@ const renderSupplyTable = () => {
                 setResponsiblesProp={setResponsibles}
                 editingTaskIdFromPainel={editingTaskIdFromPainel}
                 setEditingTaskIdFromPainel={setEditingTaskIdFromPainel}
+                externalPlanFilter={externalPlanFilter}
+                externalAreaFilter={externalAreaFilter}
+                externalFilterTrigger={externalFilterTrigger}
               />
             </motion.div>
           ) : activeTab === "reg_cadastro" ? (

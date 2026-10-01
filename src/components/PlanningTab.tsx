@@ -110,6 +110,9 @@ interface PlanningTabProps {
   setResponsiblesProp?: React.Dispatch<React.SetStateAction<Responsible[]>>;
   editingTaskIdFromPainel?: number | null;
   setEditingTaskIdFromPainel?: React.Dispatch<React.SetStateAction<number | null>>;
+  externalPlanFilter?: string | null;
+  externalAreaFilter?: number[] | null;
+  externalFilterTrigger?: number;
 }
  
 const normalizeStatus = (status: string | undefined): "Não iniciada" | "Em andamento" | "Concluída" => {
@@ -521,7 +524,10 @@ export function PlanningTab({
   setCategoriesProp,
   setResponsiblesProp,
   editingTaskIdFromPainel,
-  setEditingTaskIdFromPainel
+  setEditingTaskIdFromPainel,
+  externalPlanFilter,
+  externalAreaFilter,
+  externalFilterTrigger
 }: PlanningTabProps) {
   const { currentUser, users, roles, departments, addUser } = useAuth();
 
@@ -977,6 +983,95 @@ export function PlanningTab({
   const [newLinkUrl, setNewLinkUrl] = useState("");
   const [newLinkTitle, setNewLinkTitle] = useState("");
   const [isRegModalOpen, setIsRegModalOpen] = useState(false);
+
+  // Duplicate Task State & Handlers
+  const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
+  const [taskToDuplicate, setTaskToDuplicate] = useState<Task | null>(null);
+  const [duplicateTargetPlanId, setDuplicateTargetPlanId] = useState<string | number>("");
+  const [duplicateIncludeSubtasks, setDuplicateIncludeSubtasks] = useState(true);
+  const [isDuplicating, setIsDuplicating] = useState(false);
+
+  const handleOpenDuplicateModal = (task: Task) => {
+    setTaskToDuplicate(task);
+    setDuplicateTargetPlanId(task.planId || (plans[0] ? plans[0].id : ""));
+    const hasSubs = tasks.some(t => Number(t.parentId) === Number(task.id));
+    setDuplicateIncludeSubtasks(hasSubs);
+    setDuplicateModalOpen(true);
+  };
+
+  const executeDuplicateTask = async () => {
+    if (!taskToDuplicate) return;
+    if (!duplicateTargetPlanId) {
+      showToast("Validação", "Selecione o Plano de Atividades de destino.", "warning");
+      return;
+    }
+
+    setIsDuplicating(true);
+    try {
+      const parentPayload = {
+        ...taskToDuplicate,
+        id: undefined,
+        planId: duplicateTargetPlanId,
+        parentId: null,
+        startDate: null,
+        endDate: null,
+        progress: 0,
+        status: "Não iniciada",
+        comments: [],
+        updatedBy: currentUser?.name || "Administrador",
+        createdAt: new Date().toISOString()
+      };
+
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parentPayload)
+      });
+      const resData = await res.json();
+
+      if (!resData.success || !resData.data) {
+        throw new Error(resData.message || "Erro ao duplicar tarefa principal");
+      }
+
+      const newParentId = resData.data.id;
+
+      if (duplicateIncludeSubtasks) {
+        const subtasks = tasks.filter(t => Number(t.parentId) === Number(taskToDuplicate.id));
+        for (const sub of subtasks) {
+          const subPayload = {
+            ...sub,
+            id: undefined,
+            planId: duplicateTargetPlanId,
+            parentId: newParentId,
+            startDate: null,
+            endDate: null,
+            progress: 0,
+            status: "Não iniciada",
+            comments: [],
+            updatedBy: currentUser?.name || "Administrador",
+            createdAt: new Date().toISOString()
+          };
+
+          await fetch("/api/tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(subPayload)
+          });
+        }
+      }
+
+      await reloadTasks();
+      showToast("Sucesso", "Atividade duplicada com sucesso! Datas e progresso redefinidos.", "success");
+      setDuplicateModalOpen(false);
+      setTaskToDuplicate(null);
+    } catch (err: any) {
+      console.error("Error duplicating task:", err);
+      showToast("Erro", err.message || "Falha ao duplicar atividade.", "error");
+    } finally {
+      setIsDuplicating(false);
+    }
+  };
+
   
   // Snapshot de Fechamento (Opção 4) State
   const [closePlanModalPlan, setClosePlanModalPlan] = useState<Plan | null>(null);
@@ -2052,7 +2147,9 @@ export function PlanningTab({
     if (myTasksFilterTrigger && myTasksFilterTrigger > 0) {
       React.startTransition(() => {
         // 1. Set active plan explicitly
-        if (plans && plans.length > 0) {
+        if (externalPlanFilter !== undefined && externalPlanFilter !== null) {
+          setPlanFilter(externalPlanFilter);
+        } else if (plans && plans.length > 0) {
           const activeProj = plans.find(p => p.isActive);
           if (activeProj) {
             setPlanFilter(activeProj.id.toString());
@@ -2092,6 +2189,20 @@ export function PlanningTab({
       });
     }
   }, [myTasksFilterTrigger]);
+
+  React.useEffect(() => {
+    if (externalFilterTrigger && externalFilterTrigger > 0) {
+      React.startTransition(() => {
+        if (externalPlanFilter !== undefined && externalPlanFilter !== null) {
+          setPlanFilter(externalPlanFilter);
+        }
+        if (externalAreaFilter !== undefined && externalAreaFilter !== null) {
+          setSelectedAreaIds(externalAreaFilter);
+        }
+        setIsTasksFiltersExpanded(true);
+      });
+    }
+  }, [externalFilterTrigger, externalPlanFilter, externalAreaFilter]);
 
   // Ensure responsible filter resets to "Todos os Responsáveis" when isMyTasksSelected is false
   React.useEffect(() => {
@@ -9702,6 +9813,92 @@ export function PlanningTab({
             renderProgressCalc={renderProgressCalc}
           />
         )}
+
+        {/* Duplicate Task Modal */}
+        {duplicateModalOpen && taskToDuplicate && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[120] flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-6 text-left">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+                    <Copy size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-800">Duplicar Atividade</h3>
+                    <p className="text-xs text-slate-500 truncate max-w-[240px]">{taskToDuplicate.title}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setDuplicateModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Plano de Atividades de Destino *
+                  </label>
+                  <select
+                    value={duplicateTargetPlanId}
+                    onChange={(e) => setDuplicateTargetPlanId(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Selecione o plano...</option>
+                    {plans.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.isActive ? "(Ativo)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-slate-500 mt-1">A nova atividade será vinculada ao plano selecionado.</p>
+                </div>
+
+                {tasks.some(t => Number(t.parentId) === Number(taskToDuplicate.id)) && (
+                  <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl space-y-2">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={duplicateIncludeSubtasks}
+                        onChange={(e) => setDuplicateIncludeSubtasks(e.target.checked)}
+                        className="mt-0.5 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                      />
+                      <span className="text-xs font-bold text-slate-800 leading-snug">
+                        Duplicar subtarefas vinculadas ({tasks.filter(t => Number(t.parentId) === Number(taskToDuplicate.id)).length})
+                      </span>
+                    </label>
+                    <p className="text-[11px] text-slate-600 pl-7 leading-relaxed">
+                      As subtarefas filhas também serão duplicadas e vinculadas à nova atividade pai.
+                    </p>
+                  </div>
+                )}
+
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 leading-relaxed">
+                  <strong>Nota:</strong> As datas de início, término e o progresso da(s) tarefa(s) duplicada(s) virão vazios/nulos para posterior preenchimento. Demais atributos serão copiados integralmente.
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => setDuplicateModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={executeDuplicateTask}
+                  disabled={isDuplicating || !duplicateTargetPlanId}
+                  className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isDuplicating ? "Duplicando..." : "Confirmar Duplicação"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     );
   }
