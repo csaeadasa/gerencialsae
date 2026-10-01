@@ -308,6 +308,7 @@ export interface Task {
   notes?: string;
   checklist?: ChecklistItem[];
   planId?: number | null;
+  areaId?: number | null;
   areaIds?: number[];
   responsibleIds?: number[];
   dependsOnTaskId?: number | null;

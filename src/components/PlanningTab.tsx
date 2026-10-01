@@ -47,6 +47,7 @@ import {
   Link2,
   ExternalLink,
   Users,
+  User,
   Copy,
   FileDigit,
   Upload,
@@ -75,7 +76,10 @@ import {
   Eye,
   Archive,
   ArchiveRestore,
-  Check
+  Check,
+  BarChart3,
+  BookmarkCheck,
+  AlertOctagon
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { FiscalizacaoEditor } from './FiscalizacaoEditor';
@@ -97,6 +101,8 @@ interface PlanningTabProps {
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
   showToast: (title: string, message: string, type: "success" | "error" | "warning" | "info") => void;
   activeSubTab?: "tasks" | "dashboard" | "plans" | "areas" | "categories" | "responsibles" | "import" | "models" | "radar";
+  setActivePlanningSubTab?: (subTab: "tasks" | "dashboard" | "plans" | "areas" | "categories" | "responsibles" | "import" | "models" | "radar") => void;
+  onNavigateToPlanningWithFilter?: (subTab: "tasks" | "dashboard", planId: number | string, areaId?: number, isMyTasks?: boolean, taskIdToEdit?: number) => void;
   setConfirmState?: React.Dispatch<React.SetStateAction<{ title?: string; message: string; type?: "confirm" | "alert"; onConfirm?: () => void } | null>>;
   myTasksFilterTrigger?: number;
   isMyTasksSelected?: boolean;
@@ -114,7 +120,51 @@ interface PlanningTabProps {
   externalAreaFilter?: number[] | null;
   externalFilterTrigger?: number;
 }
- 
+
+const formatDateBR = (d: string | null | undefined): string => {
+  if (!d) return "-";
+  try {
+    const datePart = d.split('T')[0];
+    const parts = datePart.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return new Date(d).toLocaleDateString('pt-BR');
+  } catch (e) {
+    return d;
+  }
+};
+
+const getDaysDiffFromToday = (endDate: string | null | undefined): number | null => {
+  if (!endDate) return null;
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let dEnd: Date;
+    if (endDate.includes("-")) {
+      const parts = endDate.split('T')[0].split('-');
+      dEnd = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    } else {
+      dEnd = new Date(endDate);
+    }
+    if (isNaN(dEnd.getTime())) return null;
+    dEnd.setHours(0, 0, 0, 0);
+    const diffTime = dEnd.getTime() - today.getTime();
+    return Math.round(diffTime / (1000 * 60 * 60 * 24));
+  } catch (e) {
+    return null;
+  }
+};
+
+interface ExpandedStatusModalState {
+  isOpen: boolean;
+  scopeTitle: string;
+  scopeSubtitle?: string;
+  categoryType: "status" | "situation";
+  activeFilter: "Atrasada" | "Crítica" | "No Prazo" | "Não iniciada" | "Em andamento" | "Concluída" | "all";
+  areaId?: number;
+}
+
 const normalizeStatus = (status: string | undefined): "Não iniciada" | "Em andamento" | "Concluída" => {
   if (!status) return "Não iniciada";
   const s = status.toLowerCase().trim();
@@ -142,6 +192,19 @@ const sortByCreatedAt = (a: Plan, b: Plan): number => {
   if (yearA !== yearB) return yearB - yearA;
 
   return b.id - a.id;
+};
+
+const getActivePlan = (planList: Plan[] | undefined): Plan | undefined => {
+  if (!planList || planList.length === 0) return undefined;
+  const active = planList.find(p => p.isActive);
+  if (active) return active;
+  const sorted = [...planList].sort(sortByCreatedAt);
+  return sorted[0];
+};
+
+const getActivePlanId = (planList: Plan[] | undefined): string | null => {
+  const active = getActivePlan(planList);
+  return active ? active.id.toString() : null;
 };
 
 const getDeadlineStatus = (endDate: string | null | undefined, status: string | undefined): "Atrasada" | "Crítica" | "No Prazo" => {
@@ -512,6 +575,8 @@ export function PlanningTab({
   setTasks,
   showToast,
   activeSubTab = "tasks",
+  setActivePlanningSubTab,
+  onNavigateToPlanningWithFilter,
   setConfirmState = () => {},
   myTasksFilterTrigger,
   isMyTasksSelected = false,
@@ -588,8 +653,13 @@ export function PlanningTab({
     });
   };
   
-  // New plan and area filters
-  const [planFilter, setPlanFilter] = useState<string>("all");
+  // New plan and area filters - Garante o plano ativo por padrão
+  const [planFilter, setPlanFilter] = useState<string>(() => {
+    if (externalPlanFilter) return externalPlanFilter;
+    const initialPlans = plansProp || [];
+    const activeId = getActivePlanId(initialPlans);
+    return activeId || "all";
+  });
   const [selectedAreaIds, setSelectedAreaIds] = useState<number[]>([]);
   const [selectedResponsibleIds, setSelectedResponsibleIds] = useState<number[]>([]);
 
@@ -639,8 +709,27 @@ export function PlanningTab({
   React.useEffect(() => {
     if (plansProp && plansProp.length > 0) {
       setPlans(plansProp);
+      // Garante que o Painel de Atividades abra com o plano ativo filtrado
+      if (activeSubTab === "dashboard") {
+        const active = getActivePlan(plansProp);
+        if (active && (planFilter === "all" || !plansProp.some(p => p.id.toString() === planFilter))) {
+          setPlanFilter(active.id.toString());
+        }
+      }
     }
-  }, [plansProp]);
+  }, [plansProp, activeSubTab]);
+
+  const prevActiveSubTabRef = React.useRef(activeSubTab);
+  React.useEffect(() => {
+    if (activeSubTab === "dashboard" && prevActiveSubTabRef.current !== "dashboard") {
+      const currentPlans = plans.length > 0 ? plans : (plansProp || []);
+      const active = getActivePlan(currentPlans);
+      if (active && (planFilter === "all" || !currentPlans.some(p => p.id.toString() === planFilter))) {
+        setPlanFilter(active.id.toString());
+      }
+    }
+    prevActiveSubTabRef.current = activeSubTab;
+  }, [activeSubTab, plans, plansProp]);
 
   React.useEffect(() => {
     if (areasProp && areasProp.length > 0) {
@@ -1212,7 +1301,7 @@ export function PlanningTab({
   const [isApplyingFilters] = useState(false);
   // Quick status sync loader
   const [isSyncing, setIsSyncing] = useState(false);
-  const [hasConsulted, setHasConsulted] = useState(false);
+  const [hasConsulted, setHasConsulted] = useState(true);
 
   const handleAreaTableSort = (field: string) => {
     setAreaTableSort(prev => {
@@ -2537,9 +2626,21 @@ export function PlanningTab({
 
   // Calculate stats
 
-  // Filtered tasks and chart definitions for Dashboard
+  // Filtered tasks and chart definitions for Dashboard - Fast exit optimization
   const matchesFiltersDashboard = (t: Task): boolean => {
-    // Check task type
+    // 1. Check plan first (fastest filter to drop irrelevant tasks without extra computing)
+    if (planFilter !== "all" && planFilter !== "" && Number(t.planId) !== Number(planFilter)) {
+      return false;
+    }
+
+    // 2. Check area (fast exit)
+    if (selectedAreaIds.length > 0) {
+      if (!t.areaIds?.some((id) => selectedAreaIds.includes(Number(id)))) {
+        return false;
+      }
+    }
+
+    // 3. Check task type
     if (taskTypeFilter !== "all") {
       const isType = t.type || "default";
       if (taskTypeFilter === "demanda_ouvidoria" || taskTypeFilter === "recurso") {
@@ -2549,54 +2650,42 @@ export function PlanningTab({
       }
     }
 
-    // Check status
-    if (statusFilter.length < 3) {
-      if (statusFilter.length === 0) return false;
-      if (!statusFilter.includes(normalizeStatus(t.status))) return false;
-    }
-
-    // Check situation
-    if (situationFilter !== "all") {
-      if (getDeadlineStatus(t.endDate, t.status) !== situationFilter) return false;
-    }
-
-    // Check priority
-    if (priorityFilter !== "all" && t.priority !== priorityFilter) {
-      return false;
-    }
-
-    // Check category
-    if (categoryFilter !== "all") {
-      if (!t.categoryIds?.includes(Number(categoryFilter))) return false;
-    }
-    
-    // Check classification (isProgrammed)
+    // 4. Check classification (isProgrammed)
     if (isProgrammedFilter !== "all") {
       const wantProgrammed = isProgrammedFilter === "true";
       const isProgrammed = t.isProgrammed !== false;
       if (isProgrammed !== wantProgrammed) return false;
     }
 
-    // Check plan
-    if (planFilter !== "all" && planFilter !== "" && Number(t.planId) !== Number(planFilter)) {
+    // 5. Check priority
+    if (priorityFilter !== "all" && t.priority !== priorityFilter) {
       return false;
     }
 
-    // Check area (many-to-many match) with multi-select selectedAreaIds (subsystems model style)
-    if (selectedAreaIds.length > 0) {
-      if (!t.areaIds?.some((id) => selectedAreaIds.includes(Number(id)))) {
-        return false;
-      }
+    // 6. Check category
+    if (categoryFilter !== "all") {
+      if (!t.categoryIds?.includes(Number(categoryFilter))) return false;
     }
 
-    // Check responsible
+    // 7. Check responsible
     if (selectedResponsibleIds.length > 0) {
       if (!t.responsibleIds?.some((id) => selectedResponsibleIds.includes(Number(id)))) {
         return false;
       }
     }
 
-    // Check Period (Month / Quarter / Semester)
+    // 8. Check status
+    if (statusFilter.length < 3) {
+      if (statusFilter.length === 0) return false;
+      if (!statusFilter.includes(normalizeStatus(t.status))) return false;
+    }
+
+    // 9. Check situation (heavier check with date parsing)
+    if (situationFilter !== "all") {
+      if (getDeadlineStatus(t.endDate, t.status) !== situationFilter) return false;
+    }
+
+    // 10. Check Period (Month / Quarter / Semester)
     if (!taskMatchesPeriodFilter(t, periodTypeFilter, periodValueFilter)) {
       return false;
     }
@@ -2630,6 +2719,349 @@ export function PlanningTab({
 
     return { total, completed, inProgress, pending, avgProgress };
   }, [filteredTasks]);
+
+
+  // ----------------------------------------------------
+  // Entregas por Mês (Painel de Atividades)
+  // ----------------------------------------------------
+  const dashboardRefYear = useMemo(() => {
+    const selectedPlanObj = plans.find(p => p.id.toString() === planFilter) || plans.find(p => p.isActive) || plans[0];
+    if (selectedPlanObj?.name) {
+      const match = selectedPlanObj.name.match(/20\d\d/);
+      if (match) return parseInt(match[0]);
+    }
+    return new Date().getFullYear();
+  }, [planFilter, plans]);
+
+  const [dashboardDeliveriesYear, setDashboardDeliveriesYear] = useState<number>(new Date().getFullYear());
+
+  useEffect(() => {
+    if (dashboardRefYear) {
+      setDashboardDeliveriesYear(dashboardRefYear);
+    }
+  }, [dashboardRefYear]);
+
+  const completedDashboardTasks = useMemo(() => {
+    return filteredTasks.filter(t => normalizeStatus(t.status) === "Concluída" || Number(t.progress) === 100);
+  }, [filteredTasks]);
+
+  const availableDashboardDeliveriesYears = useMemo(() => {
+    const yearsSet = new Set<number>();
+    yearsSet.add(dashboardRefYear);
+    completedDashboardTasks.forEach(t => {
+      const dateStr = t.completedAt || t.endDate || t.updatedAt || t.startDate;
+      if (dateStr) {
+        try {
+          const y = new Date(dateStr).getFullYear();
+          if (!isNaN(y) && y >= 2020 && y <= 2035) {
+            yearsSet.add(y);
+          }
+        } catch {}
+      }
+    });
+    return Array.from(yearsSet).sort((a, b) => a - b);
+  }, [completedDashboardTasks, dashboardRefYear]);
+
+  const MONTHS_CONFIG_DASHBOARD = useMemo(() => [
+    { index: 0, abbr: "JAN", name: "Janeiro" },
+    { index: 1, abbr: "FEV", name: "Fevereiro" },
+    { index: 2, abbr: "MAR", name: "Março" },
+    { index: 3, abbr: "ABR", name: "Abril" },
+    { index: 4, abbr: "MAI", name: "Maio" },
+    { index: 5, abbr: "JUN", name: "Junho" },
+    { index: 6, abbr: "JUL", name: "Julho" },
+    { index: 7, abbr: "AGO", name: "Agosto" },
+    { index: 8, abbr: "SET", name: "Setembro" },
+    { index: 9, abbr: "OUT", name: "Outubro" },
+    { index: 10, abbr: "NOV", name: "Novembro" },
+    { index: 11, abbr: "DEZ", name: "Dezembro" },
+  ], []);
+
+  const monthlyDashboardDeliveriesData = useMemo(() => {
+    if (activeSubTab !== "dashboard") return [];
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonthIndex = today.getMonth();
+
+    // Pré-agrupar completedDashboardTasks por mês do dashboardDeliveriesYear em um único loop O(N)
+    const monthBuckets: Task[][] = Array.from({ length: 12 }, () => []);
+
+    completedDashboardTasks.forEach(t => {
+      const dateStr = t.completedAt || t.endDate || t.updatedAt || t.startDate;
+      if (!dateStr) return;
+      try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return;
+        if (d.getFullYear() === dashboardDeliveriesYear) {
+          const m = d.getMonth();
+          if (m >= 0 && m < 12) {
+            monthBuckets[m].push(t);
+          }
+        }
+      } catch {}
+    });
+
+    return MONTHS_CONFIG_DASHBOARD.map(month => {
+      const monthTasks = monthBuckets[month.index];
+      const isCurrentMonth = dashboardDeliveriesYear === currentYear && month.index === currentMonthIndex;
+
+      const areaCountMap: Record<number, number> = {};
+      monthTasks.forEach(t => {
+        const aId = t.areaId || (t.areaIds && t.areaIds[0]);
+        if (aId) {
+          areaCountMap[aId] = (areaCountMap[aId] || 0) + 1;
+        }
+      });
+
+      return {
+        ...month,
+        year: dashboardDeliveriesYear,
+        tasks: monthTasks,
+        count: monthTasks.length,
+        isCurrentMonth,
+        areaCountMap
+      };
+    });
+  }, [MONTHS_CONFIG_DASHBOARD, completedDashboardTasks, dashboardDeliveriesYear, activeSubTab]);
+
+  // Estado do Modal de Expansão de Status/Situação no Painel de Atividades (Replicado da Página Início)
+  const [expandedModalState, setExpandedModalState] = useState<ExpandedStatusModalState>({
+    isOpen: false,
+    scopeTitle: "",
+    categoryType: "status",
+    activeFilter: "all",
+    areaId: undefined,
+  });
+  const [modalSearchTerm, setModalSearchTerm] = useState("");
+
+  const openStatusModal = (config: Omit<ExpandedStatusModalState, "isOpen">) => {
+    setModalSearchTerm("");
+    setExpandedModalState({
+      isOpen: true,
+      ...config,
+    });
+  };
+
+  const closeStatusModal = () => {
+    setExpandedModalState(prev => ({ ...prev, isOpen: false }));
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && expandedModalState.isOpen) {
+        closeStatusModal();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [expandedModalState.isOpen]);
+
+  // Tarefas base do escopo atualmente aberto no modal
+  const modalScopeTasks = useMemo(() => {
+    if (!expandedModalState.isOpen) return [];
+    if (expandedModalState.areaId) {
+      const basePlanTasks = planFilter && planFilter !== "all"
+        ? tasks.filter(t => t.planId?.toString() === planFilter.toString())
+        : tasks;
+      return basePlanTasks.filter(t => 
+        t.areaIds?.some(id => Number(id) === Number(expandedModalState.areaId)) || 
+        Number(t.areaId) === Number(expandedModalState.areaId)
+      );
+    }
+    return filteredTasks;
+  }, [expandedModalState.isOpen, expandedModalState.areaId, planFilter, tasks, filteredTasks]);
+
+  // Contadores dinâmicos para as abas internas do modal
+  const modalCounts = useMemo(() => {
+    const delayed = modalScopeTasks.filter(t => getDeadlineStatus(t.endDate, t.status) === "Atrasada").length;
+    const critical = modalScopeTasks.filter(t => getDeadlineStatus(t.endDate, t.status) === "Crítica").length;
+    const onTime = modalScopeTasks.filter(t => getDeadlineStatus(t.endDate, t.status) === "No Prazo").length;
+    
+    const notStarted = modalScopeTasks.filter(t => normalizeStatus(t.status) === "Não iniciada").length;
+    const inProgress = modalScopeTasks.filter(t => normalizeStatus(t.status) === "Em andamento").length;
+    const completed = modalScopeTasks.filter(t => normalizeStatus(t.status) === "Concluída").length;
+    const total = modalScopeTasks.length;
+    return { delayed, critical, onTime, notStarted, inProgress, completed, total };
+  }, [modalScopeTasks]);
+
+  // Tarefas exibidas com busca e ordenação por criticidade
+  const modalDisplayTasks = useMemo(() => {
+    if (!expandedModalState.isOpen) return [];
+    let list = modalScopeTasks;
+    if (expandedModalState.categoryType === "status") {
+      if (expandedModalState.activeFilter !== "all") {
+        list = list.filter(t => getDeadlineStatus(t.endDate, t.status) === expandedModalState.activeFilter);
+      }
+    } else if (expandedModalState.categoryType === "situation") {
+      if (expandedModalState.activeFilter !== "all") {
+        list = list.filter(t => normalizeStatus(t.status) === expandedModalState.activeFilter);
+      }
+    }
+    if (modalSearchTerm.trim()) {
+      const term = modalSearchTerm.toLowerCase().trim();
+      list = list.filter(t => 
+        t.title?.toLowerCase().includes(term) ||
+        t.code?.toLowerCase().includes(term) ||
+        t.description?.toLowerCase().includes(term) ||
+        t.assignedTo?.toLowerCase().includes(term)
+      );
+    }
+    return [...list].sort((a, b) => {
+      const statusA = getDeadlineStatus(a.endDate, a.status);
+      const statusB = getDeadlineStatus(b.endDate, b.status);
+      const priorityOrder: Record<string, number> = { "Atrasada": 1, "Crítica": 2, "No Prazo": 3 };
+      const diff = (priorityOrder[statusA] || 99) - (priorityOrder[statusB] || 99);
+      if (diff !== 0) return diff;
+      if (a.endDate && b.endDate) {
+        return new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
+      }
+      return 0;
+    });
+  }, [expandedModalState, modalScopeTasks, modalSearchTerm]);
+
+  // Resumo consolidado por Área Temática para o Painel de Atividades (sem 'Minhas Tarefas') - Otimizado em O(N+M)
+  const dashboardAreaSummaries = useMemo(() => {
+    if (!areas || areas.length === 0) return [];
+    if (activeSubTab !== "dashboard") return [];
+
+    const basePlanTasks = planFilter && planFilter !== "all"
+      ? tasks.filter(t => t.planId?.toString() === planFilter.toString())
+      : tasks;
+
+    // Mapa de contadores por área para execução em único passe O(N)
+    const statsByAreaId = new Map<number, {
+      total: number;
+      notStarted: number;
+      inProgress: number;
+      completed: number;
+      progressSum: number;
+      onTime: number;
+      critical: number;
+      delayed: number;
+    }>();
+
+    areas.forEach(a => {
+      statsByAreaId.set(a.id, {
+        total: 0,
+        notStarted: 0,
+        inProgress: 0,
+        completed: 0,
+        progressSum: 0,
+        onTime: 0,
+        critical: 0,
+        delayed: 0,
+      });
+    });
+
+    basePlanTasks.forEach(t => {
+      const normStatus = normalizeStatus(t.status);
+      const dlStatus = getDeadlineStatus(t.endDate, t.status);
+      const prog = Number(t.progress) || 0;
+
+      const matchedAreaIds: number[] = [];
+      if (t.areaIds && t.areaIds.length > 0) {
+        t.areaIds.forEach(id => matchedAreaIds.push(Number(id)));
+      } else if (t.areaId) {
+        matchedAreaIds.push(Number(t.areaId));
+      }
+
+      matchedAreaIds.forEach(aId => {
+        const entry = statsByAreaId.get(aId);
+        if (entry) {
+          entry.total += 1;
+          entry.progressSum += prog;
+          if (normStatus === "Concluída") entry.completed += 1;
+          else if (normStatus === "Em andamento") entry.inProgress += 1;
+          else entry.notStarted += 1;
+
+          if (dlStatus === "No Prazo") entry.onTime += 1;
+          else if (dlStatus === "Crítica") entry.critical += 1;
+          else if (dlStatus === "Atrasada") entry.delayed += 1;
+        }
+      });
+    });
+
+    return areas.map(area => {
+      const stats = statsByAreaId.get(area.id) || {
+        total: 0,
+        notStarted: 0,
+        inProgress: 0,
+        completed: 0,
+        progressSum: 0,
+        onTime: 0,
+        critical: 0,
+        delayed: 0,
+      };
+      const avgProg = stats.total > 0 ? Math.round(stats.progressSum / stats.total) : 0;
+
+      return {
+        area,
+        name: area.name,
+        description: area.description,
+        total: stats.total,
+        notStarted: stats.notStarted,
+        inProgress: stats.inProgress,
+        completed: stats.completed,
+        avgProg,
+        onTime: stats.onTime,
+        critical: stats.critical,
+        delayed: stats.delayed
+      };
+    });
+  }, [areas, tasks, planFilter, activeSubTab]);
+
+  // Modal de Detalhes de Entregas por Mês no Painel
+  const [selectedDashboardMonthDeliveries, setSelectedDashboardMonthDeliveries] = useState<{
+    monthIndex: number;
+    monthName: string;
+    monthAbbr: string;
+    year: number;
+  } | null>(null);
+  const [dashMonthModalAreaFilter, setDashMonthModalAreaFilter] = useState<number | "all">("all");
+  const [dashMonthModalSearch, setDashMonthModalSearch] = useState<string>("");
+
+  const selectedDashboardMonthTasks = useMemo(() => {
+    if (!selectedDashboardMonthDeliveries) return [];
+    return completedDashboardTasks.filter(t => {
+      const dateStr = t.completedAt || t.endDate || t.updatedAt || t.startDate;
+      if (!dateStr) return false;
+      try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return false;
+        return d.getFullYear() === selectedDashboardMonthDeliveries.year && d.getMonth() === selectedDashboardMonthDeliveries.monthIndex;
+      } catch {
+        return false;
+      }
+    });
+  }, [selectedDashboardMonthDeliveries, completedDashboardTasks]);
+
+  const dashMonthAvailableAreas = useMemo(() => {
+    if (!selectedDashboardMonthTasks.length) return [];
+    const areaIds = new Set<number>();
+    selectedDashboardMonthTasks.forEach(t => {
+      if (t.areaId) areaIds.add(t.areaId);
+      if (t.areaIds) t.areaIds.forEach(id => areaIds.add(id));
+    });
+    return areas.filter(a => areaIds.has(a.id));
+  }, [selectedDashboardMonthTasks, areas]);
+
+  const filteredDashMonthTasks = useMemo(() => {
+    return selectedDashboardMonthTasks.filter(task => {
+      if (dashMonthModalAreaFilter !== "all") {
+        const matchesArea = task.areaId === dashMonthModalAreaFilter || (task.areaIds && task.areaIds.includes(dashMonthModalAreaFilter));
+        if (!matchesArea) return false;
+      }
+      if (dashMonthModalSearch.trim()) {
+        const query = dashMonthModalSearch.toLowerCase().trim();
+        const titleMatch = task.title?.toLowerCase().includes(query);
+        const descMatch = task.description?.toLowerCase().includes(query);
+        const codeMatch = task.code?.toLowerCase().includes(query);
+        const idMatch = task.id.toString().includes(query);
+        if (!titleMatch && !descMatch && !codeMatch && !idMatch) return false;
+      }
+      return true;
+    });
+  }, [selectedDashboardMonthTasks, dashMonthModalAreaFilter, dashMonthModalSearch]);
 
   // Chart data 1: Status Distribution
 
@@ -2758,32 +3190,57 @@ export function PlanningTab({
     return { rows, cols, matrix, maxCount };
   }, [filteredTasks]);
 
-  // Chart data 2: Average Progress and Task Count per Area
+  // Chart data 2: Average Progress and Task Count per Area - Otimizado O(N+M)
   const areaChartData = useMemo(() => {
     if (!areas || areas.length === 0) return [];
+    if (activeSubTab !== "dashboard") return [];
     
     const targetAreas = selectedAreaIds.length > 0 
       ? areas.filter(a => selectedAreaIds.includes(a.id))
       : areas;
 
+    const statsMap = new Map<number, {
+      total: number;
+      completed: number;
+      inProgress: number;
+      pending: number;
+      progressSum: number;
+    }>();
+
+    targetAreas.forEach(a => {
+      statsMap.set(a.id, { total: 0, completed: 0, inProgress: 0, pending: 0, progressSum: 0 });
+    });
+
+    filteredTasks.forEach(t => {
+      const norm = normalizeStatus(t.status);
+      const prog = Number(t.progress) || 0;
+      const tAreas = t.areaIds && t.areaIds.length > 0 ? t.areaIds : (t.areaId ? [t.areaId] : []);
+      tAreas.forEach(id => {
+        const entry = statsMap.get(Number(id));
+        if (entry) {
+          entry.total += 1;
+          entry.progressSum += prog;
+          if (norm === "Concluída") entry.completed += 1;
+          else if (norm === "Em andamento") entry.inProgress += 1;
+          else entry.pending += 1;
+        }
+      });
+    });
+
     return targetAreas.map(area => {
-      const areaTasks = filteredTasks.filter(t => t.areaIds?.includes(area.id));
-      const total = areaTasks.length;
-      const completed = areaTasks.filter(t => normalizeStatus(t.status) === "Concluída").length;
-      const inProgress = areaTasks.filter(t => normalizeStatus(t.status) === "Em andamento").length;
-      const pending = areaTasks.filter(t => normalizeStatus(t.status) === "Não iniciada").length;
-      const avgProg = total > 0 ? Math.round(areaTasks.reduce((acc, t) => acc + (t.progress || 0), 0) / total) : 0;
+      const stats = statsMap.get(area.id) || { total: 0, completed: 0, inProgress: 0, pending: 0, progressSum: 0 };
+      const avgProg = stats.total > 0 ? Math.round(stats.progressSum / stats.total) : 0;
       return {
         name: area.name,
         fullName: area.name,
         "Progresso Médio (%)": avgProg,
-        "Total de Atividades": total,
-        "Não iniciada": pending,
-        "Em andamento": inProgress,
-        "Concluídas": completed
+        "Total de Atividades": stats.total,
+        "Não iniciada": stats.pending,
+        "Em andamento": stats.inProgress,
+        "Concluídas": stats.completed
       };
     }).filter(d => d["Total de Atividades"] > 0);
-  }, [filteredTasks, areas, selectedAreaIds]);
+  }, [filteredTasks, areas, selectedAreaIds, activeSubTab]);
 
   // Chart data 3: Priority breakdown
   const priorityChartData = useMemo(() => {
@@ -2806,6 +3263,7 @@ export function PlanningTab({
 
   const areaQuarterStatusData = useMemo(() => {
     if (!areas || areas.length === 0) return [];
+    if (activeSubTab !== "dashboard") return [];
     
     const dataMap: Record<string, any> = {};
 
@@ -3096,6 +3554,7 @@ export function PlanningTab({
   }, [groupedDashboardData, expandedGroups, isAnyFilterActive]);
 
   const groupedQuarterDashboardData = useMemo(() => {
+    if (activeSubTab !== "dashboard") return [];
     const planMap: Record<number, { plan: Plan; tasks: Task[] }> = {};
     plans.forEach(p => { planMap[p.id] = { plan: p, tasks: [] }; });
     const NO_PLAN_ID = 0;
@@ -3272,6 +3731,7 @@ export function PlanningTab({
   }, [groupedQuarterDashboardData, expandedQuarterGroups, isAnyFilterActive]);
 
   const groupedPlanQuarterAreaData = useMemo(() => {
+    if (activeSubTab !== "dashboard") return [];
     const planMap: Record<number, { plan: Plan; tasks: Task[] }> = {};
     plans.forEach(p => { planMap[p.id] = { plan: p, tasks: [] }; });
     const NO_PLAN_ID = 0;
@@ -4081,9 +4541,21 @@ export function PlanningTab({
       const task = tasks.find(t => t.id === editingTaskIdFromPainel);
       if (task) {
         handleEditTask(task);
-      }
-      if (setEditingTaskIdFromPainel) {
-        setEditingTaskIdFromPainel(null);
+        if (setEditingTaskIdFromPainel) {
+          setEditingTaskIdFromPainel(null);
+        }
+      } else {
+        fetch(`/api/tasks/${editingTaskIdFromPainel}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.id) {
+              handleEditTask(data);
+              if (setEditingTaskIdFromPainel) {
+                setEditingTaskIdFromPainel(null);
+              }
+            }
+          })
+          .catch(err => console.error("Error fetching task for edit:", err));
       }
     }
   }, [editingTaskIdFromPainel, tasks]);
@@ -4228,6 +4700,236 @@ export function PlanningTab({
     if (progress === 100) return "Concluída";
     if (progress > 0) return "Em andamento";
     return "Não iniciada";
+  };
+
+  const renderProgressCalc = (targetTaskId: number | null, fallbackProgress: number) => {
+    if (!targetTaskId) return null;
+    return (
+      <div className="space-y-5 max-h-[50vh] overflow-y-auto custom-scrollbar pr-2">
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-blue-800 text-sm shadow-sm">
+                      <h4 className="font-bold flex items-center gap-2 mb-2"><Activity size={16} /> Cálculo por Pesos Relativos Livres</h4>
+                      <p className="mb-2">O <strong>cálculo por pesos relativos livres</strong> permite que você defina a importância de cada subtarefa em relação às outras atribuindo-lhes um valor numérico ("peso"). Este peso não precisa somar 100.</p>
+                      <ul className="list-disc pl-5 space-y-1 mt-2 text-xs">
+                        <li>Uma subtarefa com peso <strong>2.0</strong> impacta o dobro no progresso da tarefa pai do que uma tarefa com peso <strong>1.0</strong>.</li>
+                        <li>Se uma tarefa não possui subtarefas, seu progresso é inserido de forma manual.</li>
+                        <li>Se possui subtarefas, o progresso da tarefa pai é a soma do progresso ponderado de cada componente, dividido pela soma de todos os pesos.</li>
+                      </ul>
+                    </div>
+                    
+                    {(() => {
+                      if (!targetTaskId || !childrenMap[targetTaskId] || childrenMap[targetTaskId].length === 0) {
+                        return (
+                          <div className="space-y-4">
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+                              <p className="text-sm font-semibold text-slate-500 mb-1">Cálculo Manual</p>
+                              <p className="text-xs text-slate-400">Esta atividade não possui subtarefas dependentes. Seu progresso deve ser informado e atualizado manualmente na aba Formulário.</p>
+                            </div>
+                            
+                            <div className="bg-gradient-to-br from-emerald-50/50 to-slate-50/50 border border-emerald-100 rounded-2xl p-5 shadow-sm">
+                              <div className="flex items-center gap-2 mb-3 border-b border-emerald-100 pb-3">
+                                <Activity className="text-emerald-600 shrink-0" size={18} />
+                                <h4 className="font-black text-slate-800 text-xs uppercase tracking-wider">Fórmula de Cálculo Manual</h4>
+                              </div>
+                              <div className="bg-white border border-slate-200 p-4 rounded-xl flex items-center gap-2 font-mono text-xs">
+                                <span className="text-slate-500 font-bold">Progresso =</span>
+                                <span className="font-bold text-slate-800">Progresso Definido Manualmente =</span>
+                                <span className="text-base font-black text-emerald-700 bg-emerald-100/40 px-2.5 py-1 rounded-lg">{(fallbackProgress)}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Compute active elements
+                      const subtasks = childrenMap[targetTaskId];
+                      let totalWeight = 0;
+                      let totalCalculated = 0;
+                      
+                      const computeChildNode = (nodeId: number): any => {
+                        const node = taskById[nodeId];
+                        if (!node) return { progress: 0, weight: 1 };
+                        const cList = childrenMap[nodeId] || [];
+                        if (cList.length === 0) return { progress: node.progress || 0, weight: node.weight !== undefined && node.weight !== ("" as any) ? Number(node.weight) : 1 };
+                        let cTotalP = 0;
+                        let cTotalW = 0;
+                        cList.forEach(c => {
+                          const cChild = computeChildNode(c.id);
+                          const w = cChild.weight;
+                          cTotalP += (cChild.progress || 0) * w;
+                          cTotalW += w;
+                        });
+                        return { 
+                          progress: cTotalW > 0 ? Math.round(cTotalP / cTotalW) : 0, 
+                          weight: node.weight !== undefined && node.weight !== ("" as any) ? Number(node.weight) : 1 
+                        };
+                      };
+
+                      const subtaskDetails = subtasks.map(sub => {
+                        const childInfo = computeChildNode(sub.id);
+                        const prog = childInfo.progress;
+                        const w = childInfo.weight;
+                        const impacto = prog * w;
+                        totalWeight += w;
+                        totalCalculated += impacto;
+                        return {
+                          id: sub.id,
+                          title: getTaskDisplayName(sub),
+                          progress: prog,
+                          weight: w,
+                          impact: impacto
+                        };
+                      });
+
+                      const finalResult = totalWeight > 0 ? Math.round(totalCalculated / totalWeight) : 0;
+
+                      return (
+                        <div className="space-y-5">
+                          {/* Rich mathematical dynamic formula display */}
+                          <div className="bg-gradient-to-br from-indigo-50/70 to-slate-50 border border-indigo-100 rounded-2xl p-5 shadow-sm">
+                            <div className="flex items-center justify-between border-b border-indigo-100 pb-3 mb-4">
+                              <div className="flex items-center gap-2">
+                                <Activity className="text-indigo-600 shrink-0" size={18} />
+                                <h4 className="font-black text-slate-800 text-xs uppercase tracking-wider">Demonstração da Fórmula Geral</h4>
+                              </div>
+                              <div className="bg-emerald-600 text-white font-black text-xs px-3 py-1.5 rounded-full shadow-sm">
+                                Resultado = {finalResult}%
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-4 font-mono text-xs text-slate-700">
+                              {/* Step 1: General formula */}
+                              <div>
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">1. Fórmula de Média Ponderada</span>
+                                <div className="bg-white border border-slate-200/60 p-3 rounded-xl overflow-x-auto">
+                                  <div className="flex items-center gap-2 min-w-max">
+                                    <span className="text-slate-500 font-bold">Progresso Geral =</span>
+                                    <div className="flex flex-col items-center">
+                                      <span className="pb-1 border-b border-slate-300 px-2 font-semibold">∑ (Progresso_sub × Peso_sub)</span>
+                                      <span className="pt-1 px-2 font-semibold">∑ Peso_sub</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Step 2: Replaced Values */}
+                              <div>
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">2. Substituição Recursiva com Valores Atuais</span>
+                                <div className="bg-white border border-slate-200/60 p-3 rounded-xl overflow-x-auto">
+                                  <div className="flex items-center gap-2 min-w-max">
+                                    <span className="text-slate-500 font-bold">Progresso Geral =</span>
+                                    <div className="flex flex-col items-center">
+                                      <span className="pb-1 border-b border-slate-300 px-2">
+                                        {subtaskDetails.map((s, idx) => (
+                                          <span key={s.id}>
+                                            {idx > 0 && " + "}
+                                            <span className="bg-slate-100 font-bold text-slate-700 px-1 py-0.5 rounded" title={s.title}>
+                                              ({s.progress}% × {s.weight})
+                                            </span>
+                                          </span>
+                                        ))}
+                                      </span>
+                                      <span className="pt-1 px-2">
+                                        {subtaskDetails.map((s, idx) => (
+                                          <span key={s.id}>
+                                            {idx > 0 && " + "}
+                                            <span className="font-bold text-indigo-600">{s.weight}</span>
+                                          </span>
+                                        ))}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Step 3: Impact calculation */}
+                              <div>
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">3. Cálculo Resolvido (Soma dos Impactos)</span>
+                                <div className="bg-white border border-slate-200/60 p-3 rounded-xl overflow-x-auto">
+                                  <div className="flex items-center gap-2 min-w-max">
+                                    <span className="text-slate-500 font-bold">Progresso Geral =</span>
+                                    <div className="flex flex-col items-center">
+                                      <span className="pb-1 border-b border-slate-300 px-2">
+                                        {subtaskDetails.map((s, idx) => (
+                                          <span key={s.id}>
+                                            {idx > 0 && " + "}
+                                            <span className="bg-indigo-50 font-bold text-indigo-700 px-1.5 py-0.5 rounded" title={`Impacto da sub: ${s.title}`}>
+                                              {s.impact.toFixed(1)}
+                                            </span>
+                                          </span>
+                                        ))}
+                                      </span>
+                                      <span className="pt-1 px-2 font-bold text-indigo-700">
+                                        {totalWeight} (Soma de Pesos)
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Step 4: Division and final percent */}
+                              <div>
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">4. Divisão Final e Arredondamento Matemático</span>
+                                <div className="bg-white border border-slate-200/60 p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                  <div className="flex items-center gap-2.5 flex-wrap">
+                                    <span className="text-slate-500 font-bold">Progresso =</span>
+                                    <div className="flex flex-col items-center">
+                                      <span className="pb-1 border-b border-slate-300 px-2 font-extrabold text-emerald-600">{totalCalculated.toFixed(1)}</span>
+                                      <span className="pt-1 px-2 font-extrabold text-indigo-700">{totalWeight}</span>
+                                    </div>
+                                    <span className="text-slate-400 font-black">≈</span>
+                                    <span className="text-xs font-black text-slate-800 bg-slate-100 px-2 py-1 rounded">{(totalCalculated / totalWeight).toFixed(3)}%</span>
+                                    <span className="text-slate-400 font-black">→</span>
+                                    <span className="text-sm font-black text-white bg-emerald-600 px-3 py-1 rounded-lg shadow-sm">{finalResult}%</span>
+                                  </div>
+                                  
+                                  <div className="text-[9px] text-slate-400 leading-tight font-sans">
+                                    * Considerado os pesos definidos recursivos para o cálculo unificado.
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Table with dependent subtasks, preserved as requested */}
+                          <div className="space-y-3">
+                            <h5 className="font-bold text-sm text-slate-700">Subtarefas Dependentes ({subtasks.length})</h5>
+                            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                              <table className="w-full text-left border-collapse">
+                                <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                  <tr>
+                                    <th className="px-3.5 py-3">Subtarefa</th>
+                                    <th className="px-3 py-3 text-right">Progresso</th>
+                                    <th className="px-3 py-3 text-right">Peso</th>
+                                    <th className="px-3 py-3 text-right">Impacto Ponderado</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-medium">
+                                  {subtaskDetails.map(subDet => (
+                                    <tr key={subDet.id} className="hover:bg-slate-50/50 transition-colors">
+                                      <td className="px-3.5 py-2.5 font-bold max-w-[200px] truncate" title={subDet.title}>
+                                        {subDet.title}
+                                      </td>
+                                      <td className="px-3 py-2.5 text-right">{subDet.progress}%</td>
+                                      <td className="px-3 py-2.5 text-right font-black text-indigo-600">{subDet.weight}</td>
+                                      <td className="px-3 py-2.5 text-right text-slate-500">{subDet.impact.toFixed(1)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                                <tfoot className="bg-slate-50/80 border-t border-slate-200 text-xs font-black text-slate-700">
+                                  <tr>
+                                    <td colSpan={2} className="px-3.5 py-3 text-right uppercase tracking-widest text-[9px] text-slate-500">Soma Totalizadores:</td>
+                                    <td className="px-3 py-3 text-right text-indigo-700 text-sm">∑ Pesos = {totalWeight}</td>
+                                    <td className="px-3 py-3 text-right text-emerald-600 text-sm">∑ Impactos = {totalCalculated.toFixed(1)}</td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+    );
   };
 
   const getTaskDisplayName = (t: Task | undefined) => {
@@ -7632,66 +8334,232 @@ export function PlanningTab({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Total Tasks Card */}
-            <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm flex items-center justify-between text-left transition-all hover:-translate-y-1 hover:shadow-md hover:scale-[1.02] cursor-default duration-300">
+            <div 
+              onClick={() => openStatusModal({
+                scopeTitle: plans.find(p => p.id.toString() === planFilter)?.name || "Painel de Atividades",
+                scopeSubtitle: "Todas as atividades filtradas no painel",
+                categoryType: "status",
+                activeFilter: "all"
+              })}
+              className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm flex items-center justify-between text-left transition-all hover:-translate-y-1 hover:shadow-md hover:scale-[1.02] hover:border-indigo-300 cursor-pointer duration-300 group"
+              title="Clique para ver a lista de todas as atividades"
+            >
               <div className="space-y-1">
                 <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase flex items-center gap-1.5 w-max" title="Número total de atividades contabilizadas (filhas ou não agrupadas) dentro dos filtros atuais.">
                   Total de Atividades
                   <Info size={12} className="text-indigo-400 hover:text-indigo-600 cursor-help transition-colors" />
                 </span>
-                <p className="text-3xl font-black text-slate-800">{dashboardStats.total}</p>
-                <p className="text-[10px] text-slate-400 font-bold">filtradas no painel</p>
+                <p className="text-3xl font-black text-slate-800 group-hover:text-indigo-600 transition-colors">{dashboardStats.total}</p>
+                <div className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
+                  <span>filtradas no painel</span>
+                  <span className="text-[10px] text-indigo-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">• expandir</span>
+                </div>
               </div>
-              <div className="p-3.5 bg-indigo-50 rounded-2xl text-indigo-600">
-                <FolderKanban size={22} />
+              <div className="p-3.5 bg-indigo-50 rounded-2xl text-indigo-600 border border-indigo-100 group-hover:bg-indigo-600 group-hover:text-white transition-colors flex items-center justify-center shrink-0">
+                <FolderKanban size={22} className="stroke-[2.2]" />
               </div>
             </div>
 
             {/* Actions in queue Card - Not Started */}
-            <div className="bg-slate-100 rounded-3xl border border-slate-200/80 p-5 shadow-sm flex items-center justify-between text-left transition-all hover:-translate-y-1 hover:shadow-md hover:scale-[1.02] cursor-default duration-300">
+            <div 
+              onClick={() => openStatusModal({
+                scopeTitle: plans.find(p => p.id.toString() === planFilter)?.name || "Painel de Atividades",
+                scopeSubtitle: "Atividades com status Não Iniciada",
+                categoryType: "situation",
+                activeFilter: "Não iniciada"
+              })}
+              className="bg-slate-100 rounded-3xl border border-slate-200/80 p-5 shadow-sm flex items-center justify-between text-left transition-all hover:-translate-y-1 hover:shadow-md hover:scale-[1.02] hover:border-slate-400 cursor-pointer duration-300 group"
+              title="Clique para ver a lista de atividades não iniciadas"
+            >
               <div className="space-y-1">
                 <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase flex items-center gap-1.5 w-max" title="Quantidade de atividades com progresso igual a 0%. Indicativo de passivo de execução inicial.">
                   Não Iniciadas
                   <Info size={12} className="text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
                 </span>
-                <p className="text-3xl font-black text-slate-800">{dashboardStats.pending}</p>
-                <p className="text-[10px] text-slate-500 font-bold">atividades pendentes</p>
+                <p className="text-3xl font-black text-slate-800 group-hover:text-slate-700 transition-colors">{dashboardStats.pending}</p>
+                <div className="text-[10px] text-slate-500 font-bold flex items-center gap-1">
+                  <span>atividades pendentes</span>
+                  <span className="text-[10px] text-slate-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">• expandir</span>
+                </div>
               </div>
-              <div className="p-3.5 bg-white rounded-2xl text-slate-500 shadow-sm border border-slate-200/40">
-                <Clock size={22} />
+              <div className="p-3.5 bg-white rounded-2xl text-slate-500 shadow-sm border border-slate-200/40 group-hover:bg-slate-700 group-hover:text-white transition-colors flex items-center justify-center shrink-0">
+                <Clock size={22} className="stroke-[2.2]" />
               </div>
             </div>
 
             {/* Actions in queue Card - In Progress */}
-            <div className="bg-blue-100 rounded-3xl border border-blue-200/80 p-5 shadow-sm flex items-center justify-between text-left transition-all hover:-translate-y-1 hover:shadow-md hover:scale-[1.02] cursor-default duration-300">
+            <div 
+              onClick={() => openStatusModal({
+                scopeTitle: plans.find(p => p.id.toString() === planFilter)?.name || "Painel de Atividades",
+                scopeSubtitle: "Atividades com status Em Andamento",
+                categoryType: "situation",
+                activeFilter: "Em andamento"
+              })}
+              className="bg-blue-100 rounded-3xl border border-blue-200/80 p-5 shadow-sm flex items-center justify-between text-left transition-all hover:-translate-y-1 hover:shadow-md hover:scale-[1.02] hover:border-blue-400 cursor-pointer duration-300 group"
+              title="Clique para ver a lista de atividades em andamento"
+            >
               <div className="space-y-1">
                 <span className="text-[10px] font-black tracking-widest text-blue-500 uppercase flex items-center gap-1.5 w-max" title="Quantidade de atividades sendo executadas no momento (progresso > 0% e < 100%).">
                   Em Andamento
                   <Info size={12} className="text-blue-400 hover:text-blue-600 cursor-help transition-colors" />
                 </span>
-                <p className="text-3xl font-black text-blue-900">{dashboardStats.inProgress}</p>
-                <p className="text-[10px] text-blue-500 font-bold">atividades iniciadas</p>
+                <p className="text-3xl font-black text-blue-900 group-hover:text-blue-700 transition-colors">{dashboardStats.inProgress}</p>
+                <div className="text-[10px] text-blue-500 font-bold flex items-center gap-1">
+                  <span>atividades iniciadas</span>
+                  <span className="text-[10px] text-blue-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">• expandir</span>
+                </div>
               </div>
-              <div className="p-3.5 bg-white rounded-2xl text-blue-600 shadow-sm border border-blue-200/40">
-                <Activity size={22} />
+              <div className="p-3.5 bg-white rounded-2xl text-blue-600 shadow-sm border border-blue-200/40 group-hover:bg-blue-600 group-hover:text-white transition-colors flex items-center justify-center shrink-0">
+                <Activity size={22} className="stroke-[2.2]" />
               </div>
             </div>
 
             {/* Completed Card */}
-            <div className="bg-emerald-100 rounded-3xl border border-emerald-200/80 p-5 shadow-sm flex items-center justify-between text-left transition-all hover:-translate-y-1 hover:shadow-md hover:scale-[1.02] cursor-default duration-300">
+            <div 
+              onClick={() => openStatusModal({
+                scopeTitle: plans.find(p => p.id.toString() === planFilter)?.name || "Painel de Atividades",
+                scopeSubtitle: "Atividades finalizadas",
+                categoryType: "situation",
+                activeFilter: "Concluída"
+              })}
+              className="bg-emerald-100 rounded-3xl border border-emerald-200/80 p-5 shadow-sm flex items-center justify-between text-left transition-all hover:-translate-y-1 hover:shadow-md hover:scale-[1.02] hover:border-emerald-400 cursor-pointer duration-300 group"
+              title="Clique para ver a lista de atividades concluídas"
+            >
               <div className="space-y-1">
                 <span className="text-[10px] font-black tracking-widest text-emerald-600 uppercase flex items-center gap-1.5 w-max" title="Quantidade de atividades plenamente executadas e finalizadas com sucesso (100% de progresso).">
                   Concluídas
                   <Info size={12} className="text-emerald-400 hover:text-emerald-600 cursor-help transition-colors" />
                 </span>
-                <p className="text-3xl font-black text-emerald-900">{dashboardStats.completed}</p>
-                <p className="text-[10px] text-emerald-600 font-bold">atividades finalizadas</p>
+                <p className="text-3xl font-black text-emerald-900 group-hover:text-emerald-700 transition-colors">{dashboardStats.completed}</p>
+                <div className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                  <span>atividades finalizadas</span>
+                  <span className="text-[10px] text-emerald-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">• expandir</span>
+                </div>
               </div>
-              <div className="p-3.5 bg-white rounded-2xl text-emerald-600 shadow-sm border border-emerald-200/40">
-                <CheckCircle2 size={22} />
+              <div className="p-3.5 bg-white rounded-2xl text-emerald-600 shadow-sm border border-emerald-200/40 group-hover:bg-emerald-600 group-hover:text-white transition-colors flex items-center justify-center shrink-0">
+                <CheckCircle2 size={22} className="stroke-[2.2]" />
               </div>
             </div>
           </div>
         </div>
+
+        {/* Linha do Tempo: Entregas por Mês (Replicado após o box Concluídas) */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4 w-full text-left">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shrink-0">
+                <CalendarCheck size={18} className="stroke-[2.2]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm sm:text-base font-black text-slate-800 tracking-tight">
+                    Entregas por Mês
+                  </h4>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    {completedDashboardTasks.length} {completedDashboardTasks.length === 1 ? "concluída" : "concluídas"}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Linha do tempo das atividades concluídas. Clique em um mês para abrir as tarefas e filtrar por área.
+                </p>
+              </div>
+            </div>
+
+            {availableDashboardDeliveriesYears.length > 1 && (
+              <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-100 p-1 rounded-xl border border-slate-200/70">
+                {availableDashboardDeliveriesYears.map(y => (
+                  <button
+                    key={y}
+                    onClick={() => setDashboardDeliveriesYear(y)}
+                    className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                      dashboardDeliveriesYear === y
+                        ? "bg-white text-emerald-700 shadow-xs border border-slate-200/60"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    {y}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Timeline Track with 12 months */}
+          <div className="relative pt-1 pb-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2.5 relative z-10">
+              {monthlyDashboardDeliveriesData.map(m => {
+                const hasDeliveries = m.count > 0;
+                return (
+                  <div
+                    key={m.index}
+                    onClick={() => {
+                      setSelectedDashboardMonthDeliveries({
+                        monthIndex: m.index,
+                        monthName: m.name,
+                        monthAbbr: m.abbr,
+                        year: m.year
+                      });
+                      setDashMonthModalAreaFilter("all");
+                      setDashMonthModalSearch("");
+                    }}
+                    className={`group relative rounded-2xl p-3 border transition-all duration-200 cursor-pointer flex flex-col justify-between items-center text-center select-none ${
+                      m.isCurrentMonth
+                        ? "ring-2 ring-indigo-500/50 ring-offset-2 bg-indigo-50/20"
+                        : ""
+                    } ${
+                      hasDeliveries
+                        ? "bg-gradient-to-b from-white to-emerald-50/50 border-emerald-200 hover:border-emerald-400 hover:shadow-md hover:-translate-y-0.5"
+                        : "bg-slate-50/80 border-slate-200/80 hover:bg-white hover:border-slate-300 hover:shadow-xs"
+                    }`}
+                    title={`Clique para ver as ${m.count} atividades concluídas em ${m.name} de ${m.year}`}
+                  >
+                    {/* Top Node Indicator */}
+                    <div className="flex items-center justify-between w-full mb-1">
+                      <span className={`text-[11px] font-black uppercase tracking-wider ${
+                        hasDeliveries ? "text-emerald-700" : "text-slate-500"
+                      }`}>
+                        {m.abbr}
+                      </span>
+                      {m.isCurrentMonth ? (
+                        <span className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse" title="Mês atual" />
+                      ) : (
+                        <span className={`w-1.5 h-1.5 rounded-full ${hasDeliveries ? "bg-emerald-500" : "bg-slate-300"}`} />
+                      )}
+                    </div>
+
+                    {/* Counter Circle / Big Number */}
+                    <div className="my-1 flex flex-col items-center">
+                      <div className={`text-2xl font-black tracking-tight tabular-nums transition-colors ${
+                        hasDeliveries 
+                          ? "text-emerald-700 group-hover:text-emerald-800" 
+                          : "text-slate-400 group-hover:text-slate-600"
+                      }`}>
+                        {m.count}
+                      </div>
+                      <span className={`text-[9px] font-bold ${
+                        hasDeliveries ? "text-emerald-600/90" : "text-slate-400"
+                      }`}>
+                        {m.count === 1 ? "entrega" : "entregas"}
+                      </span>
+                    </div>
+
+                    {/* Bottom micro link */}
+                    <div className="w-full pt-1.5 mt-1 border-t border-slate-100 flex items-center justify-center">
+                      <span className={`text-[9px] font-bold tracking-tight transition-colors ${
+                        hasDeliveries
+                          ? "text-emerald-600 group-hover:underline"
+                          : "text-slate-400"
+                      }`}>
+                        {hasDeliveries ? "Ver tarefas →" : "Ver mês →"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
 
         {/* CHARTS CONTAINER GRID */}
         {dashboardStats.total === 0 ? (
@@ -7942,108 +8810,256 @@ export function PlanningTab({
               </div>
             </div>
 
-            {/* Chart 3: Priority breakdown & Area table summary -> takes full 12 cols */}
-            <div className="lg:col-span-12 grid grid-cols-1 md:grid-cols-12 gap-6 bg-slate-50 border border-slate-200 rounded-[2rem] p-6 shadow-xs text-left">
-              
-              {/* Priority BarChart -> takes 4 cols */}
-              <div className="md:col-span-4 bg-white border border-slate-200 rounded-3xl p-5 shadow-sm flex flex-col justify-between">
-                <div>
-                  <dt className="text-xs font-black tracking-widest text-slate-400 uppercase flex items-center gap-1.5 w-max" title="Níveis de urgência assinalados às demandas, útil para mensurar filas de emergência versus fluxos de rotina.">
-                    Urgência
-                    <Info size={13} className="text-slate-400 hover:text-indigo-500 cursor-help transition-colors" />
-                  </dt>
-                  <h4 className="text-sm font-black text-slate-800 mt-1">Atividades por Prioridade</h4>
-                  <p className="text-[10px] text-slate-500 font-medium">Contagem por nível estipulado.</p>
+            {/* Box Resumo por Área Temática (Replicado da Página Início, posicionado após Progresso Médio por Área) */}
+            <div className="lg:col-span-12 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center shrink-0">
+                    <BookmarkCheck size={18} className="stroke-[2.2]" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-black text-slate-800 tracking-tight">
+                      Resumo por Área Temática
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Visão detalhada por área com indicadores de situação e prazos. Clique nos números para abrir as atividades.
+                    </p>
+                  </div>
                 </div>
-                <div className="h-44 mt-2">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={priorityChartData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
-                      <XAxis dataKey="priority" tick={{ fill: "#64748b", fontSize: 9, fontWeight: "bold" }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: "#64748b", fontSize: 9 }} axisLine={false} tickLine={false} />
-                      <Tooltip content={<CustomPriorityTooltip />} cursor={{ fill: 'rgba(2f, 41, 58, 0.04)' }} />
-                      <Bar dataKey="Quantidade" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={30}>
-                        {priorityChartData.map((entry, index) => {
-                          let color = "#3b82f6"; // media
-                          if (entry.priority === "ALTA") color = "#f43f5e"; // high
-                          if (entry.priority === "BAIXA") color = "#10b981"; // low
-                          return <Cell key={`cell-${index}`} fill={color} />;
-                        })}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <span className="text-xs font-bold text-slate-400 self-start sm:self-auto bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
+                  {dashboardAreaSummaries.length} {dashboardAreaSummaries.length === 1 ? 'área listada' : 'áreas listadas'}
+                </span>
               </div>
 
-              {/* Summary table of Tasks of the Areas -> takes 8 cols */}
-              <div className="md:col-span-8 bg-white border border-slate-200 rounded-3xl p-5 shadow-sm flex flex-col justify-between justify-items-stretch">
-                <div>
-                  <dt className="text-xs font-black tracking-widest text-slate-400 uppercase flex items-center gap-1.5 w-max" title="Tabela comparativa sintetizando a volumetria de tarefas e sua conversão efetiva por departamento.">
-                    Consolidação Operacional
-                    <Info size={13} className="text-slate-400 hover:text-indigo-500 cursor-help transition-colors" />
-                  </dt>
-                  <h4 className="text-sm font-black text-slate-800 mt-1">Sumário Técnico de Metas e Conclusão</h4>
-                  <p className="text-[10px] text-slate-500 font-medium">Resumo detalhado por área operacional ativa.</p>
+              {dashboardAreaSummaries.length === 0 ? (
+                <div className="bg-white rounded-3xl p-8 border border-slate-200/80 text-center text-slate-400">
+                  <Info size={32} className="mx-auto mb-2 opacity-40" />
+                  Nenhuma área temática cadastrada.
                 </div>
-                <div className="mt-3 overflow-x-auto border border-slate-100 rounded-xl">
-                  <table className="w-full text-left text-xs text-slate-600 border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-400 border-b border-slate-100">
-                        <th className="px-3.5 py-2 font-black uppercase text-[9px] tracking-wider">Área</th>
-                        <th className="px-3.5 py-2 font-black uppercase text-[9px] tracking-wider">Total Atividades</th>
-                        <th className="px-3.5 py-2 font-black uppercase text-[9px] tracking-wider">Qtde Não Iniciada</th>
-                        <th className="px-3.5 py-2 font-black uppercase text-[9px] tracking-wider">Qtde Em Andamento</th>
-                        <th className="px-3.5 py-2 font-black uppercase text-[9px] tracking-wider">Qtde Concluídas</th>
-                        <th className="px-3.5 py-2 font-black uppercase text-[9px] tracking-wider min-w-[140px]">Progresso</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {areaChartData.slice(0, 5).map((row, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-3.5 py-2 font-black text-slate-800 uppercase" title={row.fullName}>{row.name}</td>
-                          <td className="px-3.5 py-2 font-bold">{row["Total de Atividades"]}</td>
-                          <td className="px-3.5 py-2 font-bold text-slate-500">{row["Não iniciada"]}</td>
-                          <td className="px-3.5 py-2 font-bold text-blue-500">{row["Em andamento"]}</td>
-                          <td className="px-3.5 py-2 font-bold text-emerald-600">{row["Concluídas"]}</td>
-                          <td className="px-3.5 py-2">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden w-full max-w-[120px]">
-                                <div 
-                                  className={cn(
-                                    "h-full rounded-full transition-all duration-300",
-                                    row["Progresso Médio (%)"] === 100 
-                                      ? "bg-emerald-500"
-                                      : row["Progresso Médio (%)"] >= 50
-                                        ? "bg-blue-500"
-                                        : row["Progresso Médio (%)"] > 0 ? "bg-slate-400" : "bg-slate-300"
-                                  )}
-                                  style={{ width: `${row["Progresso Médio (%)"]}%` }}
-                                />
-                              </div>
-                              <span className={cn(
-                                "text-xs font-black w-10 text-right leading-none",
-                                row["Progresso Médio (%)"] === 100 
-                                  ? "text-emerald-700 animate-pulse"
-                                  : row["Progresso Médio (%)"] >= 50
-                                    ? "text-blue-700"
-                                    : row["Progresso Médio (%)"] > 0 ? "text-slate-600" : "text-slate-400"
-                              )}>
-                                {row["Progresso Médio (%)"]}%
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {dashboardAreaSummaries.map((item) => (
+                    <div 
+                      key={item.area.id}
+                      className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all duration-300 flex flex-col justify-between group space-y-4 text-left"
+                    >
+                      <div>
+                        {/* Header Area Card */}
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="p-2.5 rounded-xl border bg-indigo-50 text-indigo-600 border-indigo-100 group-hover:bg-indigo-600 group-hover:text-white transition-colors shrink-0">
+                              <BookmarkCheck size={18} />
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-sm font-black text-slate-900 group-hover:text-indigo-700 transition-colors truncate">
+                                {item.name}
+                              </h4>
+                              {item.description && (
+                                <p className="text-[11px] text-slate-400 truncate max-w-[200px]">
+                                  {item.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-[11px] font-black px-2.5 py-1 rounded-full tabular-nums shrink-0 text-slate-600 bg-slate-100">
+                            {item.total} {item.total === 1 ? 'atividade' : 'atividades'}
+                          </span>
+                        </div>
+
+                        {/* Progress */}
+                        <div className="space-y-1.5 mb-4">
+                          <div className="flex items-center justify-between text-xs font-bold">
+                            <span className="text-slate-500">Progresso</span>
+                            <span className="text-slate-900 font-black tabular-nums">{item.avgProg}%</span>
+                          </div>
+                          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                item.avgProg === 100 
+                                  ? 'bg-emerald-500' 
+                                  : item.avgProg > 0 
+                                  ? 'bg-indigo-600'
+                                  : 'bg-slate-300'
+                              }`}
+                              style={{ width: `${item.avgProg}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Quadros de Distribuição: Situação e Status do Prazo com mecanismos de expansão */}
+                        <div className="space-y-2.5">
+                          {/* Quadro 1: Situação */}
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between px-0.5">
+                              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                                Situação
+                              </span>
+                              <span className="text-[9px] text-slate-400 font-semibold flex items-center gap-1">
+                                <span>Clique para expandir</span>
                               </span>
                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {areaChartData.length === 0 && (
-                        <tr>
-                          <td colSpan={6} className="p-8 text-center text-slate-400 italic">Nenhum dado por área.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                            <div className="grid grid-cols-3 gap-1 p-1 bg-slate-50/90 rounded-2xl border border-slate-100 text-center">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openStatusModal({
+                                    scopeTitle: item.name,
+                                    scopeSubtitle: item.description,
+                                    categoryType: "situation",
+                                    activeFilter: "Não iniciada",
+                                    areaId: item.area.id
+                                  });
+                                }}
+                                className="py-1.5 px-1 rounded-xl hover:bg-white hover:shadow-xs transition-all cursor-pointer text-center group/btn focus:outline-hidden"
+                                title={`Clique para ver as ${item.notStarted} atividades não iniciadas de ${item.name}`}
+                              >
+                                <span className="text-[10px] font-black uppercase text-slate-400 block tracking-wider group-hover/btn:text-slate-600">Não Inic.</span>
+                                <span className="text-sm font-black text-slate-700 tabular-nums">{item.notStarted}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openStatusModal({
+                                    scopeTitle: item.name,
+                                    scopeSubtitle: item.description,
+                                    categoryType: "situation",
+                                    activeFilter: "Em andamento",
+                                    areaId: item.area.id
+                                  });
+                                }}
+                                className="py-1.5 px-1 rounded-xl hover:bg-white hover:shadow-xs border-x border-slate-200 transition-all cursor-pointer text-center group/btn focus:outline-hidden"
+                                title={`Clique para ver as ${item.inProgress} atividades em andamento de ${item.name}`}
+                              >
+                                <span className="text-[10px] font-black uppercase text-blue-500 block tracking-wider group-hover/btn:text-blue-700">Andamento</span>
+                                <span className="text-sm font-black text-blue-700 tabular-nums">{item.inProgress}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openStatusModal({
+                                    scopeTitle: item.name,
+                                    scopeSubtitle: item.description,
+                                    categoryType: "situation",
+                                    activeFilter: "Concluída",
+                                    areaId: item.area.id
+                                  });
+                                }}
+                                className="py-1.5 px-1 rounded-xl hover:bg-white hover:shadow-xs transition-all cursor-pointer text-center group/btn focus:outline-hidden"
+                                title={`Clique para ver as ${item.completed} atividades concluídas de ${item.name}`}
+                              >
+                                <span className="text-[10px] font-black uppercase text-emerald-500 block tracking-wider group-hover/btn:text-emerald-700">Concluídas</span>
+                                <span className="text-sm font-black text-emerald-700 tabular-nums">{item.completed}</span>
+                              </button>
+                            </div>
+                          </div>
 
+                          {/* Quadro 2: Status do Prazo */}
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between px-0.5">
+                              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                                Status do Prazo
+                              </span>
+                              <span className="text-[9px] text-slate-400 font-semibold flex items-center gap-1">
+                                <span>Clique para expandir</span>
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1 p-1 bg-slate-50/90 rounded-2xl border border-slate-100 text-center">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openStatusModal({
+                                    scopeTitle: item.name,
+                                    scopeSubtitle: item.description,
+                                    categoryType: "status",
+                                    activeFilter: "No Prazo",
+                                    areaId: item.area.id
+                                  });
+                                }}
+                                className="py-1.5 px-1 rounded-xl hover:bg-emerald-50/80 hover:shadow-xs transition-all cursor-pointer text-center group/btn focus:outline-hidden"
+                                title={`Clique para ver as ${item.onTime} atividades no prazo de ${item.name}`}
+                              >
+                                <span className="text-[10px] font-black uppercase text-emerald-600 block tracking-wider group-hover/btn:text-emerald-800">No Prazo</span>
+                                <span className="text-sm font-black text-emerald-700 tabular-nums">{item.onTime}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openStatusModal({
+                                    scopeTitle: item.name,
+                                    scopeSubtitle: item.description,
+                                    categoryType: "status",
+                                    activeFilter: "Crítica",
+                                    areaId: item.area.id
+                                  });
+                                }}
+                                className="py-1.5 px-1 rounded-xl hover:bg-amber-50/80 hover:shadow-xs border-x border-slate-200 transition-all cursor-pointer text-center group/btn focus:outline-hidden"
+                                title={`Clique para ver as ${item.critical} atividades críticas (vencendo em até 7 dias) de ${item.name}`}
+                              >
+                                <span className="text-[10px] font-black uppercase text-amber-500 block tracking-wider group-hover/btn:text-amber-700">Crítica</span>
+                                <span className="text-sm font-black text-amber-700 tabular-nums">{item.critical}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openStatusModal({
+                                    scopeTitle: item.name,
+                                    scopeSubtitle: item.description,
+                                    categoryType: "status",
+                                    activeFilter: "Atrasada",
+                                    areaId: item.area.id
+                                  });
+                                }}
+                                className="py-1.5 px-1 rounded-xl hover:bg-rose-50/80 hover:shadow-xs transition-all cursor-pointer text-center group/btn focus:outline-hidden"
+                                title={`Clique para ver as ${item.delayed} atividades atrasadas de ${item.name}`}
+                              >
+                                <span className="text-[10px] font-black uppercase text-rose-500 block tracking-wider group-hover/btn:text-rose-700">Atrasadas</span>
+                                <span className="text-sm font-black text-rose-700 tabular-nums">{item.delayed}</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botões de Ação para Cadastrar Atividades e Painel */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          onClick={() => {
+                            if (onNavigateToPlanningWithFilter) {
+                              const curPlan = plans.find(p => p.id.toString() === planFilter) || plans.find(p => p.isActive) || plans[0];
+                              onNavigateToPlanningWithFilter("tasks", curPlan?.id || "", item.area.id);
+                            } else if (setActivePlanningSubTab) {
+                              setSelectedAreaIds([item.area.id]);
+                              setActivePlanningSubTab("tasks");
+                            }
+                          }}
+                          className="flex-1 py-2 px-3 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                          title={`Abrir Cadastrar Atividades com filtro de ${item.name}`}
+                        >
+                          <ListTodo size={14} className="text-indigo-600" />
+                          <span>Cadastrar</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedAreaIds([item.area.id]);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          className="flex-1 py-2 px-3 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 text-slate-700 hover:text-blue-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                          title={`Filtrar Painel de Atividades para ${item.name}`}
+                        >
+                          <BarChart3 size={14} className="text-blue-600" />
+                          <span>Painel</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Status Chart by Area and Quarter */}
@@ -9796,6 +10812,222 @@ export function PlanningTab({
         )}
 
         {/* Dashboard Timeline Modal Overlay */}
+
+        {/* Modal de Entregas do Mês no Painel de Atividades */}
+        {selectedDashboardMonthDeliveries && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 sm:p-6 animate-fadeIn">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden text-left"
+            >
+              {/* Modal Header */}
+              <div className="p-6 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0 shadow-2xs">
+                    <CalendarCheck size={24} className="stroke-[2.2]" />
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg sm:text-xl font-black text-slate-800 tracking-tight">
+                        Entregas de {selectedDashboardMonthDeliveries.monthName} de {selectedDashboardMonthDeliveries.year}
+                      </h3>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        {selectedDashboardMonthTasks.length} {selectedDashboardMonthTasks.length === 1 ? "Concluída" : "Concluídas"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Atividades concluídas filtradas no Painel
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setSelectedDashboardMonthDeliveries(null)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                  title="Fechar"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Filter Bar */}
+              <div className="p-4 sm:px-6 bg-white border-b border-slate-100 flex flex-col gap-3">
+                {/* Filtro por Área Temática */}
+                <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
+                    <Filter size={13} /> Área:
+                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                    <button
+                      onClick={() => setDashMonthModalAreaFilter("all")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                        dashMonthModalAreaFilter === "all"
+                          ? "bg-slate-800 text-white shadow-xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      Todas ({selectedDashboardMonthTasks.length})
+                    </button>
+                    {dashMonthAvailableAreas.map(area => {
+                      const count = selectedDashboardMonthTasks.filter(t => {
+                        const aId = t.areaId || (t.areaIds && t.areaIds[0]);
+                        return Number(aId) === Number(area.id);
+                      }).length;
+                      return (
+                        <button
+                          key={area.id}
+                          onClick={() => setDashMonthModalAreaFilter(area.id)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                            dashMonthModalAreaFilter === area.id
+                              ? "bg-emerald-600 text-white shadow-xs"
+                              : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-100"
+                          }`}
+                        >
+                          {area.name} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Search Box */}
+                <div className="relative w-full">
+                  <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Pesquisar entregas por título, código ou ID..."
+                    value={dashMonthModalSearch}
+                    onChange={e => setDashMonthModalSearch(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-emerald-500 outline-none transition"
+                  />
+                  {dashMonthModalSearch && (
+                    <button
+                      onClick={() => setDashMonthModalSearch("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Task List */}
+              <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-3 bg-slate-50/40">
+                {filteredDashMonthTasks.length === 0 ? (
+                  <div className="p-12 text-center bg-white border border-slate-200/80 rounded-3xl space-y-2">
+                    <CheckCircle2 size={36} className="mx-auto text-slate-300" />
+                    <h4 className="text-sm font-bold text-slate-700">Nenhuma entrega encontrada</h4>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                      {dashMonthModalSearch || dashMonthModalAreaFilter !== "all"
+                        ? "Nenhum resultado corresponde aos filtros selecionados para este mês."
+                        : "Não há atividades com status concluído registradas neste mês."}
+                    </p>
+                  </div>
+                ) : (
+                  filteredDashMonthTasks.map(task => {
+                    const aId = task.areaId || (task.areaIds && task.areaIds[0]);
+                    const areaObj = areas.find(a => a.id === aId);
+                    const areaName = areaObj ? (areaObj.abbreviation || areaObj.name) : "Geral";
+                    const compDate = task.completedAt || task.endDate || task.updatedAt || task.startDate;
+
+                    return (
+                      <div
+                        key={task.id}
+                        className="p-4 rounded-2xl border border-slate-200/90 bg-white hover:border-emerald-300 hover:shadow-sm transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
+                      >
+                        <div className="space-y-2 flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {task.code && (
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[10px] font-black uppercase tracking-wider">
+                                {task.code}
+                              </span>
+                            )}
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[10px] font-black uppercase tracking-wider">
+                              <CheckCircle2 size={11} className="text-emerald-600" />
+                              Concluída
+                            </span>
+                            <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-full text-[10px] font-bold">
+                              {areaName}
+                            </span>
+                          </div>
+
+                          <h4 
+                            onClick={() => {
+                              setSelectedDashboardMonthDeliveries(null);
+                              handleEditTask(task);
+                            }}
+                            className="text-sm font-black text-slate-900 leading-snug group-hover:text-emerald-700 transition-colors cursor-pointer"
+                            title="Clique para editar esta atividade"
+                          >
+                            {task.title}
+                          </h4>
+
+                          <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500 font-medium">
+                            {compDate && (
+                              <div className="flex items-center gap-1.5">
+                                <Calendar size={13} className="text-slate-400" />
+                                <span>
+                                  Conclusão: <strong className="text-slate-800 font-bold">{formatDate(compDate)}</strong>
+                                </span>
+                              </div>
+                            )}
+                            {task.assignedTo && (
+                              <div className="flex items-center gap-1.5">
+                                <User size={13} className="text-slate-400" />
+                                <span className="text-slate-700 font-semibold">{task.assignedTo}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => {
+                              setSelectedDashboardMonthDeliveries(null);
+                              setTimelineTaskId(task.id);
+                            }}
+                            className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-700 text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+                            title="Ver linha do tempo da atividade"
+                          >
+                            <Activity size={14} className="text-indigo-600" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedDashboardMonthDeliveries(null);
+                              handleEditTask(task);
+                            }}
+                            className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-800 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs group/btn"
+                            title="Abrir formulário para editar esta atividade"
+                          >
+                            <Edit3 size={13} className="text-slate-400 group-hover/btn:text-emerald-600 transition-colors" />
+                            <span>Detalhes</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 sm:px-6 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                <span>
+                  Mostrando <strong>{filteredDashMonthTasks.length}</strong> de <strong>{selectedDashboardMonthTasks.length}</strong> entregas de {selectedDashboardMonthDeliveries.monthName}
+                </span>
+                <button
+                  onClick={() => setSelectedDashboardMonthDeliveries(null)}
+                  className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         {timelineTaskId !== null && (
           <TaskTimelineModal
             taskId={timelineTaskId}
@@ -9813,6 +11045,408 @@ export function PlanningTab({
             renderProgressCalc={renderProgressCalc}
           />
         )}
+
+        {/* Modal de Expansão de Atividades por Status / Situação (Replicado da Página Início) */}
+        <AnimatePresence>
+          {expandedModalState.isOpen && (
+            <div className="fixed inset-0 z-[115] flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+              <div 
+                className="fixed inset-0"
+                onClick={closeStatusModal}
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 10 }}
+                transition={{ duration: 0.2 }}
+                className="relative bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] z-10 text-left"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header do Modal */}
+                <div className={`p-6 border-b text-white relative overflow-hidden ${
+                  expandedModalState.activeFilter === "Atrasada"
+                    ? "bg-gradient-to-r from-rose-700 via-rose-600 to-rose-500 border-rose-800"
+                    : expandedModalState.activeFilter === "Crítica"
+                    ? "bg-gradient-to-r from-amber-600 via-amber-500 to-orange-500 border-amber-700"
+                    : expandedModalState.activeFilter === "No Prazo"
+                    ? "bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-600 border-emerald-800"
+                    : "bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-slate-800"
+                }`}>
+                  <div className="flex items-start justify-between gap-4 relative z-10">
+                    <div className="space-y-1.5">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 backdrop-blur-md text-[11px] font-black uppercase tracking-wider text-white">
+                        {expandedModalState.categoryType === "status" ? (
+                          <>
+                            <Clock size={12} className="text-white/80" />
+                            <span>Status do Prazo</span>
+                          </>
+                        ) : (
+                          <>
+                            <Activity size={12} className="text-white/80" />
+                            <span>Situação Operacional</span>
+                          </>
+                        )}
+                        <span className="text-white/60">•</span>
+                        <span>{expandedModalState.scopeTitle}</span>
+                      </div>
+                      <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                        {expandedModalState.activeFilter === "all" ? (
+                          "Todas as Atividades"
+                        ) : expandedModalState.activeFilter === "Atrasada" ? (
+                          <>
+                            <AlertOctagon size={22} className="text-white animate-pulse" />
+                            <span>Atividades Atrasadas</span>
+                          </>
+                        ) : expandedModalState.activeFilter === "Crítica" ? (
+                          <>
+                            <AlertTriangle size={22} className="text-white animate-bounce" />
+                            <span>Atividades Críticas (Vencendo em até 7 dias)</span>
+                          </>
+                        ) : expandedModalState.activeFilter === "No Prazo" ? (
+                          <>
+                            <CheckCircle2 size={22} className="text-white" />
+                            <span>Atividades No Prazo</span>
+                          </>
+                        ) : (
+                          `Atividades ${expandedModalState.activeFilter}`
+                        )}
+                      </h3>
+                      <p className="text-xs text-white/80 font-medium">
+                        {expandedModalState.scopeSubtitle ? (
+                          <span>{expandedModalState.scopeSubtitle} — </span>
+                        ) : null}
+                        Total de <strong>{modalDisplayTasks.length}</strong> {modalDisplayTasks.length === 1 ? "atividade listada" : "atividades listadas"} no painel.
+                      </p>
+                    </div>
+                    <button
+                      onClick={closeStatusModal}
+                      className="p-2 rounded-2xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer shrink-0"
+                      title="Fechar janela (ESC)"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-bar com Abas de Filtro e Busca */}
+                <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  {/* Abas Rápidas */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+                    {expandedModalState.categoryType === "status" ? (
+                      <>
+                        <button
+                          onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "Atrasada" }))}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                            expandedModalState.activeFilter === "Atrasada"
+                              ? "bg-rose-600 text-white shadow-xs"
+                              : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                          }`}
+                        >
+                          <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+                          <span>Atrasadas ({modalCounts.delayed})</span>
+                        </button>
+                        <button
+                          onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "Crítica" }))}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                            expandedModalState.activeFilter === "Crítica"
+                              ? "bg-amber-600 text-white shadow-xs"
+                              : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                          }`}
+                        >
+                          <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                          <span>Críticas ({modalCounts.critical})</span>
+                        </button>
+                        <button
+                          onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "No Prazo" }))}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                            expandedModalState.activeFilter === "No Prazo"
+                              ? "bg-emerald-600 text-white shadow-xs"
+                              : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                          }`}
+                        >
+                          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                          <span>No Prazo ({modalCounts.onTime})</span>
+                        </button>
+                        <button
+                          onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "all" }))}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
+                            expandedModalState.activeFilter === "all"
+                              ? "bg-slate-800 text-white shadow-xs"
+                              : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                          }`}
+                        >
+                          Todas ({modalCounts.total})
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "Não iniciada" }))}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
+                            expandedModalState.activeFilter === "Não iniciada"
+                              ? "bg-slate-700 text-white shadow-xs"
+                              : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                          }`}
+                        >
+                          Não Iniciadas ({modalCounts.notStarted})
+                        </button>
+                        <button
+                          onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "Em andamento" }))}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
+                            expandedModalState.activeFilter === "Em andamento"
+                              ? "bg-blue-600 text-white shadow-xs"
+                              : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                          }`}
+                        >
+                          Em Andamento ({modalCounts.inProgress})
+                        </button>
+                        <button
+                          onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "Concluída" }))}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
+                            expandedModalState.activeFilter === "Concluída"
+                              ? "bg-emerald-600 text-white shadow-xs"
+                              : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                          }`}
+                        >
+                          Concluídas ({modalCounts.completed})
+                        </button>
+                        <button
+                          onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "all" }))}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
+                            expandedModalState.activeFilter === "all"
+                              ? "bg-slate-800 text-white shadow-xs"
+                              : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                          }`}
+                        >
+                          Todas ({modalCounts.total})
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Input de Busca */}
+                  <div className="relative w-full sm:w-64 shrink-0">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Filtrar por nome, código ou responsável..."
+                      value={modalSearchTerm}
+                      onChange={(e) => setModalSearchTerm(e.target.value)}
+                      className="w-full pl-8 pr-8 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-hidden focus:border-indigo-500 transition-colors"
+                    />
+                    {modalSearchTerm && (
+                      <button
+                        onClick={() => setModalSearchTerm("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Lista de Atividades */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 max-h-[55vh]">
+                  {modalDisplayTasks.length === 0 ? (
+                    <div className="p-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-3">
+                      <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                        <CheckCircle2 size={24} />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-700">Nenhuma atividade encontrada</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {modalSearchTerm
+                            ? "Nenhum resultado corresponde aos termos da pesquisa."
+                            : "Não há atividades com este status no escopo selecionado."}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    modalDisplayTasks.map((task) => {
+                      const taskDlStatus = getDeadlineStatus(task.endDate, task.status);
+                      const taskNormStatus = normalizeStatus(task.status);
+                      const diffDays = getDaysDiffFromToday(task.endDate);
+
+                      const handleTaskOpen = () => {
+                        closeStatusModal();
+                        if (onNavigateToPlanningWithFilter) {
+                          const curPlan = plans.find(p => p.id.toString() === planFilter) || plans.find(p => p.isActive) || plans[0];
+                          onNavigateToPlanningWithFilter(
+                            "tasks",
+                            curPlan?.id || "",
+                            task.areaId || (task.areaIds && task.areaIds[0]),
+                            false,
+                            task.id
+                          );
+                        } else {
+                          handleEditTask(task);
+                        }
+                      };
+
+                      return (
+                        <div
+                          key={task.id}
+                          className={`p-4 rounded-2xl border transition-all duration-200 hover:shadow-md bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 group ${
+                            taskDlStatus === "Atrasada"
+                              ? "border-rose-200 hover:border-rose-300"
+                              : taskDlStatus === "Crítica"
+                              ? "border-amber-200 hover:border-amber-300"
+                              : "border-slate-200 hover:border-indigo-200"
+                          }`}
+                        >
+                          <div className="space-y-2 flex-1 min-w-0">
+                            {/* Badges superiores */}
+                            <div className="flex flex-wrap items-center gap-2">
+                              {task.code && (
+                                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-black uppercase tracking-wider">
+                                  {task.code}
+                                </span>
+                              )}
+                              {/* Badge de Status do Prazo */}
+                              {taskDlStatus === "Atrasada" ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-[10px] font-black uppercase tracking-wider">
+                                  <AlertOctagon size={11} className="text-rose-600" />
+                                  <span>
+                                    {diffDays !== null && diffDays < 0
+                                      ? `Atrasada há ${Math.abs(diffDays)} ${Math.abs(diffDays) === 1 ? "dia" : "dias"}`
+                                      : "Atrasada"}
+                                  </span>
+                                </span>
+                              ) : taskDlStatus === "Crítica" ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-black uppercase tracking-wider">
+                                  <Clock size={11} className="text-amber-600" />
+                                  <span>
+                                    {diffDays !== null && diffDays >= 0
+                                      ? `Vence em ${diffDays} ${diffDays === 1 ? "dia" : "dias"}`
+                                      : "Crítica"}
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-black uppercase tracking-wider">
+                                  <CheckCircle2 size={11} className="text-emerald-600" />
+                                  <span>No Prazo</span>
+                                </span>
+                              )}
+                              {/* Badge de Situação */}
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                taskNormStatus === "Concluída"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : taskNormStatus === "Em andamento"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-slate-100 text-slate-700"
+                              }`}>
+                                {taskNormStatus}
+                              </span>
+                            </div>
+
+                            {/* Título da Atividade */}
+                            <h4 
+                              onClick={handleTaskOpen}
+                              className="text-sm font-black text-slate-900 leading-snug group-hover:text-indigo-700 transition-colors cursor-pointer"
+                              title="Clique para editar esta atividade"
+                            >
+                              {task.title}
+                            </h4>
+
+                            {/* Meta: Datas e Responsáveis */}
+                            <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500 font-medium">
+                              <div className="flex items-center gap-1.5">
+                                <Calendar size={13} className="text-slate-400" />
+                                <span>
+                                  {task.startDate ? formatDateBR(task.startDate) : "Início n/d"}
+                                  {" → "}
+                                  <strong className={taskDlStatus === "Atrasada" ? "text-rose-600 font-black" : taskDlStatus === "Crítica" ? "text-amber-600 font-black" : "text-slate-800"}>
+                                    {task.endDate ? formatDateBR(task.endDate) : "Sem prazo"}
+                                  </strong>
+                                </span>
+                              </div>
+                              {task.assignedTo && (
+                                <div className="flex items-center gap-1.5">
+                                  <User size={13} className="text-slate-400" />
+                                  <span className="text-slate-700 font-semibold">{task.assignedTo}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Barra de Progresso */}
+                            <div className="flex items-center gap-3 pt-1 max-w-md">
+                              <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    task.progress === 100
+                                      ? "bg-emerald-500"
+                                      : (task.progress || 0) > 0
+                                      ? taskDlStatus === "Atrasada"
+                                        ? "bg-rose-500"
+                                        : taskDlStatus === "Crítica"
+                                        ? "bg-amber-500"
+                                        : "bg-indigo-600"
+                                      : "bg-slate-300"
+                                  }`}
+                                  style={{ width: `${Math.min(100, Math.max(0, task.progress || 0))}%` }}
+                                />
+                              </div>
+                              <span className="text-xs font-black text-slate-700 tabular-nums shrink-0">
+                                {task.progress || 0}%
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Botão de Ação Direta para Editar Atividade */}
+                          <button
+                            onClick={handleTaskOpen}
+                            className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-slate-700 hover:text-indigo-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 group/open shadow-2xs"
+                            title="Abrir formulário para editar esta atividade"
+                          >
+                            <Edit3 size={13} className="text-slate-400 group-hover/open:text-indigo-600 transition-colors" />
+                            <span>Editar Atividade</span>
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Footer do Modal */}
+                <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-500">
+                    Mostrando <strong>{modalDisplayTasks.length}</strong> de <strong>{modalScopeTasks.length}</strong> atividades do escopo
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        closeStatusModal();
+                        if (expandedModalState.areaId) {
+                          setSelectedAreaIds([expandedModalState.areaId]);
+                        }
+                        if (onNavigateToPlanningWithFilter) {
+                          const curPlan = plans.find(p => p.id.toString() === planFilter) || plans.find(p => p.isActive) || plans[0];
+                          onNavigateToPlanningWithFilter(
+                            "tasks",
+                            curPlan?.id || "",
+                            expandedModalState.areaId
+                          );
+                        } else if (setActivePlanningSubTab) {
+                          setActivePlanningSubTab("tasks");
+                        }
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <ListTodo size={14} />
+                      <span>Abrir Todas no Planejamento</span>
+                    </button>
+                    <button
+                      onClick={closeStatusModal}
+                      className="px-4 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* Duplicate Task Modal */}
         {duplicateModalOpen && taskToDuplicate && (
@@ -10101,6 +11735,13 @@ export function PlanningTab({
                     >
                       <Plus size={18} /> Nova Atividade
                     </button>
+                    <button
+                      onClick={openModelGenModal}
+                      className="flex items-center justify-center gap-2 px-5 py-2.5 whitespace-nowrap bg-indigo-600 text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+                      title="Criar fluxo estruturado de atividades a partir de um modelo de processo"
+                    >
+                      <Copy size={16} /> Criar Atividade Via Modelo
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -10363,9 +12004,115 @@ export function PlanningTab({
                 </div>
               </div>
 
+              {/* Row 4: Period Filter (Month, Quarter, Semester) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📅 Tipo de Período Cronológico</span>
+                  <div className="flex gap-2">
+                    {[
+                      { id: "all", label: "TODOS" },
+                      { id: "month", label: "MÊS" },
+                      { id: "quarter", label: "TRIMESTRE" },
+                      { id: "semester", label: "SEMESTRE" }
+                    ].map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          setPeriodTypeFilter(t.id as any);
+                          setPeriodValueFilter("all");
+                        }}
+                        className={cn(
+                          "flex-1 px-3 py-2 text-xs font-black rounded-xl border transition-all uppercase cursor-pointer",
+                          periodTypeFilter === t.id
+                            ? "bg-adasa-mid border-adasa-mid text-white shadow-xs"
+                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                        )}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">🎯 Seleção do Período</span>
+                  {periodTypeFilter === "all" ? (
+                    <div className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-slate-100 text-slate-500 font-bold select-none h-[38px] flex items-center">
+                      Selecione um tipo de período ao lado para filtrar
+                    </div>
+                  ) : (
+                    <select
+                      value={periodValueFilter}
+                      onChange={(e) => setPeriodValueFilter(e.target.value)}
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold uppercase cursor-pointer"
+                    >
+                      <option value="all">Selecione o período...</option>
+                      {periodTypeFilter === "month" && (
+                        availableYears.map((yr) => (
+                          availableYears.length > 1 ? (
+                            <optgroup key={`optg-m-${yr}`} label={`Ano ${yr}`}>
+                              {MONTH_NAMES.map((name, idx) => (
+                                <option key={`m-${yr}-${idx + 1}`} value={`${yr}-${idx + 1}`}>
+                                  {name}/{yr}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ) : (
+                            MONTH_NAMES.map((name, idx) => (
+                              <option key={`m-${yr}-${idx + 1}`} value={`${yr}-${idx + 1}`}>
+                                {name}/{yr}
+                              </option>
+                            ))
+                          )
+                        ))
+                      )}
+                      {periodTypeFilter === "quarter" && (
+                        availableYears.map((yr) => (
+                          availableYears.length > 1 ? (
+                            <optgroup key={`optg-q-${yr}`} label={`Ano ${yr}`}>
+                              {QUARTER_DEFINITIONS.map((q) => (
+                                <option key={`q-${yr}-${q.q}`} value={`${yr}-Q${q.q}`}>
+                                  {q.label}/{yr} ({q.range})
+                                </option>
+                              ))}
+                            </optgroup>
+                          ) : (
+                            QUARTER_DEFINITIONS.map((q) => (
+                              <option key={`q-${yr}-${q.q}`} value={`${yr}-Q${q.q}`}>
+                                {q.label}/{yr} ({q.range})
+                              </option>
+                            ))
+                          )
+                        ))
+                      )}
+                      {periodTypeFilter === "semester" && (
+                        availableYears.map((yr) => (
+                          availableYears.length > 1 ? (
+                            <optgroup key={`optg-s-${yr}`} label={`Ano ${yr}`}>
+                              {SEMESTER_DEFINITIONS.map((s) => (
+                                <option key={`s-${yr}-${s.s}`} value={`${yr}-S${s.s}`}>
+                                  {s.label}/{yr} ({s.range})
+                                </option>
+                              ))}
+                            </optgroup>
+                          ) : (
+                            SEMESTER_DEFINITIONS.map((s) => (
+                              <option key={`s-${yr}-${s.s}`} value={`${yr}-S${s.s}`}>
+                                {s.label}/{yr} ({s.range})
+                              </option>
+                            ))
+                          )
+                        ))
+                      )}
+                    </select>
+                  )}
+                </div>
+              </div>
+
               {/* Consultar / Limpar Buttons */}
               <div className="flex flex-wrap justify-center items-center gap-3 pt-2">
-                  {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
+                  {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all" || periodTypeFilter !== "all" || periodValueFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
                     <button
                       onClick={() => {
                         setPlanFilter("all");
@@ -10378,6 +12125,8 @@ export function PlanningTab({
                         setSearchTerm("");
                         setIsProgrammedFilter("all");
                         setTaskTypeFilter("all");
+                        setPeriodTypeFilter("all");
+                        setPeriodValueFilter("all");
                         setHasSubtasksFilter(false);
                       }}
                       className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center gap-2 font-black uppercase tracking-widest px-6 py-2.5 rounded-xl text-xs transition-all shadow-sm hover:-translate-y-0.5 cursor-pointer"
@@ -10403,6 +12152,13 @@ export function PlanningTab({
                  >
                    <Plus size={18} /> Nova Atividade
                  </button>
+                  <button
+                    onClick={openModelGenModal}
+                    className="flex items-center justify-center gap-2 px-5 py-2.5 whitespace-nowrap bg-indigo-600 text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+                    title="Criar fluxo estruturado de atividades a partir de um modelo de processo"
+                  >
+                    <Copy size={16} /> Criar Atividade Via Modelo
+                  </button>
               </div>
 
                 </div>
@@ -10410,221 +12166,219 @@ export function PlanningTab({
             )}
           </div>
 
-          {hasConsulted && (
-            <>
+
+              {/* Barra Consolidada em uma Linha: Atividades Filtradas, Progresso de Conclusão, Status e Situação */}
+              {(() => {
+                const visibleTasksList = enhancedTasks.filter(t => matchesFilters(t));
+                let statsByStatus = { "Não iniciada": 0, "Em andamento": 0, "Concluída": 0 };
+                let statsBySituation = { "No Prazo": 0, "Crítica": 0, "Atrasada": 0 };
+
+                visibleTasksList.forEach(t => {
+                  const normStatus = normalizeStatus(t.status);
+                  if (statsByStatus[normStatus as keyof typeof statsByStatus] !== undefined) {
+                    statsByStatus[normStatus as keyof typeof statsByStatus]++;
+                  }
+                  const dlStatus = getDeadlineStatus(t.endDate, t.status);
+                  if (dlStatus === "Atrasada") statsBySituation["Atrasada"]++;
+                  else if (dlStatus === "Crítica") statsBySituation["Crítica"]++;
+                  else statsBySituation["No Prazo"]++;
+                });
+
+                const overallTotal = visibleTasksList.length;
+                const overallCompleted = statsByStatus["Concluída"];
+                const overallPercent = overallTotal > 0 ? Math.round((overallCompleted / overallTotal) * 100) : 0;
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
+                    {/* Box 1: Atividades Filtradas */}
+                    <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col justify-center min-h-[96px]">
+                      <div className="flex items-center gap-3">
+                        <div className="bg-indigo-100 text-indigo-600 p-2.5 rounded-xl border border-indigo-200 shadow-sm shrink-0">
+                          <ListTodo size={22} />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 leading-tight mb-1 truncate">
+                            Atividades Filtradas
+                          </span>
+                          <span className="text-xl font-black text-slate-800 leading-none">
+                            {visibleTasksList.length}{" "}
+                            <span className="text-xs font-semibold text-slate-400">tarefas</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Box 2: Progresso de Conclusão (largura reduzida para mesma linha) */}
+                    <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col justify-center min-h-[96px]">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5 truncate">
+                        <CheckCircle2 size={12} className="text-emerald-500 shrink-0" /> Progresso de Conclusão {selectedAreaIds.length > 0 ? "(Por Área)" : "(Geral)"}
+                      </h4>
+                      {selectedAreaIds.length > 0 ? (
+                        <div className="flex flex-col gap-1.5 max-h-[85px] overflow-y-auto pr-1 rounded-xl custom-scrollbar">
+                          {selectedAreaIds.map(aid => {
+                            const areaObj = areas.find(a => a.id === aid);
+                            const areaName = areaObj ? (areaObj.abbreviation || areaObj.name) : `Área ${aid}`;
+                            const tasksInArea = visibleTasksList.filter(t => t.areaIds?.includes(aid));
+                            const total = tasksInArea.length;
+                            const completed = tasksInArea.filter(t => normalizeStatus(t.status) === "Concluída").length;
+                            const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+                            return (
+                              <div key={aid} className="flex flex-col gap-1 shrink-0">
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="font-bold text-slate-700 truncate max-w-[120px]" title={areaObj?.name}>{areaName}</span>
+                                  <span className="font-extrabold text-indigo-600 shrink-0 text-[11px]">{percent}% <span className="text-[9px] text-slate-400 font-medium">({completed}/{total})</span></span>
+                                </div>
+                                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${percent}%` }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1.5 justify-center flex-1">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-bold text-slate-700 truncate">Todas as Áreas</span>
+                            <span className="font-extrabold text-indigo-600 shrink-0">{overallPercent}% <span className="text-[10px] text-slate-400 font-medium">({overallCompleted}/{overallTotal})</span></span>
+                          </div>
+                          <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${overallPercent}%` }} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Box 3: Atividades por Status */}
+                    <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col justify-center min-h-[96px]">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5 truncate">
+                        <LayoutGrid size={12} className="text-indigo-500 shrink-0" /> Atividades por Status
+                      </h4>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-slate-50 rounded-xl p-2 flex flex-col items-center justify-center border border-slate-100 shadow-xs">
+                          <span className="text-lg font-black text-slate-700 leading-none">{statsByStatus["Não iniciada"]}</span>
+                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest text-center mt-1">Não Inic.</span>
+                        </div>
+                        <div className="bg-amber-50/50 rounded-xl p-2 flex flex-col items-center justify-center border border-amber-100 shadow-xs">
+                          <span className="text-lg font-black text-amber-700 leading-none">{statsByStatus["Em andamento"]}</span>
+                          <span className="text-[9px] font-bold text-amber-700/70 uppercase tracking-widest text-center mt-1">Em And.</span>
+                        </div>
+                        <div className="bg-emerald-50/50 rounded-xl p-2 flex flex-col items-center justify-center border border-emerald-100 shadow-xs">
+                          <span className="text-lg font-black text-emerald-700 leading-none">{statsByStatus["Concluída"]}</span>
+                          <span className="text-[9px] font-bold text-emerald-700/70 uppercase tracking-widest text-center mt-1">Concl.</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Box 4: Atividades por Situação */}
+                    <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col justify-center min-h-[96px]">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5 truncate">
+                        <AlertCircle size={12} className="text-rose-500 shrink-0" /> Atividades por Situação
+                      </h4>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-emerald-50/50 rounded-xl p-2 flex flex-col items-center justify-center border border-emerald-100 shadow-xs">
+                          <span className="text-lg font-black text-emerald-700 leading-none">{statsBySituation["No Prazo"]}</span>
+                          <span className="text-[9px] font-bold text-emerald-700/70 uppercase tracking-widest text-center mt-1">No Prazo</span>
+                        </div>
+                        <div className="bg-amber-50/50 rounded-xl p-2 flex flex-col items-center justify-center border border-amber-100 shadow-xs">
+                          <span className="text-lg font-black text-amber-700 leading-none">{statsBySituation["Crítica"]}</span>
+                          <span className="text-[9px] font-bold text-amber-700/70 uppercase tracking-widest text-center mt-1">Crítica</span>
+                        </div>
+                        <div className="bg-rose-50/50 rounded-xl p-2 flex flex-col items-center justify-center border border-rose-100 shadow-xs">
+                          <span className="text-lg font-black text-rose-700 leading-none">{statsBySituation["Atrasada"]}</span>
+                          <span className="text-[9px] font-bold text-rose-700/70 uppercase tracking-widest text-center mt-1">Atrasada</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Visualização (View Toggles) */}
               <div className="bg-white border border-slate-200/80 rounded-[2rem] p-6 shadow-sm space-y-6">
-            <div className="mb-2 border-l-4 border-adasa-mid pl-2.5 py-0.5">
-              <h3 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-widest">
-                Visualização
-              </h3>
-            </div>
+                <div className="mb-2 border-l-4 border-adasa-mid pl-2.5 py-0.5">
+                  <h3 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-widest">
+                    Visualização
+                  </h3>
+                </div>
 
-            {/* View Toggle */}
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 w-full flex items-center justify-center">
-              <div className="flex flex-wrap items-center justify-center gap-2 overflow-x-auto pb-1 xl:pb-0 w-full">
-                <button
-                  onClick={() => { setViewMode("board"); setTimelineTaskId(null); }}
-                  className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "board" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
-                >
-                  <LayoutGrid size={16} /> Quadro
-                </button>
-                <button
-                  onClick={() => { setViewMode("tree"); setTimelineTaskId(null); }}
-                  className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "tree" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
-                >
-                  <FolderKanban size={16} /> Recentes
-                </button>
-                <button
-                  onClick={() => { setViewMode("category"); setTimelineTaskId(null); }}
-                  className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "category" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
-                >
-                  <Tag size={16} /> Categorias
-                </button>
-                <button
-                  onClick={() => { setViewMode("status"); setTimelineTaskId(null); }}
-                  className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "status" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
-                >
-                  <CheckCircle2 size={16} /> Status
-                </button>
-                {!isMyTasksSelected && (
-                  <>
+                {/* View Toggle */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 w-full flex items-center justify-center">
+                  <div className="flex flex-wrap items-center justify-center gap-2 overflow-x-auto pb-1 xl:pb-0 w-full">
                     <button
-                      onClick={() => { setViewMode("area"); setTimelineTaskId(null); }}
-                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "area" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                      onClick={() => { setViewMode("board"); setTimelineTaskId(null); }}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "board" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                     >
-                      <Briefcase size={16} /> Áreas
+                      <LayoutGrid size={16} /> Quadro
                     </button>
                     <button
-                      onClick={() => { setViewMode("responsible"); setTimelineTaskId(null); }}
-                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "responsible" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                      onClick={() => { setViewMode("tree"); setTimelineTaskId(null); }}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "tree" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                     >
-                      <Users size={16} /> Responsáveis
+                      <FolderKanban size={16} /> Recentes
                     </button>
                     <button
-                      onClick={() => { setViewMode("table"); setTimelineTaskId(null); }}
-                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "table" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                      onClick={() => { setViewMode("category"); setTimelineTaskId(null); }}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "category" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                     >
-                      <Table size={16} /> Tabela
+                      <Tag size={16} /> Categorias
                     </button>
                     <button
-                      onClick={() => { setViewMode("gantt"); setTimelineTaskId(null); }}
-                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "gantt" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                      onClick={() => { setViewMode("status"); setTimelineTaskId(null); }}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "status" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                     >
-                      <CalendarRange size={16} /> Gantt
+                      <CheckCircle2 size={16} /> Status
                     </button>
-                  </>
-                )}
-                <button
-                  onClick={() => { setViewMode("calendar"); setTimelineTaskId(null); }}
-                  className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "calendar" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
-                >
-                  <Calendar size={16} /> Calendário
-                </button>
-                <button
-                  onClick={() => { setViewMode("recurso"); setTimelineTaskId(null); }}
-                  className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "recurso" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
-                >
-                  <Layers size={16} /> Tipo de Atividade
-                </button>
-                {timelineTaskId !== null && (
-                  <button
-                    onClick={() => setTimelineTaskId(null)}
-                    className="flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-black uppercase tracking-wider rounded-xl transition-all duration-200 bg-white text-adasa-mid shadow-sm border border-slate-200 hover:text-slate-800 hover:bg-slate-50 whitespace-nowrap xl:ml-4"
-                  >
-                    <List size={16} /> Voltar para Filtros
-                  </button>
-                )}
-              </div>
-            </div>
- 
-          {/* Estatísticas e Progresso Consolidados */}
-          {(() => {
-            const visibleTasksList = enhancedTasks.filter(t => matchesFilters(t));
-            let statsByStatus = { "Não iniciada": 0, "Em andamento": 0, "Concluída": 0 };
-            let statsBySituation = { "No Prazo": 0, "Crítica": 0, "Atrasada": 0 };
-
-            visibleTasksList.forEach(t => {
-              const normStatus = normalizeStatus(t.status);
-              if (statsByStatus[normStatus as keyof typeof statsByStatus] !== undefined) {
-                statsByStatus[normStatus as keyof typeof statsByStatus]++;
-              }
-              const dlStatus = getDeadlineStatus(t.endDate, t.status);
-              if (dlStatus === "Atrasada") statsBySituation["Atrasada"]++;
-              else if (dlStatus === "Crítica") statsBySituation["Crítica"]++;
-              else statsBySituation["No Prazo"]++;
-            });
-
-            const overallTotal = visibleTasksList.length;
-            const overallCompleted = statsByStatus["Concluída"];
-            const overallPercent = overallTotal > 0 ? Math.round((overallCompleted / overallTotal) * 100) : 0;
-
-            return (
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4">
-                <div className="col-span-1 lg:col-span-2 bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col">
-                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                     <CheckCircle2 size={12} className="text-emerald-500" /> Progresso de Conclusão {selectedAreaIds.length > 0 ? "(Por Área Filtrada)" : "(Visão Geral)"}
-                   </h4>
-                   {selectedAreaIds.length > 0 ? (
-                     <div className="flex flex-col gap-3 max-h-[140px] overflow-y-auto pr-2 rounded-xl custom-scrollbar">
-                       {selectedAreaIds.map(aid => {
-                         const areaObj = areas.find(a => a.id === aid);
-                         const areaName = areaObj ? (areaObj.abbreviation || areaObj.name) : `Área ${aid}`;
-                         const tasksInArea = visibleTasksList.filter(t => t.areaIds?.includes(aid));
-                         const total = tasksInArea.length;
-                         const completed = tasksInArea.filter(t => normalizeStatus(t.status) === "Concluída").length;
-                         const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-                         return (
-                           <div key={aid} className="flex flex-col gap-1.5 shrink-0 mb-1">
-                              <div className="flex justify-between items-center text-xs">
-                                <span className="font-bold text-slate-700 truncate" title={areaObj?.name}>{areaName}</span>
-                                <span className="font-extrabold text-indigo-600 shrink-0">{percent}% <span className="text-[10px] text-slate-400 font-medium">({completed}/{total})</span></span>
-                              </div>
-                              <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${percent}%` }} />
-                              </div>
-                           </div>
-                         )
-                       })}
-                     </div>
-                   ) : (
-                     <div className="flex flex-col gap-1.5 mt-1 justify-center flex-1">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-bold text-slate-700">Todas as Áreas (Quadro Atual)</span>
-                          <span className="font-extrabold text-indigo-600">{overallPercent}% <span className="text-[10px] text-slate-400 font-medium">({overallCompleted}/{overallTotal})</span></span>
-                        </div>
-                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${overallPercent}%` }} />
-                        </div>
-                     </div>
-                   )}
+                    {!isMyTasksSelected && (
+                      <>
+                        <button
+                          onClick={() => { setViewMode("area"); setTimelineTaskId(null); }}
+                          className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "area" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                        >
+                          <Briefcase size={16} /> Áreas
+                        </button>
+                        <button
+                          onClick={() => { setViewMode("responsible"); setTimelineTaskId(null); }}
+                          className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "responsible" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                        >
+                          <Users size={16} /> Responsáveis
+                        </button>
+                        <button
+                          onClick={() => { setViewMode("table"); setTimelineTaskId(null); }}
+                          className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "table" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                        >
+                          <Table size={16} /> Tabela
+                        </button>
+                        <button
+                          onClick={() => { setViewMode("gantt"); setTimelineTaskId(null); }}
+                          className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "gantt" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                        >
+                          <CalendarRange size={16} /> Gantt
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => { setViewMode("calendar"); setTimelineTaskId(null); }}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "calendar" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                    >
+                      <Calendar size={16} /> Calendário
+                    </button>
+                    <button
+                      onClick={() => { setViewMode("recurso"); setTimelineTaskId(null); }}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "recurso" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                    >
+                      <Layers size={16} /> Tipo de Atividade
+                    </button>
+                    {timelineTaskId !== null && (
+                      <button
+                        onClick={() => setTimelineTaskId(null)}
+                        className="flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-black uppercase tracking-wider rounded-xl transition-all duration-200 bg-white text-adasa-mid shadow-sm border border-slate-200 hover:text-slate-800 hover:bg-slate-50 whitespace-nowrap xl:ml-4"
+                      >
+                        <List size={16} /> Voltar para Filtros
+                      </button>
+                    )}
+                  </div>
+                  </div>
                 </div>
-                
-                <div className="col-span-1 bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col justify-center">
-                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                     <LayoutGrid size={12} className="text-indigo-500" /> Atividades por Status
-                   </h4>
-                   <div className="grid grid-cols-3 gap-2">
-                     <div className="bg-slate-50 rounded-xl p-2.5 flex flex-col items-center justify-center border border-slate-100 shadow-xs">
-                       <span className="text-xl font-black text-slate-700 leading-none">{statsByStatus["Não iniciada"]}</span>
-                       <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest text-center mt-1.5">Não Inic.</span>
-                     </div>
-                     <div className="bg-amber-50/50 rounded-xl p-2.5 flex flex-col items-center justify-center border border-amber-100 shadow-xs">
-                       <span className="text-xl font-black text-amber-700 leading-none">{statsByStatus["Em andamento"]}</span>
-                       <span className="text-[9px] font-bold text-amber-700/70 uppercase tracking-widest text-center mt-1.5">Em And.</span>
-                     </div>
-                     <div className="bg-emerald-50/50 rounded-xl p-2.5 flex flex-col items-center justify-center border border-emerald-100 shadow-xs">
-                       <span className="text-xl font-black text-emerald-700 leading-none">{statsByStatus["Concluída"]}</span>
-                       <span className="text-[9px] font-bold text-emerald-700/70 uppercase tracking-widest text-center mt-1.5">Concl.</span>
-                     </div>
-                   </div>
-                </div>
-
-                <div className="col-span-1 bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col justify-center">
-                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                     <AlertCircle size={12} className="text-rose-500" /> Atividades por Situação
-                   </h4>
-                   <div className="grid grid-cols-3 gap-2">
-                     <div className="bg-emerald-50/50 rounded-xl p-2.5 flex flex-col items-center justify-center border border-emerald-100 shadow-xs">
-                       <span className="text-xl font-black text-emerald-700 leading-none">{statsBySituation["No Prazo"]}</span>
-                       <span className="text-[9px] font-bold text-emerald-700/70 uppercase tracking-widest text-center mt-1.5">No Prazo</span>
-                     </div>
-                     <div className="bg-amber-50/50 rounded-xl p-2.5 flex flex-col items-center justify-center border border-amber-100 shadow-xs">
-                       <span className="text-xl font-black text-amber-700 leading-none">{statsBySituation["Crítica"]}</span>
-                       <span className="text-[9px] font-bold text-amber-700/70 uppercase tracking-widest text-center mt-1.5">Crítica</span>
-                     </div>
-                     <div className="bg-rose-50/50 rounded-xl p-2.5 flex flex-col items-center justify-center border border-rose-100 shadow-xs">
-                       <span className="text-xl font-black text-rose-700 leading-none">{statsBySituation["Atrasada"]}</span>
-                       <span className="text-[9px] font-bold text-rose-700/70 uppercase tracking-widest text-center mt-1.5">Atrasada</span>
-                     </div>
-                   </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Main Container */}
-          <div className="space-y-4">
-              <div className="flex flex-col md:flex-row bg-white border border-slate-200 rounded-2xl p-4 px-5 shadow-sm items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                    <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl border border-indigo-200 shadow-sm">
-                      <ListTodo size={20} />
-                    </div>
-                    <div className="flex flex-col">
-                       <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 leading-none mb-1">Atividades Listadas / Filtradas</span>
-                       <span className="text-lg font-extrabold text-slate-800 leading-none">{enhancedTasks.filter(t => matchesFilters(t)).length} <span className="text-xs font-semibold text-slate-400">tarefas</span></span>
-                    </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full md:w-auto">
-                  <button
-                    onClick={openModelGenModal}
-                    className="flex items-center justify-center gap-2 px-5 py-2.5 whitespace-nowrap bg-adasa-mid text-white text-xs sm:text-sm font-black uppercase tracking-wider rounded-xl hover:bg-adasa-dark transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 cursor-pointer w-full sm:w-auto"
-                    title="Criar fluxo estruturado de atividades a partir de um modelo de processo"
-                  >
-                    <Copy size={16} /> Criar Atividade Via Modelo
-                  </button>
-                </div>
-              </div>
 
               {["status", "category", "area", "responsible", "tree", "recurso"].includes(viewMode) && (
                 <div className="flex flex-col sm:flex-row items-center gap-3 justify-between bg-slate-50 border border-slate-200/80 rounded-2xl p-3 px-4 shadow-xs mt-2 select-none">
@@ -11909,7 +13663,6 @@ export function PlanningTab({
                    </div>
                  );
               })()}
-            </div>
 
                {viewMode === "gantt" && (() => {
                   const parseSafeDate = (dateStr: string | null | undefined): Date | null => {
@@ -12843,10 +14596,8 @@ export function PlanningTab({
                   </div>
                 );
               })()}
+          </div>
         </div>
-          </>
-        )}
-      </div>
 
       {/* MODAL: Generate from Model Dialog */}
       <AnimatePresence>
@@ -14587,240 +16338,9 @@ export function PlanningTab({
       )}
 
       </div>
-    </div>
   );
 
   // Recursive Tree Node Renderer
-  
-  function renderProgressCalc(targetTaskId: number | null, fallbackProgress: number) {
-    if (!targetTaskId) return null;
-    return (
-      <div className="space-y-5 max-h-[50vh] overflow-y-auto custom-scrollbar pr-2">
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-blue-800 text-sm shadow-sm">
-                      <h4 className="font-bold flex items-center gap-2 mb-2"><Activity size={16} /> Cálculo por Pesos Relativos Livres</h4>
-                      <p className="mb-2">O <strong>cálculo por pesos relativos livres</strong> permite que você defina a importância de cada subtarefa em relação às outras atribuindo-lhes um valor numérico ("peso"). Este peso não precisa somar 100.</p>
-                      <ul className="list-disc pl-5 space-y-1 mt-2 text-xs">
-                        <li>Uma subtarefa com peso <strong>2.0</strong> impacta o dobro no progresso da tarefa pai do que uma tarefa com peso <strong>1.0</strong>.</li>
-                        <li>Se uma tarefa não possui subtarefas, seu progresso é inserido de forma manual.</li>
-                        <li>Se possui subtarefas, o progresso da tarefa pai é a soma do progresso ponderado de cada componente, dividido pela soma de todos os pesos.</li>
-                      </ul>
-                    </div>
-                    
-                    {(() => {
-                      if (!targetTaskId || !childrenMap[targetTaskId] || childrenMap[targetTaskId].length === 0) {
-                        return (
-                          <div className="space-y-4">
-                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-                              <p className="text-sm font-semibold text-slate-500 mb-1">Cálculo Manual</p>
-                              <p className="text-xs text-slate-400">Esta atividade não possui subtarefas dependentes. Seu progresso deve ser informado e atualizado manualmente na aba Formulário.</p>
-                            </div>
-                            
-                            <div className="bg-gradient-to-br from-emerald-50/50 to-slate-50/50 border border-emerald-100 rounded-2xl p-5 shadow-sm">
-                              <div className="flex items-center gap-2 mb-3 border-b border-emerald-100 pb-3">
-                                <Activity className="text-emerald-600 shrink-0" size={18} />
-                                <h4 className="font-black text-slate-800 text-xs uppercase tracking-wider">Fórmula de Cálculo Manual</h4>
-                              </div>
-                              <div className="bg-white border border-slate-200 p-4 rounded-xl flex items-center gap-2 font-mono text-xs">
-                                <span className="text-slate-500 font-bold">Progresso =</span>
-                                <span className="font-bold text-slate-800">Progresso Definido Manualmente =</span>
-                                <span className="text-base font-black text-emerald-700 bg-emerald-100/40 px-2.5 py-1 rounded-lg">{(fallbackProgress)}%</span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      // Compute active elements
-                      const subtasks = childrenMap[targetTaskId];
-                      let totalWeight = 0;
-                      let totalCalculated = 0;
-                      
-                      const computeChildNode = (nodeId: number): any => {
-                        const node = taskById[nodeId];
-                        if (!node) return { progress: 0, weight: 1 };
-                        const cList = childrenMap[nodeId] || [];
-                        if (cList.length === 0) return { progress: node.progress || 0, weight: node.weight !== undefined && node.weight !== ("" as any) ? Number(node.weight) : 1 };
-                        let cTotalP = 0;
-                        let cTotalW = 0;
-                        cList.forEach(c => {
-                          const cChild = computeChildNode(c.id);
-                          const w = cChild.weight;
-                          cTotalP += (cChild.progress || 0) * w;
-                          cTotalW += w;
-                        });
-                        return { 
-                          progress: cTotalW > 0 ? Math.round(cTotalP / cTotalW) : 0, 
-                          weight: node.weight !== undefined && node.weight !== ("" as any) ? Number(node.weight) : 1 
-                        };
-                      };
-
-                      const subtaskDetails = subtasks.map(sub => {
-                        const childInfo = computeChildNode(sub.id);
-                        const prog = childInfo.progress;
-                        const w = childInfo.weight;
-                        const impacto = prog * w;
-                        totalWeight += w;
-                        totalCalculated += impacto;
-                        return {
-                          id: sub.id,
-                          title: getTaskDisplayName(sub),
-                          progress: prog,
-                          weight: w,
-                          impact: impacto
-                        };
-                      });
-
-                      const finalResult = totalWeight > 0 ? Math.round(totalCalculated / totalWeight) : 0;
-
-                      return (
-                        <div className="space-y-5">
-                          {/* Rich mathematical dynamic formula display */}
-                          <div className="bg-gradient-to-br from-indigo-50/70 to-slate-50 border border-indigo-100 rounded-2xl p-5 shadow-sm">
-                            <div className="flex items-center justify-between border-b border-indigo-100 pb-3 mb-4">
-                              <div className="flex items-center gap-2">
-                                <Activity className="text-indigo-600 shrink-0" size={18} />
-                                <h4 className="font-black text-slate-800 text-xs uppercase tracking-wider">Demonstração da Fórmula Geral</h4>
-                              </div>
-                              <div className="bg-emerald-600 text-white font-black text-xs px-3 py-1.5 rounded-full shadow-sm">
-                                Resultado = {finalResult}%
-                              </div>
-                            </div>
-                            
-                            <div className="space-y-4 font-mono text-xs text-slate-700">
-                              {/* Step 1: General formula */}
-                              <div>
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">1. Fórmula de Média Ponderada</span>
-                                <div className="bg-white border border-slate-200/60 p-3 rounded-xl overflow-x-auto">
-                                  <div className="flex items-center gap-2 min-w-max">
-                                    <span className="text-slate-500 font-bold">Progresso Geral =</span>
-                                    <div className="flex flex-col items-center">
-                                      <span className="pb-1 border-b border-slate-300 px-2 font-semibold">∑ (Progresso_sub × Peso_sub)</span>
-                                      <span className="pt-1 px-2 font-semibold">∑ Peso_sub</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Step 2: Replaced Values */}
-                              <div>
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">2. Substituição Recursiva com Valores Atuais</span>
-                                <div className="bg-white border border-slate-200/60 p-3 rounded-xl overflow-x-auto">
-                                  <div className="flex items-center gap-2 min-w-max">
-                                    <span className="text-slate-500 font-bold">Progresso Geral =</span>
-                                    <div className="flex flex-col items-center">
-                                      <span className="pb-1 border-b border-slate-300 px-2">
-                                        {subtaskDetails.map((s, idx) => (
-                                          <span key={s.id}>
-                                            {idx > 0 && " + "}
-                                            <span className="bg-slate-100 font-bold text-slate-700 px-1 py-0.5 rounded" title={s.title}>
-                                              ({s.progress}% × {s.weight})
-                                            </span>
-                                          </span>
-                                        ))}
-                                      </span>
-                                      <span className="pt-1 px-2">
-                                        {subtaskDetails.map((s, idx) => (
-                                          <span key={s.id}>
-                                            {idx > 0 && " + "}
-                                            <span className="font-bold text-indigo-600">{s.weight}</span>
-                                          </span>
-                                        ))}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Step 3: Impact calculation */}
-                              <div>
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">3. Cálculo Resolvido (Soma dos Impactos)</span>
-                                <div className="bg-white border border-slate-200/60 p-3 rounded-xl overflow-x-auto">
-                                  <div className="flex items-center gap-2 min-w-max">
-                                    <span className="text-slate-500 font-bold">Progresso Geral =</span>
-                                    <div className="flex flex-col items-center">
-                                      <span className="pb-1 border-b border-slate-300 px-2">
-                                        {subtaskDetails.map((s, idx) => (
-                                          <span key={s.id}>
-                                            {idx > 0 && " + "}
-                                            <span className="bg-indigo-50 font-bold text-indigo-700 px-1.5 py-0.5 rounded" title={`Impacto da sub: ${s.title}`}>
-                                              {s.impact.toFixed(1)}
-                                            </span>
-                                          </span>
-                                        ))}
-                                      </span>
-                                      <span className="pt-1 px-2 font-bold text-indigo-700">
-                                        {totalWeight} (Soma de Pesos)
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Step 4: Division and final percent */}
-                              <div>
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">4. Divisão Final e Arredondamento Matemático</span>
-                                <div className="bg-white border border-slate-200/60 p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                  <div className="flex items-center gap-2.5 flex-wrap">
-                                    <span className="text-slate-500 font-bold">Progresso =</span>
-                                    <div className="flex flex-col items-center">
-                                      <span className="pb-1 border-b border-slate-300 px-2 font-extrabold text-emerald-600">{totalCalculated.toFixed(1)}</span>
-                                      <span className="pt-1 px-2 font-extrabold text-indigo-700">{totalWeight}</span>
-                                    </div>
-                                    <span className="text-slate-400 font-black">≈</span>
-                                    <span className="text-xs font-black text-slate-800 bg-slate-100 px-2 py-1 rounded">{(totalCalculated / totalWeight).toFixed(3)}%</span>
-                                    <span className="text-slate-400 font-black">→</span>
-                                    <span className="text-sm font-black text-white bg-emerald-600 px-3 py-1 rounded-lg shadow-sm">{finalResult}%</span>
-                                  </div>
-                                  
-                                  <div className="text-[9px] text-slate-400 leading-tight font-sans">
-                                    * Considerado os pesos definidos recursivos para o cálculo unificado.
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Table with dependent subtasks, preserved as requested */}
-                          <div className="space-y-3">
-                            <h5 className="font-bold text-sm text-slate-700">Subtarefas Dependentes ({subtasks.length})</h5>
-                            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                              <table className="w-full text-left border-collapse">
-                                <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                                  <tr>
-                                    <th className="px-3.5 py-3">Subtarefa</th>
-                                    <th className="px-3 py-3 text-right">Progresso</th>
-                                    <th className="px-3 py-3 text-right">Peso</th>
-                                    <th className="px-3 py-3 text-right">Impacto Ponderado</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-medium">
-                                  {subtaskDetails.map(subDet => (
-                                    <tr key={subDet.id} className="hover:bg-slate-50/50 transition-colors">
-                                      <td className="px-3.5 py-2.5 font-bold max-w-[200px] truncate" title={subDet.title}>
-                                        {subDet.title}
-                                      </td>
-                                      <td className="px-3 py-2.5 text-right">{subDet.progress}%</td>
-                                      <td className="px-3 py-2.5 text-right font-black text-indigo-600">{subDet.weight}</td>
-                                      <td className="px-3 py-2.5 text-right text-slate-500">{subDet.impact.toFixed(1)}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                                <tfoot className="bg-slate-50/80 border-t border-slate-200 text-xs font-black text-slate-700">
-                                  <tr>
-                                    <td colSpan={2} className="px-3.5 py-3 text-right uppercase tracking-widest text-[9px] text-slate-500">Soma Totalizadores:</td>
-                                    <td className="px-3 py-3 text-right text-indigo-700 text-sm">∑ Pesos = {totalWeight}</td>
-                                    <td className="px-3 py-3 text-right text-emerald-600 text-sm">∑ Impactos = {totalCalculated.toFixed(1)}</td>
-                                  </tr>
-                                </tfoot>
-                              </table>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-    );
-  };
 
   function getTaskEffectiveDate(taskId: number): number {
     const task = tasks.find(t => t.id === taskId);

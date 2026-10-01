@@ -131,6 +131,13 @@ const getDaysDiffFromToday = (endDate: string | null | undefined): number | null
   }
 };
 
+const getTaskAreaName = (task: Task, areasList: Area[] = []): string => {
+  const targetAreaId = task.areaId || (task.areaIds && task.areaIds[0]);
+  if (!targetAreaId) return "Geral";
+  const found = areasList.find(a => Number(a.id) === Number(targetAreaId));
+  return found ? found.name : "Geral";
+};
+
 interface ExpandedStatusModalState {
   isOpen: boolean;
   scopeTitle: string;
@@ -139,6 +146,13 @@ interface ExpandedStatusModalState {
   activeFilter: "Atrasada" | "Crítica" | "No Prazo" | "Não iniciada" | "Em andamento" | "Concluída" | "all";
   areaId?: number;
   isMyTasks?: boolean;
+}
+
+interface MonthlyDeliveriesModalState {
+  monthIndex: number;
+  monthName: string;
+  monthAbbr: string;
+  year: number;
 }
 
 export function HomeTab({ 
@@ -414,6 +428,149 @@ export function HomeTab({
     });
   }, [expandedModalState, modalScopeTasks, modalSearchTerm]);
 
+  // ----------------------------------------------------
+  // Entregas por Mês: Dados e Lógica da Linha do Tempo
+  // ----------------------------------------------------
+  const planReferenceYear = useMemo(() => {
+    if (activePlan?.name) {
+      const match = activePlan.name.match(/20\d\d/);
+      if (match) return parseInt(match[0]);
+    }
+    return new Date().getFullYear();
+  }, [activePlan]);
+
+  const [selectedTimelineYear, setSelectedTimelineYear] = useState<number>(planReferenceYear);
+
+  useEffect(() => {
+    setSelectedTimelineYear(planReferenceYear);
+  }, [planReferenceYear]);
+
+  const MONTHS_CONFIG = useMemo(() => [
+    { index: 0, abbr: "JAN", name: "Janeiro" },
+    { index: 1, abbr: "FEV", name: "Fevereiro" },
+    { index: 2, abbr: "MAR", name: "Março" },
+    { index: 3, abbr: "ABR", name: "Abril" },
+    { index: 4, abbr: "MAI", name: "Maio" },
+    { index: 5, abbr: "JUN", name: "Junho" },
+    { index: 6, abbr: "JUL", name: "Julho" },
+    { index: 7, abbr: "AGO", name: "Agosto" },
+    { index: 8, abbr: "SET", name: "Setembro" },
+    { index: 9, abbr: "OUT", name: "Outubro" },
+    { index: 10, abbr: "NOV", name: "Novembro" },
+    { index: 11, abbr: "DEZ", name: "Dezembro" },
+  ], []);
+
+  const completedPlanTasks = useMemo(() => {
+    return planTasks.filter(t => normalizeStatus(t.status) === "Concluída" || Number(t.progress) === 100);
+  }, [planTasks]);
+
+  const availableYears = useMemo(() => {
+    const yearsSet = new Set<number>();
+    yearsSet.add(planReferenceYear);
+    completedPlanTasks.forEach(t => {
+      const dateStr = t.completedAt || t.endDate || t.updatedAt || t.startDate;
+      if (dateStr) {
+        try {
+          const y = new Date(dateStr).getFullYear();
+          if (!isNaN(y) && y >= 2020 && y <= 2035) {
+            yearsSet.add(y);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    });
+    return Array.from(yearsSet).sort((a, b) => a - b);
+  }, [completedPlanTasks, planReferenceYear]);
+
+  const monthlyDeliveriesData = useMemo(() => {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonthIndex = today.getMonth();
+
+    return MONTHS_CONFIG.map(month => {
+      const monthTasks = completedPlanTasks.filter(t => {
+        const dateStr = t.completedAt || t.endDate || t.updatedAt || t.startDate;
+        if (!dateStr) return false;
+        try {
+          const d = new Date(dateStr);
+          if (isNaN(d.getTime())) return false;
+          return d.getFullYear() === selectedTimelineYear && d.getMonth() === month.index;
+        } catch {
+          return false;
+        }
+      });
+
+      const isCurrentMonth = selectedTimelineYear === currentYear && month.index === currentMonthIndex;
+
+      const areaCountMap: Record<number, number> = {};
+      monthTasks.forEach(t => {
+        const aId = t.areaId || (t.areaIds && t.areaIds[0]);
+        if (aId) {
+          areaCountMap[aId] = (areaCountMap[aId] || 0) + 1;
+        }
+      });
+
+      return {
+        ...month,
+        year: selectedTimelineYear,
+        tasks: monthTasks,
+        count: monthTasks.length,
+        isCurrentMonth,
+        areaCountMap
+      };
+    });
+  }, [MONTHS_CONFIG, completedPlanTasks, selectedTimelineYear]);
+
+  // Estado do Modal de Entregas por Mês
+  const [selectedMonthForDeliveries, setSelectedMonthForDeliveries] = useState<MonthlyDeliveriesModalState | null>(null);
+  const [monthModalAreaFilter, setMonthModalAreaFilter] = useState<number | "all">("all");
+  const [monthModalSearch, setMonthModalSearch] = useState<string>("");
+
+  const selectedMonthTasks = useMemo(() => {
+    if (!selectedMonthForDeliveries) return [];
+    return completedPlanTasks.filter(t => {
+      const dateStr = t.completedAt || t.endDate || t.updatedAt || t.startDate;
+      if (!dateStr) return false;
+      try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return false;
+        return d.getFullYear() === selectedMonthForDeliveries.year && d.getMonth() === selectedMonthForDeliveries.monthIndex;
+      } catch {
+        return false;
+      }
+    });
+  }, [selectedMonthForDeliveries, completedPlanTasks]);
+
+  const monthAvailableAreas = useMemo(() => {
+    const areaIdSet = new Set<number>();
+    selectedMonthTasks.forEach(t => {
+      const aId = t.areaId || (t.areaIds && t.areaIds[0]);
+      if (aId) areaIdSet.add(Number(aId));
+    });
+    return (areas || []).filter(a => areaIdSet.has(Number(a.id)));
+  }, [selectedMonthTasks, areas]);
+
+  const filteredMonthTasks = useMemo(() => {
+    let list = selectedMonthTasks;
+    if (monthModalAreaFilter !== "all") {
+      list = list.filter(t => {
+        const aId = t.areaId || (t.areaIds && t.areaIds[0]);
+        return Number(aId) === Number(monthModalAreaFilter);
+      });
+    }
+    if (monthModalSearch.trim()) {
+      const term = monthModalSearch.toLowerCase().trim();
+      list = list.filter(t => 
+        t.title?.toLowerCase().includes(term) ||
+        t.code?.toLowerCase().includes(term) ||
+        t.description?.toLowerCase().includes(term) ||
+        t.assignedTo?.toLowerCase().includes(term)
+      );
+    }
+    return list;
+  }, [selectedMonthTasks, monthModalAreaFilter, monthModalSearch]);
+
   return (
     <div className="space-y-10 w-full pb-16">
       {/* Dynamic Header Promo Banner */}
@@ -435,12 +592,12 @@ export function HomeTab({
         </div>
       </div>
 
-      {/* Module Group: Acesso Rápido (Plano Ativo) */}
+      {/* Module Group: Sumário Executivo (Plano Ativo) */}
       <section className="space-y-3.5">
         <div className="flex items-center gap-2.5 border-b border-slate-100 pb-2.5">
           <div className="p-1 px-2.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0">
             <Sparkles size={13} className="text-indigo-600" />
-            Acesso Rápido
+            Sumário Executivo
           </div>
           <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
             Plano Ativo: <span className="text-indigo-700 font-extrabold">{activePlan?.name || "Plano Geral de Atividades"}</span>
@@ -641,7 +798,124 @@ export function HomeTab({
               </div>
             </div>
           </div>
-        </div>
+
+          {/* Linha do Tempo: Entregas por Mês (Full Width) */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4 w-full">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shrink-0">
+                    <CalendarCheck size={18} className="stroke-[2.2]" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm sm:text-base font-black text-slate-800 tracking-tight">
+                        Entregas por Mês
+                      </h4>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        {completedPlanTasks.length} {completedPlanTasks.length === 1 ? "concluída" : "concluídas"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Linha do tempo das atividades concluídas. Clique em um mês para abrir as tarefas e filtrar por área.
+                    </p>
+                  </div>
+                </div>
+
+                {availableYears.length > 1 && (
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-100 p-1 rounded-xl border border-slate-200/70">
+                    {availableYears.map(y => (
+                      <button
+                        key={y}
+                        onClick={() => setSelectedTimelineYear(y)}
+                        className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                          selectedTimelineYear === y
+                            ? "bg-white text-emerald-700 shadow-xs border border-slate-200/60"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        {y}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Timeline Track with 12 months */}
+              <div className="relative pt-1 pb-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2.5 relative z-10">
+                  {monthlyDeliveriesData.map(m => {
+                    const hasDeliveries = m.count > 0;
+                    return (
+                      <div
+                        key={m.index}
+                        onClick={() => {
+                          setSelectedMonthForDeliveries({
+                            monthIndex: m.index,
+                            monthName: m.name,
+                            monthAbbr: m.abbr,
+                            year: m.year
+                          });
+                          setMonthModalAreaFilter("all");
+                          setMonthModalSearch("");
+                        }}
+                        className={`group relative rounded-2xl p-3 border transition-all duration-200 cursor-pointer flex flex-col justify-between items-center text-center select-none ${
+                          m.isCurrentMonth
+                            ? "ring-2 ring-indigo-500/50 ring-offset-2 bg-indigo-50/20"
+                            : ""
+                        } ${
+                          hasDeliveries
+                            ? "bg-gradient-to-b from-white to-emerald-50/50 border-emerald-200 hover:border-emerald-400 hover:shadow-md hover:-translate-y-0.5"
+                            : "bg-slate-50/80 border-slate-200/80 hover:bg-white hover:border-slate-300 hover:shadow-xs"
+                        }`}
+                        title={`Clique para ver as ${m.count} atividades concluídas em ${m.name} de ${m.year}`}
+                      >
+                        {/* Top Node Indicator */}
+                        <div className="flex items-center justify-between w-full mb-1">
+                          <span className={`text-[11px] font-black uppercase tracking-wider ${
+                            hasDeliveries ? "text-emerald-700" : "text-slate-500"
+                          }`}>
+                            {m.abbr}
+                          </span>
+                          {m.isCurrentMonth ? (
+                            <span className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse" title="Mês atual" />
+                          ) : (
+                            <span className={`w-1.5 h-1.5 rounded-full ${hasDeliveries ? "bg-emerald-500" : "bg-slate-300"}`} />
+                          )}
+                        </div>
+
+                        {/* Counter Circle / Big Number */}
+                        <div className="my-1 flex flex-col items-center">
+                          <div className={`text-2xl font-black tracking-tight tabular-nums transition-colors ${
+                            hasDeliveries 
+                              ? "text-emerald-700 group-hover:text-emerald-800" 
+                              : "text-slate-400 group-hover:text-slate-600"
+                          }`}>
+                            {m.count}
+                          </div>
+                          <span className={`text-[9px] font-bold ${
+                            hasDeliveries ? "text-emerald-600/90" : "text-slate-400"
+                          }`}>
+                            {m.count === 1 ? "entrega" : "entregas"}
+                          </span>
+                        </div>
+
+                        {/* Bottom micro link */}
+                        <div className="w-full pt-1.5 mt-1 border-t border-slate-100 flex items-center justify-center">
+                          <span className={`text-[9px] font-bold tracking-tight transition-colors ${
+                            hasDeliveries
+                              ? "text-emerald-600 group-hover:underline"
+                              : "text-slate-400"
+                          }`}>
+                            {hasDeliveries ? "Ver tarefas →" : "Ver mês →"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
 
         {/* Box Resumo por Área Temática do Plano Ativo */}
         <div className="space-y-4 pt-2">
@@ -2051,6 +2325,256 @@ export function HomeTab({
 
                   <button
                     onClick={closeStatusModal}
+                    className="px-4 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: Entregas do Mês com Filtro por Área Temática */}
+      <AnimatePresence>
+        {selectedMonthForDeliveries && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 sm:p-6 animate-fadeIn">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="p-6 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0 shadow-2xs">
+                    <CalendarCheck size={24} className="stroke-[2.2]" />
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg sm:text-xl font-black text-slate-800 tracking-tight">
+                        Entregas de {selectedMonthForDeliveries.monthName} de {selectedMonthForDeliveries.year}
+                      </h3>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        {selectedMonthTasks.length} {selectedMonthTasks.length === 1 ? "Concluída" : "Concluídas"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Atividades finalizadas no plano <strong>{activePlan?.name || "Plano Geral"}</strong>
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setSelectedMonthForDeliveries(null)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                  title="Fechar"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Filter Bar */}
+              <div className="p-4 sm:px-6 bg-white border-b border-slate-100 flex flex-col gap-3">
+                {/* Filtro por Área Temática */}
+                <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
+                    <Filter size={13} /> Área:
+                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                    <button
+                      onClick={() => setMonthModalAreaFilter("all")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                        monthModalAreaFilter === "all"
+                          ? "bg-slate-800 text-white shadow-xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      Todas ({selectedMonthTasks.length})
+                    </button>
+                    {monthAvailableAreas.map(area => {
+                      const count = selectedMonthTasks.filter(t => {
+                        const aId = t.areaId || (t.areaIds && t.areaIds[0]);
+                        return Number(aId) === Number(area.id);
+                      }).length;
+                      return (
+                        <button
+                          key={area.id}
+                          onClick={() => setMonthModalAreaFilter(area.id)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                            monthModalAreaFilter === area.id
+                              ? "bg-emerald-600 text-white shadow-xs"
+                              : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-100"
+                          }`}
+                        >
+                          {area.name} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Search Box on the line below */}
+                <div className="relative w-full">
+                  <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Pesquisar entregas por título, descrição ou ID..."
+                    value={monthModalSearch}
+                    onChange={e => setMonthModalSearch(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-emerald-500 outline-none transition"
+                  />
+                  {monthModalSearch && (
+                    <button
+                      onClick={() => setMonthModalSearch("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Task List */}
+              <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-3 bg-slate-50/40">
+                {filteredMonthTasks.length === 0 ? (
+                  <div className="p-12 text-center bg-white border border-slate-200/80 rounded-3xl space-y-2">
+                    <CheckCircle2 size={36} className="mx-auto text-slate-300" />
+                    <h4 className="text-sm font-bold text-slate-700">Nenhuma entrega encontrada</h4>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                      {monthModalSearch || monthModalAreaFilter !== "all"
+                        ? "Nenhum resultado corresponde aos filtros selecionados para este mês."
+                        : "Não há atividades com status concluído registradas neste mês."}
+                    </p>
+                  </div>
+                ) : (
+                  filteredMonthTasks.map(task => {
+                    const areaName = getTaskAreaName(task, areas);
+                    const compDate = task.completedAt || task.endDate;
+
+                    return (
+                      <div
+                        key={task.id}
+                        className="p-4 rounded-2xl border border-slate-200/90 bg-white hover:border-emerald-300 hover:shadow-sm transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
+                      >
+                        <div className="space-y-2 flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {task.code && (
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[10px] font-black uppercase tracking-wider">
+                                {task.code}
+                              </span>
+                            )}
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[10px] font-black uppercase tracking-wider">
+                              <CheckCircle2 size={11} className="text-emerald-600" />
+                              Concluída
+                            </span>
+                            <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-full text-[10px] font-bold">
+                              {areaName}
+                            </span>
+                          </div>
+
+                          <h4 
+                            onClick={() => {
+                              setSelectedMonthForDeliveries(null);
+                              if (activePlan) {
+                                if (onNavigateToPlanningWithFilter) {
+                                  onNavigateToPlanningWithFilter(
+                                    "tasks",
+                                    activePlan.id,
+                                    task.areaId || (task.areaIds && task.areaIds[0]),
+                                    undefined,
+                                    task.id
+                                  );
+                                } else {
+                                  handleProtectedNavigate("planning", "tasks", "planning_tasks");
+                                }
+                              }
+                            }}
+                            className="text-sm font-black text-slate-900 leading-snug group-hover:text-emerald-700 transition-colors cursor-pointer"
+                            title="Clique para editar esta atividade"
+                          >
+                            {task.title}
+                          </h4>
+
+                          <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500 font-medium">
+                            {compDate && (
+                              <div className="flex items-center gap-1.5">
+                                <Calendar size={13} className="text-slate-400" />
+                                <span>
+                                  Conclusão: <strong className="text-slate-800 font-bold">{formatDateBR(compDate)}</strong>
+                                </span>
+                              </div>
+                            )}
+                            {task.assignedTo && (
+                              <div className="flex items-center gap-1.5">
+                                <User size={13} className="text-slate-400" />
+                                <span className="text-slate-700 font-semibold">{task.assignedTo}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Action Button to Edit Task */}
+                        <button
+                          onClick={() => {
+                            setSelectedMonthForDeliveries(null);
+                            if (activePlan) {
+                              if (onNavigateToPlanningWithFilter) {
+                                onNavigateToPlanningWithFilter(
+                                  "tasks",
+                                  activePlan.id,
+                                  task.areaId || (task.areaIds && task.areaIds[0]),
+                                  undefined,
+                                  task.id
+                                );
+                              } else {
+                                handleProtectedNavigate("planning", "tasks", "planning_tasks");
+                              }
+                            }
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-800 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 shadow-2xs group/btn"
+                          title="Abrir formulário para editar esta atividade"
+                        >
+                          <Edit3 size={13} className="text-slate-400 group-hover/btn:text-emerald-600 transition-colors" />
+                          <span>Editar Atividade</span>
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-500">
+                  Mostrando <strong>{filteredMonthTasks.length}</strong> de <strong>{selectedMonthTasks.length}</strong> entregas de {selectedMonthForDeliveries.monthName}
+                </span>
+
+                <div className="flex items-center gap-2">
+                  {activePlan && (
+                    <button
+                      onClick={() => {
+                        setSelectedMonthForDeliveries(null);
+                        if (onNavigateToPlanningWithFilter) {
+                          onNavigateToPlanningWithFilter(
+                            "tasks",
+                            activePlan.id,
+                            monthModalAreaFilter !== "all" ? Number(monthModalAreaFilter) : undefined
+                          );
+                        } else {
+                          handleProtectedNavigate("planning", "tasks", "planning_tasks");
+                        }
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <ListTodo size={14} />
+                      <span>Abrir no Planejamento</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSelectedMonthForDeliveries(null)}
                     className="px-4 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
                   >
                     Fechar

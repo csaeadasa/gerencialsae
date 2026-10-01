@@ -4331,8 +4331,14 @@ const renderSupplyTable = () => {
                         <button
                           onClick={() => {
                             setIsMyTasksSelected(false);
-                            setActivePlanningSubTab("dashboard");
-                            handleTabChange("planning");
+                            const activeProj = plans.find((p: any) => p.isActive) || plans[0];
+                            const activePlanId = activeProj ? activeProj.id.toString() : "";
+                            if (activePlanId) {
+                              handleNavigateToPlanningWithFilter("dashboard", activePlanId);
+                            } else {
+                              setActivePlanningSubTab("dashboard");
+                              handleTabChange("planning");
+                            }
                             setIsMobileMenuOpen(false);
                           }}
                           className={cn("w-full text-left justify-start px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "planning" && activePlanningSubTab === "dashboard" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
@@ -5018,8 +5024,14 @@ const renderSupplyTable = () => {
                       title={isSidebarCollapsed ? "Painel de Atividades" : undefined}
                       onClick={() => {
                         setIsMyTasksSelected(false);
-                        setActivePlanningSubTab("dashboard");
-                        handleTabChange("planning");
+                        const activeProj = plans.find((p: any) => p.isActive) || plans[0];
+                        const activePlanId = activeProj ? activeProj.id.toString() : "";
+                        if (activePlanId) {
+                          handleNavigateToPlanningWithFilter("dashboard", activePlanId);
+                        } else {
+                          setActivePlanningSubTab("dashboard");
+                          handleTabChange("planning");
+                        }
                       }}
                       className={cn(
                         "w-full text-left justify-start px-4 py-2 rounded-xl flex items-center gap-3 transition-all duration-200 group text-xs font-semibold cursor-pointer",
@@ -9827,6 +9839,8 @@ const renderSupplyTable = () => {
                 setTasks={setTasks}
                 showToast={showToast}
                 activeSubTab={activePlanningSubTab}
+                setActivePlanningSubTab={setActivePlanningSubTab}
+                onNavigateToPlanningWithFilter={handleNavigateToPlanningWithFilter}
                 setConfirmState={setConfirmState}
                 myTasksFilterTrigger={myTasksFilterTrigger}
                 isMyTasksSelected={isMyTasksSelected}
