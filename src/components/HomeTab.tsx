@@ -1992,10 +1992,10 @@ export function HomeTab({
                 </div>
               </div>
 
-              {/* Sub-bar com Abas de Filtro e Busca */}
-              <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                {/* Abas Rápidas */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+              {/* Sub-bar com Abas de Filtro na linha superior e Consulta na linha inferior */}
+              <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-col gap-3">
+                {/* Linha Superior: Botões de Filtro */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none w-full">
                   {expandedModalState.categoryType === "status" ? (
                     <>
                       <button
@@ -2094,22 +2094,23 @@ export function HomeTab({
                   )}
                 </div>
 
-                {/* Input de Busca */}
-                <div className="relative w-full sm:w-64 shrink-0">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                {/* Linha Inferior: Campo de Busca / Consulta */}
+                <div className="relative w-full">
+                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Filtrar por nome, código ou responsável..."
+                    placeholder="Consultar por nome, código ou responsável..."
                     value={modalSearchTerm}
                     onChange={(e) => setModalSearchTerm(e.target.value)}
-                    className="w-full pl-8 pr-8 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-hidden focus:border-indigo-500 transition-colors"
+                    className="w-full pl-9 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-hidden focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all shadow-2xs"
                   />
                   {modalSearchTerm && (
                     <button
                       onClick={() => setModalSearchTerm("")}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-1"
+                      title="Limpar consulta"
                     >
-                      <X size={12} />
+                      <X size={14} />
                     </button>
                   )}
                 </div>
