@@ -313,7 +313,7 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex flex-col p-4 sm:p-6 md:p-8 animate-fadeIn items-center justify-center">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[140] flex flex-col p-4 sm:p-6 md:p-8 animate-fadeIn items-center justify-center">
       <div className="bg-white rounded-[2rem] w-full max-w-5xl h-full max-h-[92vh] shadow-2xl relative flex flex-col overflow-hidden border border-slate-100">
         
         {/* Top Header */}

@@ -12843,25 +12843,6 @@ export function PlanningTab({
                   </div>
                 );
               })()}
-
-            {/* Timeline Modal Overlay */}
-            {timelineTaskId !== null && (
-              <TaskTimelineModal
-                taskId={timelineTaskId}
-                onClose={() => setTimelineTaskId(null)}
-                onEditTask={handleEditTask}
-                tasks={tasks}
-                taskById={taskById}
-                childrenMap={childrenMap}
-                areas={areas}
-                categories={categories}
-                responsibles={responsibles}
-                formatDate={formatDate}
-                formatDateTime={formatDateTime}
-                showToast={showToast}
-                renderProgressCalc={renderProgressCalc}
-              />
-            )}
         </div>
           </>
         )}
@@ -13206,6 +13187,17 @@ export function PlanningTab({
                   {formMode === "create" ? "Nova Atividade" : "Editar Atividade"}
                 </h3>
                 <div className="flex items-center gap-2.5">
+                  {formMode === "edit" && editingTask.id && (
+                    <button
+                      type="button"
+                      onClick={() => setTimelineTaskId(editingTask.id)}
+                      className="px-3.5 py-2 font-bold text-sm text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs group"
+                      title="Abrir a Linha do Tempo / Timeline completa desta atividade"
+                    >
+                      <Activity size={16} className="text-indigo-600 group-hover:scale-110 transition-transform" />
+                      <span>Timeline da Tarefa</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setIsFormOpen(false)}
@@ -14574,6 +14566,25 @@ export function PlanningTab({
           </div>
         )}
       </AnimatePresence>
+
+      {/* Global Task Timeline Modal */}
+      {timelineTaskId !== null && (
+        <TaskTimelineModal
+          taskId={timelineTaskId}
+          onClose={() => setTimelineTaskId(null)}
+          onEditTask={handleEditTask}
+          tasks={tasks}
+          taskById={taskById}
+          childrenMap={childrenMap}
+          areas={areas}
+          categories={categories}
+          responsibles={responsibles}
+          formatDate={formatDate}
+          formatDateTime={formatDateTime}
+          showToast={showToast}
+          renderProgressCalc={renderProgressCalc}
+        />
+      )}
 
       </div>
     </div>

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { 
   Droplets, 
   Activity, 
@@ -25,9 +25,18 @@ import {
   Sparkles,
   Info,
   ChevronRight,
-  UserCheck
+  UserCheck,
+  X,
+  Search,
+  AlertOctagon,
+  AlertTriangle,
+  ExternalLink,
+  Edit3,
+  Calendar,
+  User,
+  Filter
 } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { Task, Area } from "../types";
 import { useAuth } from "../lib/auth";
 
@@ -39,7 +48,7 @@ interface HomeTabProps {
   plans?: any[];
   responsibles?: any[];
   onMyTasksSelect?: () => void;
-  onNavigateToPlanningWithFilter?: (subTab: "tasks" | "dashboard", planId: number | string, areaId?: number, isMyTasks?: boolean) => void;
+  onNavigateToPlanningWithFilter?: (subTab: "tasks" | "dashboard", planId: number | string, areaId?: number, isMyTasks?: boolean, taskIdToEdit?: number) => void;
   checkPermission?: (moduleId: any, action: any) => boolean;
   showToast?: (title: string, message: string, type?: 'success' | 'warning' | 'error' | 'info') => void;
 }
@@ -87,6 +96,51 @@ const getDeadlineStatus = (endDate: string | null | undefined, status: string | 
   }
 };
 
+const formatDateBR = (d: string | null | undefined): string => {
+  if (!d) return "-";
+  try {
+    const datePart = d.split('T')[0];
+    const parts = datePart.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return new Date(d).toLocaleDateString('pt-BR');
+  } catch (e) {
+    return d;
+  }
+};
+
+const getDaysDiffFromToday = (endDate: string | null | undefined): number | null => {
+  if (!endDate) return null;
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let dEnd: Date;
+    if (endDate.includes("-")) {
+      const parts = endDate.split('T')[0].split('-');
+      dEnd = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    } else {
+      dEnd = new Date(endDate);
+    }
+    if (isNaN(dEnd.getTime())) return null;
+    dEnd.setHours(0, 0, 0, 0);
+    const diffTime = dEnd.getTime() - today.getTime();
+    return Math.round(diffTime / (1000 * 60 * 60 * 24));
+  } catch (e) {
+    return null;
+  }
+};
+
+interface ExpandedStatusModalState {
+  isOpen: boolean;
+  scopeTitle: string;
+  scopeSubtitle?: string;
+  categoryType: "status" | "situation";
+  activeFilter: "Atrasada" | "Crítica" | "No Prazo" | "Não iniciada" | "Em andamento" | "Concluída" | "all";
+  areaId?: number;
+  isMyTasks?: boolean;
+}
+
 export function HomeTab({ 
   setActiveTab, 
   setActivePlanningSubTab, 
@@ -100,6 +154,40 @@ export function HomeTab({
   showToast 
 }: HomeTabProps) {
   const { currentUser } = useAuth();
+
+  // Estado do Modal de Expansão de Status/Situação
+  const [expandedModalState, setExpandedModalState] = useState<ExpandedStatusModalState>({
+    isOpen: false,
+    scopeTitle: "",
+    categoryType: "status",
+    activeFilter: "Atrasada",
+    areaId: undefined,
+    isMyTasks: false,
+  });
+
+  const [modalSearchTerm, setModalSearchTerm] = useState("");
+
+  const openStatusModal = (config: Omit<ExpandedStatusModalState, "isOpen">) => {
+    setModalSearchTerm("");
+    setExpandedModalState({
+      isOpen: true,
+      ...config,
+    });
+  };
+
+  const closeStatusModal = () => {
+    setExpandedModalState(prev => ({ ...prev, isOpen: false }));
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && expandedModalState.isOpen) {
+        closeStatusModal();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [expandedModalState.isOpen]);
   
   const handleProtectedNavigate = (tab: string, subTab?: any, requiredModule?: string) => {
     if (requiredModule && checkPermission && !checkPermission(requiredModule, 'view')) {
@@ -192,7 +280,7 @@ export function HomeTab({
 
     return {
       isMyTasks: true,
-      name: "Minhas Tarefas",
+      name: "MINHAS TAREFAS",
       description: currentUser?.name ? `Atividades de ${currentUser.name}` : "Atividades atribuídas ao seu usuário",
       total,
       notStarted,
@@ -257,6 +345,75 @@ export function HomeTab({
     return result;
   }, [areas, planTasks, myTasksSummary]);
 
+  // Tarefas base do escopo atualmente aberto no modal
+  const modalScopeTasks = useMemo(() => {
+    if (!expandedModalState.isOpen) return [];
+    if (expandedModalState.isMyTasks) {
+      return myPlanTasks;
+    } else if (expandedModalState.areaId) {
+      return planTasks.filter(t => 
+        t.areaIds?.some(id => Number(id) === Number(expandedModalState.areaId)) || 
+        Number(t.areaId) === Number(expandedModalState.areaId)
+      );
+    }
+    return planTasks;
+  }, [expandedModalState.isOpen, expandedModalState.isMyTasks, expandedModalState.areaId, myPlanTasks, planTasks]);
+
+  // Contadores dinâmicos para as abas internas do modal
+  const modalCounts = useMemo(() => {
+    const delayed = modalScopeTasks.filter(t => getDeadlineStatus(t.endDate, t.status) === "Atrasada").length;
+    const critical = modalScopeTasks.filter(t => getDeadlineStatus(t.endDate, t.status) === "Crítica").length;
+    const onTime = modalScopeTasks.filter(t => getDeadlineStatus(t.endDate, t.status) === "No Prazo").length;
+    
+    const notStarted = modalScopeTasks.filter(t => normalizeStatus(t.status) === "Não iniciada").length;
+    const inProgress = modalScopeTasks.filter(t => normalizeStatus(t.status) === "Em andamento").length;
+    const completed = modalScopeTasks.filter(t => normalizeStatus(t.status) === "Concluída").length;
+    const total = modalScopeTasks.length;
+
+    return { delayed, critical, onTime, notStarted, inProgress, completed, total };
+  }, [modalScopeTasks]);
+
+  // Tarefas exibidas com busca e ordenação por criticidade
+  const modalDisplayTasks = useMemo(() => {
+    if (!expandedModalState.isOpen) return [];
+
+    let list = modalScopeTasks;
+
+    if (expandedModalState.categoryType === "status") {
+      if (expandedModalState.activeFilter !== "all") {
+        list = list.filter(t => getDeadlineStatus(t.endDate, t.status) === expandedModalState.activeFilter);
+      }
+    } else if (expandedModalState.categoryType === "situation") {
+      if (expandedModalState.activeFilter !== "all") {
+        list = list.filter(t => normalizeStatus(t.status) === expandedModalState.activeFilter);
+      }
+    }
+
+    if (modalSearchTerm.trim()) {
+      const term = modalSearchTerm.toLowerCase().trim();
+      list = list.filter(t => 
+        t.title?.toLowerCase().includes(term) ||
+        t.code?.toLowerCase().includes(term) ||
+        t.description?.toLowerCase().includes(term) ||
+        t.assignedTo?.toLowerCase().includes(term)
+      );
+    }
+
+    // Ordenação: Atrasadas primeiro (mais antigas), depois Críticas (mais próximas), depois No Prazo
+    return [...list].sort((a, b) => {
+      const statusA = getDeadlineStatus(a.endDate, a.status);
+      const statusB = getDeadlineStatus(b.endDate, b.status);
+      const priorityOrder: Record<string, number> = { "Atrasada": 1, "Crítica": 2, "No Prazo": 3 };
+      const diff = (priorityOrder[statusA] || 99) - (priorityOrder[statusB] || 99);
+      if (diff !== 0) return diff;
+
+      if (a.endDate && b.endDate) {
+        return new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
+      }
+      return 0;
+    });
+  }, [expandedModalState, modalScopeTasks, modalSearchTerm]);
+
   return (
     <div className="space-y-10 w-full pb-16">
       {/* Dynamic Header Promo Banner */}
@@ -279,53 +436,64 @@ export function HomeTab({
       </div>
 
       {/* Module Group: Acesso Rápido (Plano Ativo) */}
-      <section className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1 px-2.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles size={13} className="text-indigo-600" />
-              Acesso Rápido
-            </div>
-            <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              Plano Ativo: <span className="text-indigo-700 font-extrabold">{activePlan?.name || "Plano Geral de Atividades"}</span>
-            </h2>
+      <section className="space-y-3.5">
+        <div className="flex items-center gap-2.5 border-b border-slate-100 pb-2.5">
+          <div className="p-1 px-2.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0">
+            <Sparkles size={13} className="text-indigo-600" />
+            Acesso Rápido
           </div>
-          {activePlan && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  if (onNavigateToPlanningWithFilter) {
-                    onNavigateToPlanningWithFilter("tasks", activePlan.id);
-                  } else {
-                    handleProtectedNavigate("planning", "tasks", "planning_tasks");
-                  }
-                }}
-                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-                title="Abrir Cadastrar Atividades para o Plano Ativo"
-              >
-                <ListTodo size={14} className="text-slate-600" />
-                <span>Ver Atividades</span>
-              </button>
-              <button
-                onClick={() => {
-                  if (onNavigateToPlanningWithFilter) {
-                    onNavigateToPlanningWithFilter("dashboard", activePlan.id);
-                  } else {
-                    handleProtectedNavigate("planning", "dashboard", "planning_dashboard");
-                  }
-                }}
-                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-                title="Abrir Painel de Atividades para o Plano Ativo"
-              >
-                <BarChart3 size={14} />
-                <span>Painel do Plano</span>
-              </button>
-            </div>
-          )}
+          <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+            Plano Ativo: <span className="text-indigo-700 font-extrabold">{activePlan?.name || "Plano Geral de Atividades"}</span>
+          </h2>
         </div>
 
         {/* Box com Gráficos da Figura */}
-        <div className="space-y-4">
+        <div className="space-y-3.5">
+          {/* Título e Subtítulo com botões de ação alinhados à direita */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-black text-slate-800 tracking-tight">
+                Resumo do Plano da Superintendência
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Progresso, status de execução
+              </p>
+            </div>
+
+            {activePlan && (
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    if (onNavigateToPlanningWithFilter) {
+                      onNavigateToPlanningWithFilter("tasks", activePlan.id);
+                    } else {
+                      handleProtectedNavigate("planning", "tasks", "planning_tasks");
+                    }
+                  }}
+                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  title="Abrir Cadastrar Atividades para o Plano Ativo"
+                >
+                  <ListTodo size={14} className="text-slate-600" />
+                  <span>Ver Atividades</span>
+                </button>
+                <button
+                  onClick={() => {
+                    if (onNavigateToPlanningWithFilter) {
+                      onNavigateToPlanningWithFilter("dashboard", activePlan.id);
+                    } else {
+                      handleProtectedNavigate("planning", "dashboard", "planning_dashboard");
+                    }
+                  }}
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                  title="Abrir Painel de Atividades para o Plano Ativo"
+                >
+                  <BarChart3 size={14} />
+                  <span>Painel do Plano</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Top Card: PERCENTUAL DE CONCLUSÃO */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm">
             <div className="flex items-center justify-between mb-2">
@@ -358,77 +526,117 @@ export function HomeTab({
           {/* Row of 4 Metric Boxes */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Box 1: Total de Atividades */}
-            <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-sm flex items-center justify-between">
+            <div 
+              onClick={() => openStatusModal({
+                scopeTitle: activePlan?.name || "Plano Geral de Atividades",
+                scopeSubtitle: "Todas as atividades do plano ativo",
+                categoryType: "status",
+                activeFilter: "all"
+              })}
+              className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all duration-200 flex items-center justify-between cursor-pointer group"
+              title="Clique para ver a lista de todas as atividades"
+            >
               <div>
                 <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1">
                   <span>TOTAL DE ATIVIDADES</span>
-                  <Info size={13} className="text-slate-400 cursor-help" title="Total de atividades cadastradas no plano ativo" />
+                  <Info size={13} className="text-slate-400" />
                 </div>
-                <div className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight tabular-nums leading-tight">
+                <div className="text-3xl sm:text-4xl font-black text-slate-900 group-hover:text-indigo-600 transition-colors tracking-tight tabular-nums leading-tight">
                   {totalTasks}
                 </div>
-                <div className="text-xs font-semibold text-slate-400 mt-0.5">
-                  filtradas no painel
+                <div className="text-xs font-semibold text-slate-400 mt-0.5 flex items-center gap-1">
+                  <span>filtradas no painel</span>
+                  <span className="text-[10px] text-indigo-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">• expandir</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 group-hover:bg-indigo-600 group-hover:text-white transition-colors flex items-center justify-center shrink-0">
                 <FolderKanban size={22} className="stroke-[2.2]" />
               </div>
             </div>
 
             {/* Box 2: Não Iniciadas */}
-            <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-sm flex items-center justify-between">
+            <div 
+              onClick={() => openStatusModal({
+                scopeTitle: activePlan?.name || "Plano Geral de Atividades",
+                scopeSubtitle: "Atividades com status Não Iniciada",
+                categoryType: "situation",
+                activeFilter: "Não iniciada"
+              })}
+              className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-sm hover:shadow-md hover:border-slate-400 transition-all duration-200 flex items-center justify-between cursor-pointer group"
+              title="Clique para ver a lista de atividades não iniciadas"
+            >
               <div>
                 <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1">
                   <span>NÃO INICIADAS</span>
-                  <Info size={13} className="text-slate-400 cursor-help" title="Atividades ainda não iniciadas (progresso 0%)" />
+                  <Info size={13} className="text-slate-400" />
                 </div>
-                <div className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight tabular-nums leading-tight">
+                <div className="text-3xl sm:text-4xl font-black text-slate-900 group-hover:text-slate-700 transition-colors tracking-tight tabular-nums leading-tight">
                   {notStartedTasks}
                 </div>
-                <div className="text-xs font-semibold text-slate-400 mt-0.5">
-                  atividades pendentes
+                <div className="text-xs font-semibold text-slate-400 mt-0.5 flex items-center gap-1">
+                  <span>atividades pendentes</span>
+                  <span className="text-[10px] text-slate-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">• expandir</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-600 border border-slate-200 group-hover:bg-slate-700 group-hover:text-white transition-colors flex items-center justify-center shrink-0">
                 <Clock size={22} className="stroke-[2.2]" />
               </div>
             </div>
 
             {/* Box 3: Em Andamento */}
-            <div className="bg-blue-50/40 rounded-3xl p-5 sm:p-6 border border-blue-200 shadow-sm flex items-center justify-between">
+            <div 
+              onClick={() => openStatusModal({
+                scopeTitle: activePlan?.name || "Plano Geral de Atividades",
+                scopeSubtitle: "Atividades com status Em Andamento",
+                categoryType: "situation",
+                activeFilter: "Em andamento"
+              })}
+              className="bg-blue-50/40 rounded-3xl p-5 sm:p-6 border border-blue-200 shadow-sm hover:shadow-md hover:border-blue-400 transition-all duration-200 flex items-center justify-between cursor-pointer group"
+              title="Clique para ver a lista de atividades em andamento"
+            >
               <div>
                 <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-blue-600 mb-1">
                   <span>EM ANDAMENTO</span>
-                  <Info size={13} className="text-blue-400 cursor-help" title="Atividades iniciadas em execução (progresso entre 1% e 99%)" />
+                  <Info size={13} className="text-blue-400" />
                 </div>
-                <div className="text-3xl sm:text-4xl font-black text-blue-900 tracking-tight tabular-nums leading-tight">
+                <div className="text-3xl sm:text-4xl font-black text-blue-900 group-hover:text-blue-700 transition-colors tracking-tight tabular-nums leading-tight">
                   {inProgressTasks}
                 </div>
-                <div className="text-xs font-semibold text-blue-600/70 mt-0.5">
-                  atividades iniciadas
+                <div className="text-xs font-semibold text-blue-600/70 mt-0.5 flex items-center gap-1">
+                  <span>atividades iniciadas</span>
+                  <span className="text-[10px] text-blue-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">• expandir</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-white text-blue-600 border border-blue-100 shadow-xs flex items-center justify-center shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-white text-blue-600 border border-blue-100 shadow-xs group-hover:bg-blue-600 group-hover:text-white transition-colors flex items-center justify-center shrink-0">
                 <Activity size={22} className="stroke-[2.2]" />
               </div>
             </div>
 
             {/* Box 4: Concluídas */}
-            <div className="bg-emerald-50/50 rounded-3xl p-5 sm:p-6 border border-emerald-200 shadow-sm flex items-center justify-between">
+            <div 
+              onClick={() => openStatusModal({
+                scopeTitle: activePlan?.name || "Plano Geral de Atividades",
+                scopeSubtitle: "Atividades finalizadas",
+                categoryType: "situation",
+                activeFilter: "Concluída"
+              })}
+              className="bg-emerald-50/50 rounded-3xl p-5 sm:p-6 border border-emerald-200 shadow-sm hover:shadow-md hover:border-emerald-400 transition-all duration-200 flex items-center justify-between cursor-pointer group"
+              title="Clique para ver a lista de atividades concluídas"
+            >
               <div>
                 <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-emerald-700 mb-1">
                   <span>CONCLUÍDAS</span>
-                  <Info size={13} className="text-emerald-500 cursor-help" title="Atividades concluídas com 100% de entrega" />
+                  <Info size={13} className="text-emerald-500" />
                 </div>
-                <div className="text-3xl sm:text-4xl font-black text-emerald-950 tracking-tight tabular-nums leading-tight">
+                <div className="text-3xl sm:text-4xl font-black text-emerald-950 group-hover:text-emerald-700 transition-colors tracking-tight tabular-nums leading-tight">
                   {completedTasks}
                 </div>
-                <div className="text-xs font-semibold text-emerald-700/80 mt-0.5">
-                  atividades finalizadas
+                <div className="text-xs font-semibold text-emerald-700/80 mt-0.5 flex items-center gap-1">
+                  <span>atividades finalizadas</span>
+                  <span className="text-[10px] text-emerald-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">• expandir</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-white text-emerald-600 border border-emerald-200 shadow-xs flex items-center justify-center shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-white text-emerald-600 border border-emerald-200 shadow-xs group-hover:bg-emerald-600 group-hover:text-white transition-colors flex items-center justify-center shrink-0">
                 <CheckCircle2 size={22} className="stroke-[2.2]" />
               </div>
             </div>
@@ -514,7 +722,7 @@ export function HomeTab({
                       </div>
                     </div>
 
-                    {/* Quadros de Distribuição: Situação e Status do Prazo */}
+                    {/* Quadros de Distribuição: Situação e Status do Prazo com mecanismos de expansão */}
                     <div className="space-y-2.5">
                       {/* Quadro 1: Situação */}
                       <div className="space-y-1">
@@ -522,20 +730,68 @@ export function HomeTab({
                           <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
                             Situação
                           </span>
+                          <span className="text-[9px] text-slate-400 font-semibold flex items-center gap-1">
+                            <span>Clique para expandir</span>
+                          </span>
                         </div>
-                        <div className="grid grid-cols-3 gap-2 py-2 px-3 bg-slate-50/90 rounded-2xl border border-slate-100 text-center">
-                          <div>
-                            <span className="text-[10px] font-black uppercase text-slate-400 block tracking-wider">Não Inic.</span>
+                        <div className="grid grid-cols-3 gap-1 p-1 bg-slate-50/90 rounded-2xl border border-slate-100 text-center">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openStatusModal({
+                                scopeTitle: item.name,
+                                scopeSubtitle: item.description,
+                                categoryType: "situation",
+                                activeFilter: "Não iniciada",
+                                areaId: item.isMyTasks ? undefined : item.area?.id,
+                                isMyTasks: item.isMyTasks
+                              });
+                            }}
+                            className="py-1.5 px-1 rounded-xl hover:bg-white hover:shadow-xs transition-all cursor-pointer text-center group/btn focus:outline-hidden"
+                            title={`Clique para ver as ${item.notStarted} atividades não iniciadas de ${item.name}`}
+                          >
+                            <span className="text-[10px] font-black uppercase text-slate-400 block tracking-wider group-hover/btn:text-slate-600">Não Inic.</span>
                             <span className="text-sm font-black text-slate-700 tabular-nums">{item.notStarted}</span>
-                          </div>
-                          <div className="border-x border-slate-200 px-1">
-                            <span className="text-[10px] font-black uppercase text-blue-500 block tracking-wider">Andamento</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openStatusModal({
+                                scopeTitle: item.name,
+                                scopeSubtitle: item.description,
+                                categoryType: "situation",
+                                activeFilter: "Em andamento",
+                                areaId: item.isMyTasks ? undefined : item.area?.id,
+                                isMyTasks: item.isMyTasks
+                              });
+                            }}
+                            className="py-1.5 px-1 rounded-xl hover:bg-white hover:shadow-xs border-x border-slate-200 transition-all cursor-pointer text-center group/btn focus:outline-hidden"
+                            title={`Clique para ver as ${item.inProgress} atividades em andamento de ${item.name}`}
+                          >
+                            <span className="text-[10px] font-black uppercase text-blue-500 block tracking-wider group-hover/btn:text-blue-700">Andamento</span>
                             <span className="text-sm font-black text-blue-700 tabular-nums">{item.inProgress}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black uppercase text-emerald-500 block tracking-wider">Concluídas</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openStatusModal({
+                                scopeTitle: item.name,
+                                scopeSubtitle: item.description,
+                                categoryType: "situation",
+                                activeFilter: "Concluída",
+                                areaId: item.isMyTasks ? undefined : item.area?.id,
+                                isMyTasks: item.isMyTasks
+                              });
+                            }}
+                            className="py-1.5 px-1 rounded-xl hover:bg-white hover:shadow-xs transition-all cursor-pointer text-center group/btn focus:outline-hidden"
+                            title={`Clique para ver as ${item.completed} atividades concluídas de ${item.name}`}
+                          >
+                            <span className="text-[10px] font-black uppercase text-emerald-500 block tracking-wider group-hover/btn:text-emerald-700">Concluídas</span>
                             <span className="text-sm font-black text-emerald-700 tabular-nums">{item.completed}</span>
-                          </div>
+                          </button>
                         </div>
                       </div>
 
@@ -545,20 +801,68 @@ export function HomeTab({
                           <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
                             Status do Prazo
                           </span>
+                          <span className="text-[9px] text-slate-400 font-semibold flex items-center gap-1">
+                            <span>Clique para expandir</span>
+                          </span>
                         </div>
-                        <div className="grid grid-cols-3 gap-2 py-2 px-3 bg-slate-50/90 rounded-2xl border border-slate-100 text-center">
-                          <div>
-                            <span className="text-[10px] font-black uppercase text-emerald-600 block tracking-wider">No Prazo</span>
+                        <div className="grid grid-cols-3 gap-1 p-1 bg-slate-50/90 rounded-2xl border border-slate-100 text-center">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openStatusModal({
+                                scopeTitle: item.name,
+                                scopeSubtitle: item.description,
+                                categoryType: "status",
+                                activeFilter: "No Prazo",
+                                areaId: item.isMyTasks ? undefined : item.area?.id,
+                                isMyTasks: item.isMyTasks
+                              });
+                            }}
+                            className="py-1.5 px-1 rounded-xl hover:bg-emerald-50/80 hover:shadow-xs transition-all cursor-pointer text-center group/btn focus:outline-hidden"
+                            title={`Clique para ver as ${item.onTime} atividades no prazo de ${item.name}`}
+                          >
+                            <span className="text-[10px] font-black uppercase text-emerald-600 block tracking-wider group-hover/btn:text-emerald-800">No Prazo</span>
                             <span className="text-sm font-black text-emerald-700 tabular-nums">{item.onTime}</span>
-                          </div>
-                          <div className="border-x border-slate-200 px-1">
-                            <span className="text-[10px] font-black uppercase text-amber-500 block tracking-wider">Crítica</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openStatusModal({
+                                scopeTitle: item.name,
+                                scopeSubtitle: item.description,
+                                categoryType: "status",
+                                activeFilter: "Crítica",
+                                areaId: item.isMyTasks ? undefined : item.area?.id,
+                                isMyTasks: item.isMyTasks
+                              });
+                            }}
+                            className="py-1.5 px-1 rounded-xl hover:bg-amber-50/80 hover:shadow-xs border-x border-slate-200 transition-all cursor-pointer text-center group/btn focus:outline-hidden"
+                            title={`Clique para ver as ${item.critical} atividades críticas (vencendo em até 7 dias) de ${item.name}`}
+                          >
+                            <span className="text-[10px] font-black uppercase text-amber-500 block tracking-wider group-hover/btn:text-amber-700">Crítica</span>
                             <span className="text-sm font-black text-amber-700 tabular-nums">{item.critical}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black uppercase text-rose-500 block tracking-wider">Atrasadas</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openStatusModal({
+                                scopeTitle: item.name,
+                                scopeSubtitle: item.description,
+                                categoryType: "status",
+                                activeFilter: "Atrasada",
+                                areaId: item.isMyTasks ? undefined : item.area?.id,
+                                isMyTasks: item.isMyTasks
+                              });
+                            }}
+                            className="py-1.5 px-1 rounded-xl hover:bg-rose-50/80 hover:shadow-xs transition-all cursor-pointer text-center group/btn focus:outline-hidden"
+                            title={`Clique para ver as ${item.delayed} atividades atrasadas de ${item.name}`}
+                          >
+                            <span className="text-[10px] font-black uppercase text-rose-500 block tracking-wider group-hover/btn:text-rose-700">Atrasadas</span>
                             <span className="text-sm font-black text-rose-700 tabular-nums">{item.delayed}</span>
-                          </div>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1327,6 +1631,436 @@ export function HomeTab({
           <ArrowRight size={18} className="text-slate-400 group-hover:translate-x-1 transition-transform mr-2" />
         </motion.div>
       </section>
+
+      {/* Modal de Expansão de Atividades por Status / Situação */}
+      <AnimatePresence>
+        {expandedModalState.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div 
+              className="fixed inset-0"
+              onClick={closeStatusModal}
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              transition={{ duration: 0.2 }}
+              className="relative bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] z-10"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header do Modal */}
+              <div className={`p-6 border-b text-white relative overflow-hidden ${
+                expandedModalState.activeFilter === "Atrasada"
+                  ? "bg-gradient-to-r from-rose-700 via-rose-600 to-rose-500 border-rose-800"
+                  : expandedModalState.activeFilter === "Crítica"
+                  ? "bg-gradient-to-r from-amber-600 via-amber-500 to-orange-500 border-amber-700"
+                  : expandedModalState.activeFilter === "No Prazo"
+                  ? "bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-600 border-emerald-800"
+                  : "bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-slate-800"
+              }`}>
+                <div className="flex items-start justify-between gap-4 relative z-10">
+                  <div className="space-y-1.5">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 backdrop-blur-md text-[11px] font-black uppercase tracking-wider text-white">
+                      {expandedModalState.categoryType === "status" ? (
+                        <>
+                          <Clock size={12} className="text-white/80" />
+                          <span>Status do Prazo</span>
+                        </>
+                      ) : (
+                        <>
+                          <Activity size={12} className="text-white/80" />
+                          <span>Situação Operacional</span>
+                        </>
+                      )}
+                      <span className="text-white/60">•</span>
+                      <span>{expandedModalState.scopeTitle}</span>
+                    </div>
+
+                    <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                      {expandedModalState.activeFilter === "all" ? (
+                        "Todas as Atividades"
+                      ) : expandedModalState.activeFilter === "Atrasada" ? (
+                        <>
+                          <AlertOctagon size={22} className="text-white animate-pulse" />
+                          <span>Atividades Atrasadas</span>
+                        </>
+                      ) : expandedModalState.activeFilter === "Crítica" ? (
+                        <>
+                          <AlertTriangle size={22} className="text-white animate-bounce" />
+                          <span>Atividades Críticas (Vencendo em até 7 dias)</span>
+                        </>
+                      ) : expandedModalState.activeFilter === "No Prazo" ? (
+                        <>
+                          <CheckCircle2 size={22} className="text-white" />
+                          <span>Atividades No Prazo</span>
+                        </>
+                      ) : (
+                        `Atividades ${expandedModalState.activeFilter}`
+                      )}
+                    </h3>
+
+                    <p className="text-xs text-white/80 font-medium">
+                      {expandedModalState.scopeSubtitle ? (
+                        <span>{expandedModalState.scopeSubtitle} — </span>
+                      ) : null}
+                      Total de <strong>{modalDisplayTasks.length}</strong> {modalDisplayTasks.length === 1 ? "atividade listada" : "atividades listadas"} no plano ativo.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={closeStatusModal}
+                    className="p-2 rounded-2xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer shrink-0"
+                    title="Fechar janela (ESC)"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Sub-bar com Abas de Filtro e Busca */}
+              <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                {/* Abas Rápidas */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+                  {expandedModalState.categoryType === "status" ? (
+                    <>
+                      <button
+                        onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "Atrasada" }))}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                          expandedModalState.activeFilter === "Atrasada"
+                            ? "bg-rose-600 text-white shadow-xs"
+                            : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                        }`}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+                        <span>Atrasadas ({modalCounts.delayed})</span>
+                      </button>
+
+                      <button
+                        onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "Crítica" }))}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                          expandedModalState.activeFilter === "Crítica"
+                            ? "bg-amber-600 text-white shadow-xs"
+                            : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                        }`}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                        <span>Críticas ({modalCounts.critical})</span>
+                      </button>
+
+                      <button
+                        onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "No Prazo" }))}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                          expandedModalState.activeFilter === "No Prazo"
+                            ? "bg-emerald-600 text-white shadow-xs"
+                            : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                        }`}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        <span>No Prazo ({modalCounts.onTime})</span>
+                      </button>
+
+                      <button
+                        onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "all" }))}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
+                          expandedModalState.activeFilter === "all"
+                            ? "bg-slate-800 text-white shadow-xs"
+                            : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                        }`}
+                      >
+                        Todas ({modalCounts.total})
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "Não iniciada" }))}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
+                          expandedModalState.activeFilter === "Não iniciada"
+                            ? "bg-slate-700 text-white shadow-xs"
+                            : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                        }`}
+                      >
+                        Não Iniciadas ({modalCounts.notStarted})
+                      </button>
+
+                      <button
+                        onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "Em andamento" }))}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
+                          expandedModalState.activeFilter === "Em andamento"
+                            ? "bg-blue-600 text-white shadow-xs"
+                            : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                        }`}
+                      >
+                        Em Andamento ({modalCounts.inProgress})
+                      </button>
+
+                      <button
+                        onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "Concluída" }))}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
+                          expandedModalState.activeFilter === "Concluída"
+                            ? "bg-emerald-600 text-white shadow-xs"
+                            : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                        }`}
+                      >
+                        Concluídas ({modalCounts.completed})
+                      </button>
+
+                      <button
+                        onClick={() => setExpandedModalState(prev => ({ ...prev, activeFilter: "all" }))}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
+                          expandedModalState.activeFilter === "all"
+                            ? "bg-slate-800 text-white shadow-xs"
+                            : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
+                        }`}
+                      >
+                        Todas ({modalCounts.total})
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Input de Busca */}
+                <div className="relative w-full sm:w-64 shrink-0">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Filtrar por nome, código ou responsável..."
+                    value={modalSearchTerm}
+                    onChange={(e) => setModalSearchTerm(e.target.value)}
+                    className="w-full pl-8 pr-8 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-hidden focus:border-indigo-500 transition-colors"
+                  />
+                  {modalSearchTerm && (
+                    <button
+                      onClick={() => setModalSearchTerm("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Lista de Atividades */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 max-h-[55vh]">
+                {modalDisplayTasks.length === 0 ? (
+                  <div className="p-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                      <CheckCircle2 size={24} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-700">Nenhuma atividade encontrada</h4>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {modalSearchTerm
+                          ? "Nenhum resultado corresponde aos termos da pesquisa."
+                          : "Não há atividades com este status no escopo selecionado."}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  modalDisplayTasks.map((task) => {
+                    const taskDlStatus = getDeadlineStatus(task.endDate, task.status);
+                    const taskNormStatus = normalizeStatus(task.status);
+                    const diffDays = getDaysDiffFromToday(task.endDate);
+
+                    return (
+                      <div
+                        key={task.id}
+                        className={`p-4 rounded-2xl border transition-all duration-200 hover:shadow-md bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 group ${
+                          taskDlStatus === "Atrasada"
+                            ? "border-rose-200 hover:border-rose-300"
+                            : taskDlStatus === "Crítica"
+                            ? "border-amber-200 hover:border-amber-300"
+                            : "border-slate-200 hover:border-indigo-200"
+                        }`}
+                      >
+                        <div className="space-y-2 flex-1 min-w-0">
+                          {/* Badges superiores */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            {task.code && (
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-black uppercase tracking-wider">
+                                {task.code}
+                              </span>
+                            )}
+
+                            {/* Badge de Status do Prazo */}
+                            {taskDlStatus === "Atrasada" ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-[10px] font-black uppercase tracking-wider">
+                                <AlertOctagon size={11} className="text-rose-600" />
+                                <span>
+                                  {diffDays !== null && diffDays < 0
+                                    ? `Atrasada há ${Math.abs(diffDays)} ${Math.abs(diffDays) === 1 ? "dia" : "dias"}`
+                                    : "Atrasada"}
+                                </span>
+                              </span>
+                            ) : taskDlStatus === "Crítica" ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-black uppercase tracking-wider">
+                                <Clock size={11} className="text-amber-600" />
+                                <span>
+                                  {diffDays !== null && diffDays >= 0
+                                    ? `Vence em ${diffDays} ${diffDays === 1 ? "dia" : "dias"}`
+                                    : "Crítica"}
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-black uppercase tracking-wider">
+                                <CheckCircle2 size={11} className="text-emerald-600" />
+                                <span>No Prazo</span>
+                              </span>
+                            )}
+
+                            {/* Badge de Situação */}
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              taskNormStatus === "Concluída"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : taskNormStatus === "Em andamento"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-slate-100 text-slate-700"
+                            }`}>
+                              {taskNormStatus}
+                            </span>
+                          </div>
+
+                          {/* Título da Atividade */}
+                          <h4 
+                            onClick={() => {
+                              closeStatusModal();
+                              if (activePlan) {
+                                if (onNavigateToPlanningWithFilter) {
+                                  onNavigateToPlanningWithFilter(
+                                    "tasks", 
+                                    activePlan.id, 
+                                    task.areaId || (task.areaIds && task.areaIds[0]), 
+                                    expandedModalState.isMyTasks,
+                                    task.id
+                                  );
+                                } else {
+                                  handleProtectedNavigate("planning", "tasks", "planning_tasks");
+                                }
+                              }
+                            }}
+                            className="text-sm font-black text-slate-900 leading-snug group-hover:text-indigo-700 transition-colors cursor-pointer"
+                            title="Clique para editar esta atividade"
+                          >
+                            {task.title}
+                          </h4>
+
+                          {/* Meta: Datas e Responsáveis */}
+                          <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500 font-medium">
+                            <div className="flex items-center gap-1.5">
+                              <Calendar size={13} className="text-slate-400" />
+                              <span>
+                                {task.startDate ? formatDateBR(task.startDate) : "Início n/d"}
+                                {" → "}
+                                <strong className={taskDlStatus === "Atrasada" ? "text-rose-600 font-black" : taskDlStatus === "Crítica" ? "text-amber-600 font-black" : "text-slate-800"}>
+                                  {task.endDate ? formatDateBR(task.endDate) : "Sem prazo"}
+                                </strong>
+                              </span>
+                            </div>
+
+                            {task.assignedTo && (
+                              <div className="flex items-center gap-1.5">
+                                <User size={13} className="text-slate-400" />
+                                <span className="text-slate-700 font-semibold">{task.assignedTo}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Barra de Progresso */}
+                          <div className="flex items-center gap-3 pt-1 max-w-md">
+                            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-300 ${
+                                  task.progress === 100
+                                    ? "bg-emerald-500"
+                                    : (task.progress || 0) > 0
+                                    ? taskDlStatus === "Atrasada"
+                                      ? "bg-rose-500"
+                                      : taskDlStatus === "Crítica"
+                                      ? "bg-amber-500"
+                                      : "bg-indigo-600"
+                                    : "bg-slate-300"
+                                }`}
+                                style={{ width: `${Math.min(100, Math.max(0, task.progress || 0))}%` }}
+                              />
+                            </div>
+                            <span className="text-xs font-black text-slate-700 tabular-nums shrink-0">
+                              {task.progress || 0}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Botão de Ação Direta para Editar Atividade */}
+                        <button
+                          onClick={() => {
+                            closeStatusModal();
+                            if (activePlan) {
+                              if (onNavigateToPlanningWithFilter) {
+                                onNavigateToPlanningWithFilter(
+                                  "tasks", 
+                                  activePlan.id, 
+                                  task.areaId || (task.areaIds && task.areaIds[0]), 
+                                  expandedModalState.isMyTasks,
+                                  task.id
+                                );
+                              } else {
+                                handleProtectedNavigate("planning", "tasks", "planning_tasks");
+                              }
+                            }
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-slate-700 hover:text-indigo-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 group/open shadow-2xs"
+                          title="Abrir formulário para editar esta atividade"
+                        >
+                          <Edit3 size={13} className="text-slate-400 group-hover/open:text-indigo-600 transition-colors" />
+                          <span>Editar Atividade</span>
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Footer do Modal */}
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-500">
+                  Mostrando <strong>{modalDisplayTasks.length}</strong> de <strong>{modalScopeTasks.length}</strong> atividades do escopo
+                </span>
+
+                <div className="flex items-center gap-2">
+                  {activePlan && (
+                    <button
+                      onClick={() => {
+                        closeStatusModal();
+                        if (onNavigateToPlanningWithFilter) {
+                          onNavigateToPlanningWithFilter(
+                            "tasks",
+                            activePlan.id,
+                            expandedModalState.areaId,
+                            expandedModalState.isMyTasks
+                          );
+                        } else {
+                          handleProtectedNavigate("planning", "tasks", "planning_tasks");
+                        }
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <ListTodo size={14} />
+                      <span>Abrir Todas no Planejamento</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={closeStatusModal}
+                    className="px-4 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

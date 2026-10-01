@@ -640,7 +640,7 @@ export default function App() {
   const [externalAreaFilter, setExternalAreaFilter] = useState<number[] | null>(null);
   const [externalFilterTrigger, setExternalFilterTrigger] = useState(0);
 
-  const handleNavigateToPlanningWithFilter = (subTab: "tasks" | "dashboard", planId: number | string, areaId?: number, isMyTasks?: boolean) => {
+  const handleNavigateToPlanningWithFilter = (subTab: "tasks" | "dashboard", planId: number | string, areaId?: number, isMyTasks?: boolean, taskIdToEdit?: number) => {
     const requiredModule = isMyTasks ? "planning_my_tasks" : (subTab === "tasks" ? "planning_tasks" : "planning_dashboard");
     if (checkPermission && !checkPermission(requiredModule, 'view')) {
       if (requiredModule === "planning_my_tasks" && checkPermission("planning_tasks", "view")) {
@@ -653,6 +653,9 @@ export default function App() {
     setIsMyTasksSelected(!!isMyTasks);
     setExternalPlanFilter(planId ? planId.toString() : null);
     setExternalAreaFilter(areaId !== undefined && areaId !== null ? [Number(areaId)] : []);
+    if (taskIdToEdit !== undefined && taskIdToEdit !== null) {
+      setEditingTaskIdFromPainel(taskIdToEdit);
+    }
     if (isMyTasks) {
       setMyTasksFilterTrigger(prev => prev + 1);
     } else {
