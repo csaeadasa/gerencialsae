@@ -917,8 +917,8 @@ async function runStartupMigration() {
       // Verify that depends_on_task_id exists
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS depends_on_task_id INTEGER REFERENCES pl_tasks(id) ON DELETE SET NULL;`);
       
-      // Add updated_at and updated_by to tables
-      await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP, ADD COLUMN IF NOT EXISTS updated_by VARCHAR(255);`);
+      // Add updated_at, updated_by, created_at, created_by, completed_at, completed_by to tables
+      await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP, ADD COLUMN IF NOT EXISTS updated_by VARCHAR(255), ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW(), ADD COLUMN IF NOT EXISTS created_by VARCHAR(255), ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP, ADD COLUMN IF NOT EXISTS completed_by VARCHAR(255);`);
       await client.query(`ALTER TABLE pl_plans ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP, ADD COLUMN IF NOT EXISTS updated_by VARCHAR(255);`);
       await client.query(`ALTER TABLE pl_plans ADD COLUMN IF NOT EXISTS created_at TIMESTAMP, ADD COLUMN IF NOT EXISTS created_by VARCHAR(255);`);
       await client.query(`ALTER TABLE pl_plans ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT FALSE;`);
@@ -971,6 +971,18 @@ async function runStartupMigration() {
           duration_days INTEGER DEFAULT 0,
           weight REAL DEFAULT 1.0,
           sequence_order INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT NOW(),
+          created_by VARCHAR(255)
+        );
+      `);
+
+      // Ensure pl_checklist_models table exists for step-by-step checklist templates
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS pl_checklist_models (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          items JSONB NOT NULL DEFAULT '[]'::jsonb,
           created_at TIMESTAMP DEFAULT NOW(),
           created_by VARCHAR(255)
         );
@@ -5149,11 +5161,11 @@ export async function startServer(isVercel = false) {
       try {
         const result = await client.query(`
           WITH RECURSIVE task_tree AS (
-            SELECT id, title, description, start_date, end_date, status, parent_id, progress, priority, category, assigned_to, created_by, notes, plan_id, depends_on_task_id, updated_at, updated_by, sei_process, weight, type, fiscalizacao_data, ouvidoria_data, recurso_rev_data, checklist, links, comments, is_programmed, 1 AS depth
+            SELECT id, title, description, start_date, end_date, status, parent_id, progress, priority, category, assigned_to, created_by, created_at, completed_at, completed_by, notes, plan_id, depends_on_task_id, updated_at, updated_by, sei_process, weight, type, fiscalizacao_data, ouvidoria_data, recurso_rev_data, checklist, links, comments, is_programmed, 1 AS depth
             FROM pl_tasks
             WHERE parent_id IS NULL
             UNION ALL
-            SELECT t.id, t.title, t.description, t.start_date, t.end_date, t.status, t.parent_id, t.progress, t.priority, t.category, t.assigned_to, t.created_by, t.notes, t.plan_id, t.depends_on_task_id, t.updated_at, t.updated_by, t.sei_process, t.weight, t.type, t.fiscalizacao_data, t.ouvidoria_data, t.recurso_rev_data, t.checklist, t.links, t.comments, t.is_programmed, tt.depth + 1
+            SELECT t.id, t.title, t.description, t.start_date, t.end_date, t.status, t.parent_id, t.progress, t.priority, t.category, t.assigned_to, t.created_by, t.created_at, t.completed_at, t.completed_by, t.notes, t.plan_id, t.depends_on_task_id, t.updated_at, t.updated_by, t.sei_process, t.weight, t.type, t.fiscalizacao_data, t.ouvidoria_data, t.recurso_rev_data, t.checklist, t.links, t.comments, t.is_programmed, tt.depth + 1
             FROM pl_tasks t
             INNER JOIN task_tree tt ON t.parent_id = tt.id
           )
@@ -5243,6 +5255,9 @@ export async function startServer(isVercel = false) {
           category: t.category,
           assignedTo: t.assigned_to,
           createdBy: t.created_by,
+          createdAt: t.created_at,
+          completedAt: t.completed_at,
+          completedBy: t.completed_by,
           notes: t.notes,
           checklist: t.checklist || [],
           links: t.links || [],
@@ -6139,9 +6154,14 @@ export async function startServer(isVercel = false) {
         const rawWeight = req.body.weight;
         const parsedWeight = (rawWeight !== undefined && rawWeight !== null && rawWeight !== "") ? parseFloat(rawWeight) : 1.0;
         const finalWeight = isNaN(parsedWeight) ? 1.0 : parsedWeight;
+        const taskCreatedBy = req.body.createdBy || req.body.updatedBy || "SGI Pro";
+        const taskCreatedAt = req.body.createdAt ? new Date(req.body.createdAt) : new Date();
+        const taskCompletedAt = (finalProgress === 100 || finalStatus === "Concluída") ? (req.body.completedAt ? new Date(req.body.completedAt) : new Date()) : null;
+        const taskCompletedBy = (finalProgress === 100 || finalStatus === "Concluída") ? (req.body.completedBy || req.body.updatedBy || req.body.createdBy || "SGI Pro") : null;
+
         const result = await client.query(
-          `INSERT INTO pl_tasks (title, description, start_date, end_date, status, parent_id, progress, priority, category, assigned_to, notes, plan_id, depends_on_task_id, updated_at, updated_by, sei_process, weight, type, fiscalizacao_data, ouvidoria_data, recurso_rev_data, checklist, links, comments, is_programmed, related_sei_processes)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+          `INSERT INTO pl_tasks (title, description, start_date, end_date, status, parent_id, progress, priority, category, assigned_to, notes, plan_id, depends_on_task_id, updated_at, updated_by, created_at, created_by, completed_at, completed_by, sei_process, weight, type, fiscalizacao_data, ouvidoria_data, recurso_rev_data, checklist, links, comments, is_programmed, related_sei_processes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
            RETURNING *`,
           [
             title || "Sem título",
@@ -6158,6 +6178,10 @@ export async function startServer(isVercel = false) {
             planId ? parseInt(planId) : null,
             dependsOnTaskId ? parseInt(dependsOnTaskId) : null,
             req.body.updatedBy || "SGI Pro",
+            taskCreatedAt,
+            taskCreatedBy,
+            taskCompletedAt,
+            taskCompletedBy,
             req.body.seiProcess || extractSeiProcessFromTitle(title) || null,
             finalWeight,
             type || "default",
@@ -6257,6 +6281,11 @@ export async function startServer(isVercel = false) {
             category: finalSaved.category,
             assignedTo: finalAssignedTo,
             createdBy: finalSaved.created_by,
+            createdAt: finalSaved.created_at,
+            completedAt: finalSaved.completed_at,
+            completedBy: finalSaved.completed_by,
+            updatedAt: finalSaved.updated_at,
+            updatedBy: finalSaved.updated_by,
             notes: finalSaved.notes,
             planId: finalSaved.plan_id ? Number(finalSaved.plan_id) : null,
             weight: finalSaved.weight !== undefined && finalSaved.weight !== null ? Number(finalSaved.weight) : 1,
@@ -6273,9 +6302,7 @@ export async function startServer(isVercel = false) {
             recursoRevData: finalSaved.recurso_rev_data,
             areaIds: areaIds || [],
             responsibleIds: cleanRespIds,
-            categoryIds: categoryIds || [],
-            updatedAt: finalSaved.updated_at,
-            updatedBy: finalSaved.updated_by
+            categoryIds: categoryIds || []
           }
         });
       } catch (err) {
@@ -6299,7 +6326,7 @@ export async function startServer(isVercel = false) {
       try {
         await client.query("BEGIN");
         
-        const currentTaskRes = await client.query("SELECT parent_id, start_date, end_date, progress, status, depends_on_task_id, links, comments, is_programmed, related_sei_processes FROM pl_tasks WHERE id = $1", [taskId]);
+        const currentTaskRes = await client.query("SELECT parent_id, start_date, end_date, progress, status, depends_on_task_id, links, comments, is_programmed, related_sei_processes, created_at, created_by, completed_at, completed_by FROM pl_tasks WHERE id = $1", [taskId]);
         if (currentTaskRes.rows.length === 0) {
           await client.query("ROLLBACK");
           return res.status(404).json({ success: false, error: "Tarefa não encontrada." });
@@ -6345,6 +6372,20 @@ export async function startServer(isVercel = false) {
           finalStatus = finalProgress === 100 ? "Concluída" : finalProgress > 0 ? "Em andamento" : "Não iniciada";
         }
 
+        let finalCompletedAt = currentTaskRes.rows[0].completed_at;
+        let finalCompletedBy = currentTaskRes.rows[0].completed_by;
+        if (finalProgress === 100 || finalStatus === "Concluída") {
+          if (!finalCompletedAt) {
+            finalCompletedAt = req.body.completedAt ? new Date(req.body.completedAt) : new Date();
+          }
+          if (!finalCompletedBy) {
+            finalCompletedBy = req.body.completedBy || req.body.updatedBy || "SGI Pro";
+          }
+        } else {
+          finalCompletedAt = null;
+          finalCompletedBy = null;
+        }
+
         let finalAreaIds = areaIds || [];
         let finalCategoryIds = categoryIds || [];
         if (parentId) {
@@ -6364,7 +6405,7 @@ export async function startServer(isVercel = false) {
 
         const result = await client.query(
           `UPDATE pl_tasks 
-           SET title = $1, description = $2, start_date = $3, end_date = $4, status = $5, progress = $6, priority = $7, category = $8, assigned_to = $9, notes = $10, parent_id = $11, plan_id = $12, depends_on_task_id = $13, updated_at = NOW(), updated_by = $14, sei_process = $16, weight = $17, type = $18, fiscalizacao_data = $19, ouvidoria_data = $20, recurso_rev_data = $21, checklist = $22, links = $23, comments = $24, is_programmed = $25, related_sei_processes = $26
+           SET title = $1, description = $2, start_date = $3, end_date = $4, status = $5, progress = $6, priority = $7, category = $8, assigned_to = $9, notes = $10, parent_id = $11, plan_id = $12, depends_on_task_id = $13, updated_at = NOW(), updated_by = $14, sei_process = $16, weight = $17, type = $18, fiscalizacao_data = $19, ouvidoria_data = $20, recurso_rev_data = $21, checklist = $22, links = $23, comments = $24, is_programmed = $25, related_sei_processes = $26, completed_at = $27, completed_by = $28
            WHERE id = $15
            RETURNING *`,
           [
@@ -6393,7 +6434,9 @@ export async function startServer(isVercel = false) {
             links !== undefined ? JSON.stringify(links) : (currentTaskRes.rows[0].links ? JSON.stringify(currentTaskRes.rows[0].links) : JSON.stringify([])),
             comments !== undefined ? JSON.stringify(comments) : (currentTaskRes.rows[0].comments ? JSON.stringify(currentTaskRes.rows[0].comments) : JSON.stringify([])),
             finalIsProgrammed,
-            JSON.stringify(req.body.relatedSeiProcesses !== undefined ? (Array.isArray(req.body.relatedSeiProcesses) ? req.body.relatedSeiProcesses : []) : (currentTaskRes.rows[0].related_sei_processes || []))
+            JSON.stringify(req.body.relatedSeiProcesses !== undefined ? (Array.isArray(req.body.relatedSeiProcesses) ? req.body.relatedSeiProcesses : []) : (currentTaskRes.rows[0].related_sei_processes || [])),
+            finalCompletedAt,
+            finalCompletedBy
           ]
         );
 
@@ -6505,6 +6548,11 @@ export async function startServer(isVercel = false) {
             category: finalSaved.category,
             assignedTo: finalAssignedTo,
             createdBy: finalSaved.created_by,
+            createdAt: finalSaved.created_at,
+            completedAt: finalSaved.completed_at,
+            completedBy: finalSaved.completed_by,
+            updatedAt: finalSaved.updated_at,
+            updatedBy: finalSaved.updated_by,
             notes: finalSaved.notes,
             planId: finalSaved.plan_id ? Number(finalSaved.plan_id) : null,
             weight: finalSaved.weight !== undefined && finalSaved.weight !== null ? Number(finalSaved.weight) : 1,
@@ -6521,9 +6569,7 @@ export async function startServer(isVercel = false) {
             recursoRevData: finalSaved.recurso_rev_data,
             areaIds: finalAreaIds,
             responsibleIds: cleanRespIds,
-            categoryIds: finalCategoryIds,
-            updatedAt: finalSaved.updated_at,
-            updatedBy: finalSaved.updated_by
+            categoryIds: finalCategoryIds
           }
         });
       } catch (err) {
@@ -6773,6 +6819,83 @@ export async function startServer(isVercel = false) {
       res.json({ success: true, deletedId: modelId });
     } catch (err: any) {
       console.error("Erro ao deletar modelo:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // --- Checklist Models Endpoints ---
+  app.get("/api/checklist-models", async (req, res) => {
+    try {
+      const pool = getDbPool();
+      const client = await pool.connect();
+      try {
+        const result = await client.query("SELECT * FROM pl_checklist_models ORDER BY name ASC");
+        const models = result.rows.map(r => ({
+          id: Number(r.id),
+          name: r.name,
+          description: r.description || "",
+          items: Array.isArray(r.items) ? r.items : (typeof r.items === "string" ? JSON.parse(r.items) : []),
+          createdAt: r.created_at,
+          createdBy: r.created_by
+        }));
+        res.json({ success: true, data: models });
+      } finally {
+        client.release();
+      }
+    } catch (err: any) {
+      console.error("Erro ao buscar modelos de checklist:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/checklist-models", async (req, res) => {
+    try {
+      const { name, description, items, createdBy } = req.body;
+      if (!name || !name.trim()) {
+        return res.status(400).json({ success: false, error: "Nome do modelo é obrigatório." });
+      }
+      const pool = getDbPool();
+      const client = await pool.connect();
+      try {
+        const cleanItems = Array.isArray(items) ? items : [];
+        const result = await client.query(
+          "INSERT INTO pl_checklist_models (name, description, items, created_at, created_by) VALUES ($1, $2, $3, NOW(), $4) RETURNING *",
+          [name.trim(), description || "", JSON.stringify(cleanItems), createdBy || "SGI Pro"]
+        );
+        const r = result.rows[0];
+        res.json({
+          success: true,
+          data: {
+            id: Number(r.id),
+            name: r.name,
+            description: r.description || "",
+            items: r.items || [],
+            createdAt: r.created_at,
+            createdBy: r.created_by
+          }
+        });
+      } finally {
+        client.release();
+      }
+    } catch (err: any) {
+      console.error("Erro ao salvar modelo de checklist:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete("/api/checklist-models/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const pool = getDbPool();
+      const client = await pool.connect();
+      try {
+        await client.query("DELETE FROM pl_checklist_models WHERE id = $1", [id]);
+        res.json({ success: true, deletedId: id });
+      } finally {
+        client.release();
+      }
+    } catch (err: any) {
+      console.error("Erro ao excluir modelo de checklist:", err);
       res.status(500).json({ success: false, error: err.message });
     }
   });

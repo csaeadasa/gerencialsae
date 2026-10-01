@@ -631,7 +631,7 @@ export function HomeTab({
                     }
                   }}
                   className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-                  title="Abrir Cadastrar Atividades para o Plano Ativo"
+                  title="Abrir Gerenciar Atividades para o Plano Ativo"
                 >
                   <ListTodo size={14} className="text-slate-600" />
                   <span>Ver Atividades</span>
@@ -1178,10 +1178,10 @@ export function HomeTab({
                           ? 'hover:bg-violet-50 border-slate-200 hover:border-violet-200 text-slate-700 hover:text-violet-700' 
                           : 'hover:bg-indigo-50 border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-700'
                       }`}
-                      title={item.isMyTasks ? "Abrir Minhas Atividades no plano ativo" : `Abrir Cadastrar Atividades com filtro de ${item.name}`}
+                      title={item.isMyTasks ? "Abrir Minhas Atividades no plano ativo" : `Abrir Gerenciar Atividades com filtro de ${item.name}`}
                     >
                       <ListTodo size={14} className={item.isMyTasks ? "text-violet-600" : "text-indigo-600"} />
-                      <span>Cadastrar</span>
+                      <span>Gerenciar</span>
                     </button>
                     <button
                       onClick={() => {
@@ -1474,7 +1474,7 @@ export function HomeTab({
               <ListTodo size={18} />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-slate-800 group-hover:text-blue-800 transition-colors">Cadastrar Atividades</h4>
+              <h4 className="text-xs font-bold text-slate-800 group-hover:text-blue-800 transition-colors">Gerenciar Atividades</h4>
               <p className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5">Cadastrar, gerenciar e editar atividades e cronogramas detalhados.</p>
             </div>
           </div>
@@ -1569,7 +1569,7 @@ export function HomeTab({
                   <div className="mb-4 p-3 rounded-xl bg-blue-50 text-blue-500 w-max border border-blue-100 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
                     <FileText size={24} />
                   </div>
-                  <h3 className="text-base font-bold text-slate-800 mb-1.5 leading-tight">Cadastrar Resoluções</h3>
+                  <h3 className="text-base font-bold text-slate-800 mb-1.5 leading-tight">Gerenciar Resoluções</h3>
                   <p className="text-slate-500 text-xs font-medium leading-relaxed mb-4">
                     Cadastre e gerencie o estoque regulatório, resoluções vigentes, atos normativos e atas de audiência da superintendência.
                   </p>
@@ -1609,7 +1609,7 @@ export function HomeTab({
                   <div className="mb-4 p-3 rounded-xl bg-blue-50 text-blue-500 w-max border border-blue-100 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
                     <MessageSquare size={24} />
                   </div>
-                  <h3 className="text-base font-bold text-slate-800 mb-1.5 leading-tight">Participação Social</h3>
+                  <h3 className="text-base font-bold text-slate-800 mb-1.5 leading-tight">Gerenciar Participação Social</h3>
                   <p className="text-slate-500 text-xs font-medium leading-relaxed mb-4">
                     Gerencie tomadas de subsídios, consultas e audiências públicas, cadastre minutas e receba contribuições da sociedade.
                   </p>
@@ -1660,7 +1660,7 @@ export function HomeTab({
                   <div className="mb-4 p-3 rounded-xl bg-blue-50 text-blue-500 w-max border border-blue-100 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
                     <BookOpen size={24} />
                   </div>
-                  <h3 className="text-base font-bold text-slate-800 mb-1.5 leading-tight">Cadastrar Agenda Regulatória</h3>
+                  <h3 className="text-base font-bold text-slate-800 mb-1.5 leading-tight">Gerenciar Agenda Regulatória</h3>
                   <p className="text-slate-500 text-xs font-medium leading-relaxed mb-4">
                     Cadastre e gerencie a agenda regulatória, metas, temas e ações da agência reguladora e monitore seu progresso.
                   </p>
@@ -1849,7 +1849,7 @@ export function HomeTab({
                 <div className="mb-4 p-3 rounded-xl bg-blue-50 text-blue-500 w-max border border-blue-100 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
                   <BookOpen size={24} />
                 </div>
-                <h3 className="text-base font-bold text-slate-800 mb-1.5 leading-tight">Cadastrar Publicações</h3>
+                <h3 className="text-base font-bold text-slate-800 mb-1.5 leading-tight">Gerenciar Publicações</h3>
                 <p className="text-slate-500 text-xs font-medium leading-relaxed mb-4">
                   Cadastre e gerencie o acervo bibliográfico da agência, relatórios anuais de atividades, boletins informativos e artigos de pesquisa científica. Siga o mesmo layout da página de Resoluções.
                 </p>

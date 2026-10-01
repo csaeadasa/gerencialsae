@@ -4188,7 +4188,7 @@ const renderSupplyTable = () => {
                     {confirmState.title || "Confirmar Ação"}
                   </h3>
                 </div>
-                <p className="text-slate-600 text-sm font-medium leading-relaxed">
+                <p className="text-slate-600 text-sm font-medium leading-relaxed whitespace-pre-line">
                   {confirmState.message}
                 </p>
               </div>
@@ -4324,7 +4324,7 @@ const renderSupplyTable = () => {
                           className={cn("w-full text-left justify-start px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "planning" && activePlanningSubTab === "tasks" && !isMyTasksSelected ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                         >
                           <ListTodo size={18} className={activeTab === "planning" && activePlanningSubTab === "tasks" && !isMyTasksSelected ? "text-adasa-mid" : "text-white/50"} />
-                          Cadastrar Atividades
+                          Gerenciar Atividades
                         </button>
                       )}
                       {checkPermission('planning_dashboard', 'view') && (
@@ -4358,7 +4358,7 @@ const renderSupplyTable = () => {
                           className={cn("w-full text-left justify-start px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "planning" && activePlanningSubTab === "plans" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                         >
                           <MapIcon size={18} className={activeTab === "planning" && activePlanningSubTab === "plans" ? "text-adasa-mid" : "text-white/50"} />
-                          Cadastrar Planos
+                          Gerenciar Planos
                         </button>
                       )}
                       {checkPermission('planning_areas', 'view') && (
@@ -4372,7 +4372,7 @@ const renderSupplyTable = () => {
                           className={cn("w-full text-left justify-start px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "planning" && activePlanningSubTab === "areas" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                         >
                           <Layers size={18} className={activeTab === "planning" && activePlanningSubTab === "areas" ? "text-adasa-mid" : "text-white/50"} />
-                          Cadastrar Áreas Temáticas
+                          Gerenciar Áreas Temáticas
                         </button>
                       )}
                       {checkPermission('planning_categories', 'view') && (
@@ -4386,7 +4386,7 @@ const renderSupplyTable = () => {
                           className={cn("w-full text-left justify-start px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "planning" && activePlanningSubTab === "categories" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                         >
                           <Tags size={18} className={activeTab === "planning" && activePlanningSubTab === "categories" ? "text-adasa-mid" : "text-white/50"} />
-                          Cadastrar Categorias
+                          Gerenciar Categorias
                         </button>
                       )}
                       {checkPermission('planning_responsibles', 'view') && (
@@ -4400,7 +4400,7 @@ const renderSupplyTable = () => {
                           className={cn("w-full text-left justify-start px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "planning" && activePlanningSubTab === "responsibles" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                         >
                           <Users size={18} className={activeTab === "planning" && activePlanningSubTab === "responsibles" ? "text-adasa-mid" : "text-white/50"} />
-                          Cadastrar Responsáveis
+                          Gerenciar Responsáveis
                         </button>
                       )}
                       {checkPermission('planning_import', 'view') && (
@@ -4428,7 +4428,7 @@ const renderSupplyTable = () => {
                           className={cn("w-full text-left justify-start px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "planning" && activePlanningSubTab === "models" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                         >
                           <Copy size={18} className={activeTab === "planning" && activePlanningSubTab === "models" ? "text-adasa-mid" : "text-white/50"} />
-                          Cadastrar Modelo de Atividades
+                          Gerenciar Modelos de Atividades
                         </button>
                       )}
                       {checkPermission('planning_radar', 'view') && (
@@ -4491,7 +4491,7 @@ const renderSupplyTable = () => {
                             className={cn("w-full text-left justify-start px-4 py-2 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "reg_cadastro" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                           >
                             <FileText size={18} className={activeTab === "reg_cadastro" ? "text-adasa-mid" : "text-white/50"} />
-                            Cadastrar Resoluções
+                            Gerenciar Resoluções
                           </button>
                         )}
                         {checkPermission("reg_painel", "view") && (
@@ -4517,7 +4517,7 @@ const renderSupplyTable = () => {
                             className={cn("w-full text-left justify-start px-4 py-2 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "reg_subsidios" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                           >
                             <MessageSquare size={18} className={activeTab === "reg_subsidios" ? "text-adasa-mid" : "text-white/50"} />
-                            Participação Social
+                            Gerenciar Participação Social
                           </button>
                         )}
                         {checkPermission("reg_subsidios_painel", "view") && (
@@ -4550,7 +4550,7 @@ const renderSupplyTable = () => {
                             className={cn("w-full text-left justify-start px-4 py-2 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "reg_agenda" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                           >
                             <BookOpen size={18} className={activeTab === "reg_agenda" ? "text-adasa-mid" : "text-white/50"} />
-                            Cadastrar Agenda
+                            Gerenciar Agenda Regulatória
                           </button>
                         )}
                         {checkPermission("reg_agenda_painel", "view") && (
@@ -4612,7 +4612,7 @@ const renderSupplyTable = () => {
                             className={cn("w-full text-left justify-start px-4 py-2 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "manage" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                           >
                             <FilePlus size={18} className={activeTab === "manage" ? "text-adasa-mid" : "text-white/50"} />
-                            Cadastrar Balanço
+                            Gerenciar Balanço Hídrico
                           </button>
                         )}
                         {checkPermission("analyze", "view") && (
@@ -4720,7 +4720,7 @@ const renderSupplyTable = () => {
                           className={cn("w-full text-left justify-start px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all text-xs font-semibold", activeTab === "pub_cadastro" ? "bg-white text-adasa-dark shadow-lg font-bold" : "text-white/85 hover:bg-white/5")}
                         >
                           <FileText size={18} className={activeTab === "pub_cadastro" ? "text-adasa-mid" : "text-white/50"} />
-                          Cadastrar Publicações
+                          Gerenciar Publicações
                         </button>
                       )}
                       {checkPermission("pub_painel", "view") && (
@@ -4994,7 +4994,7 @@ const renderSupplyTable = () => {
 
                   {checkPermission('planning_tasks', 'view') && (
                     <button
-                      title={isSidebarCollapsed ? "Cadastrar Atividades" : undefined}
+                      title={isSidebarCollapsed ? "Gerenciar Atividades" : undefined}
                       onClick={() => {
                         setIsMyTasksSelected(false);
                         setMyTasksFilterTrigger(prev => prev + 1);
@@ -5015,7 +5015,7 @@ const renderSupplyTable = () => {
                           activeTab === "planning" && activePlanningSubTab === "tasks" && !isMyTasksSelected ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                         )}
                       />
-                      {!isSidebarCollapsed && <span className="hidden md:inline">Cadastrar Atividades</span>}
+                      {!isSidebarCollapsed && <span className="hidden md:inline">Gerenciar Atividades</span>}
                     </button>
                   )}
 
@@ -5053,7 +5053,7 @@ const renderSupplyTable = () => {
 
                   {checkPermission('planning_plans', 'view') && (
                     <button
-                      title={isSidebarCollapsed ? "Cadastrar Planos" : undefined}
+                      title={isSidebarCollapsed ? "Gerenciar Planos" : undefined}
                       onClick={() => {
                         setIsMyTasksSelected(false);
                         setActivePlanningSubTab("plans");
@@ -5073,13 +5073,13 @@ const renderSupplyTable = () => {
                           activeTab === "planning" && activePlanningSubTab === "plans" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                         )}
                       />
-                      {!isSidebarCollapsed && <span className="hidden md:inline">Cadastrar Planos</span>}
+                      {!isSidebarCollapsed && <span className="hidden md:inline">Gerenciar Planos</span>}
                     </button>
                   )}
 
                   {checkPermission('planning_areas', 'view') && (
                     <button
-                      title={isSidebarCollapsed ? "Cadastrar Áreas Temáticas" : undefined}
+                      title={isSidebarCollapsed ? "Gerenciar Áreas Temáticas" : undefined}
                       onClick={() => {
                         setIsMyTasksSelected(false);
                         setActivePlanningSubTab("areas");
@@ -5099,13 +5099,13 @@ const renderSupplyTable = () => {
                           activeTab === "planning" && activePlanningSubTab === "areas" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                         )}
                       />
-                      {!isSidebarCollapsed && <span className="hidden md:inline">Cadastrar Áreas Temáticas</span>}
+                      {!isSidebarCollapsed && <span className="hidden md:inline">Gerenciar Áreas Temáticas</span>}
                     </button>
                   )}
 
                   {checkPermission('planning_categories', 'view') && (
                     <button
-                      title={isSidebarCollapsed ? "Cadastrar Categorias" : undefined}
+                      title={isSidebarCollapsed ? "Gerenciar Categorias" : undefined}
                       onClick={() => {
                         setIsMyTasksSelected(false);
                         setActivePlanningSubTab("categories");
@@ -5125,13 +5125,13 @@ const renderSupplyTable = () => {
                           activeTab === "planning" && activePlanningSubTab === "categories" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                         )}
                       />
-                      {!isSidebarCollapsed && <span className="hidden md:inline">Cadastrar Categorias</span>}
+                      {!isSidebarCollapsed && <span className="hidden md:inline">Gerenciar Categorias</span>}
                     </button>
                   )}
 
                   {checkPermission('planning_responsibles', 'view') && (
                     <button
-                      title={isSidebarCollapsed ? "Cadastrar Responsáveis" : undefined}
+                      title={isSidebarCollapsed ? "Gerenciar Responsáveis" : undefined}
                       onClick={() => {
                         setIsMyTasksSelected(false);
                         setActivePlanningSubTab("responsibles");
@@ -5151,7 +5151,7 @@ const renderSupplyTable = () => {
                           activeTab === "planning" && activePlanningSubTab === "responsibles" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                         )}
                       />
-                      {!isSidebarCollapsed && <span className="hidden md:inline">Cadastrar Responsáveis</span>}
+                      {!isSidebarCollapsed && <span className="hidden md:inline">Gerenciar Responsáveis</span>}
                     </button>
                   )}
 
@@ -5183,7 +5183,7 @@ const renderSupplyTable = () => {
 
                   {checkPermission('planning_models', 'view') && (
                     <button
-                      title={isSidebarCollapsed ? "Cadastrar Modelo de Atividades" : undefined}
+                      title={isSidebarCollapsed ? "Gerenciar Modelos de Atividades" : undefined}
                       onClick={() => {
                         setIsMyTasksSelected(false);
                         setActivePlanningSubTab("models");
@@ -5203,7 +5203,7 @@ const renderSupplyTable = () => {
                           activeTab === "planning" && activePlanningSubTab === "models" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                         )}
                       />
-                      {!isSidebarCollapsed && <span className="hidden md:inline">Cadastrar Modelo de Atividades</span>}
+                      {!isSidebarCollapsed && <span className="hidden md:inline">Gerenciar Modelos de Atividades</span>}
                     </button>
                   )}
 
@@ -5276,7 +5276,7 @@ const renderSupplyTable = () => {
                     )}
                     {checkPermission("reg_cadastro", "view") && (
                       <button
-                        title={isSidebarCollapsed ? "Cadastrar Resoluções" : undefined}
+                        title={isSidebarCollapsed ? "Gerenciar Resoluções" : undefined}
                         onClick={() => {
                           setIsMyTasksSelected(false);
                           handleTabChange("reg_cadastro");
@@ -5295,7 +5295,7 @@ const renderSupplyTable = () => {
                             activeTab === "reg_cadastro" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                           )}
                         />
-                        {!isSidebarCollapsed && <span className="hidden md:inline">Cadastrar Resoluções</span>}
+                        {!isSidebarCollapsed && <span className="hidden md:inline">Gerenciar Resoluções</span>}
                       </button>
                     )}
                     {checkPermission("reg_painel", "view") && (
@@ -5324,7 +5324,7 @@ const renderSupplyTable = () => {
                     )}
                     {checkPermission("reg_subsidios", "view") && (
                       <button
-                        title={isSidebarCollapsed ? "Participação Social" : undefined}
+                        title={isSidebarCollapsed ? "Gerenciar Participação Social" : undefined}
                         onClick={() => {
                           setIsMyTasksSelected(false);
                           handleTabChange("reg_subsidios");
@@ -5343,7 +5343,7 @@ const renderSupplyTable = () => {
                             activeTab === "reg_subsidios" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                           )}
                         />
-                        {!isSidebarCollapsed && <span className="hidden md:inline">Participação Social</span>}
+                        {!isSidebarCollapsed && <span className="hidden md:inline">Gerenciar Participação Social</span>}
                       </button>
                     )}
                     {checkPermission("reg_subsidios_painel", "view") && (
@@ -5381,7 +5381,7 @@ const renderSupplyTable = () => {
                     )}
                     {checkPermission("reg_agenda", "view") && (
                       <button
-                        title={isSidebarCollapsed ? "Cadastrar Agenda Regulatória" : undefined}
+                        title={isSidebarCollapsed ? "Gerenciar Agenda Regulatória" : undefined}
                         onClick={() => {
                           setIsMyTasksSelected(false);
                           handleTabChange("reg_agenda");
@@ -5400,7 +5400,7 @@ const renderSupplyTable = () => {
                             activeTab === "reg_agenda" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                           )}
                         />
-                        {!isSidebarCollapsed && <span className="hidden md:inline">Cadastrar Agenda</span>}
+                        {!isSidebarCollapsed && <span className="hidden md:inline">Gerenciar Agenda Regulatória</span>}
                       </button>
                     )}
                     {checkPermission("reg_agenda_painel", "view") && (
@@ -5472,7 +5472,7 @@ const renderSupplyTable = () => {
                     )}
                     {checkPermission("explore", "view") && (
                       <button
-                        title={isSidebarCollapsed ? "Cadastrar Balanço" : undefined}
+                        title={isSidebarCollapsed ? "Gerenciar Balanço Hídrico" : undefined}
                         onClick={() => handleTabChange("manage")}
                         className={cn(
                           "w-full text-left justify-start px-4 py-2 rounded-xl flex items-center gap-3 transition-all duration-200 group text-xs font-semibold cursor-pointer",
@@ -5488,7 +5488,7 @@ const renderSupplyTable = () => {
                             activeTab === "manage" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                           )}
                         />
-                        {!isSidebarCollapsed && <span className="hidden md:inline">Cadastrar Balanço</span>}
+                        {!isSidebarCollapsed && <span className="hidden md:inline">Gerenciar Balanço Hídrico</span>}
                       </button>
                     )}
                     {checkPermission("analyze", "view") && (
@@ -5639,7 +5639,7 @@ const renderSupplyTable = () => {
                 >
                   {checkPermission("pub_cadastro", "view") && (
                     <button
-                      title={isSidebarCollapsed ? "Cadastrar Publicações" : undefined}
+                      title={isSidebarCollapsed ? "Gerenciar Publicações" : undefined}
                       onClick={() => {
                         setIsMyTasksSelected(false);
                         handleTabChange("pub_cadastro");
@@ -5658,7 +5658,7 @@ const renderSupplyTable = () => {
                           activeTab === "pub_cadastro" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                         )}
                       />
-                      {!isSidebarCollapsed && <span className="hidden md:inline">Cadastrar Publicações</span>}
+                      {!isSidebarCollapsed && <span className="hidden md:inline">Gerenciar Publicações</span>}
                     </button>
                   )}
                   {checkPermission("pub_painel", "view") && (
@@ -5784,14 +5784,14 @@ const renderSupplyTable = () => {
                 ? "Usuários e Permissões"
                 : activeTab === "planning"
                 ? (activePlanningSubTab === "dashboard" ? "Painel de Atividades" :
-                   activePlanningSubTab === "tasks" ? (isMyTasksSelected ? "Minhas Atividades" : "Cadastrar Atividades") : 
-                   activePlanningSubTab === "plans" ? "Cadastrar Planos" : 
-                   activePlanningSubTab === "areas" ? "Cadastrar Áreas Temáticas" : 
-                   activePlanningSubTab === "categories" ? "Cadastrar Categorias" :
-                   activePlanningSubTab === "responsibles" ? "Cadastrar Responsáveis" :
-                   activePlanningSubTab === "models" ? "Cadastrar Modelo de Atividades" :
+                   activePlanningSubTab === "tasks" ? (isMyTasksSelected ? "Minhas Atividades" : "Gerenciar Atividades") : 
+                   activePlanningSubTab === "plans" ? "Gerenciar Planos" : 
+                   activePlanningSubTab === "areas" ? "Gerenciar Áreas Temáticas" : 
+                   activePlanningSubTab === "categories" ? "Gerenciar Categorias" :
+                   activePlanningSubTab === "responsibles" ? "Gerenciar Responsáveis" :
+                   activePlanningSubTab === "models" ? "Gerenciar Modelos de Atividades" :
                    activePlanningSubTab === "radar" ? "Radar de Atividades" : "Importar Atividades")
-                : activeTab === "reg_cadastro" ? "Cadastrar Resoluções" : activeTab === "reg_agenda" ? "Agenda Regulatória" : activeTab === "reg_subsidios" ? "Participação Social" : activeTab === "reg_subsidios_painel" ? "Painel Participação Social" : activeTab === "reg_painel" ? "Painel Estratégico de Resoluções" : activeTab === "reg_agenda_painel" ? "Painel da Agenda Regulatória" : activeTab === "pub_cadastro" ? "Cadastrar Publicações" : activeTab === "pub_painel" ? "Painel de Publicações" : activeTab === "fisc_operational" ? "Painel de Fiscalização" : activeTab === "recurso_painel" ? "Painel de Qualidade do Atendimento" : "Cadastrar Balanço"}
+                : activeTab === "reg_cadastro" ? "Gerenciar Resoluções" : activeTab === "reg_agenda" ? "Agenda Regulatória" : activeTab === "reg_subsidios" ? "Gerenciar Participação Social" : activeTab === "reg_subsidios_painel" ? "Painel Participação Social" : activeTab === "reg_painel" ? "Painel Estratégico de Resoluções" : activeTab === "reg_agenda_painel" ? "Painel da Agenda Regulatória" : activeTab === "pub_cadastro" ? "Gerenciar Publicações" : activeTab === "pub_painel" ? "Painel de Publicações" : activeTab === "fisc_operational" ? "Painel de Fiscalização" : activeTab === "recurso_painel" ? "Painel de Qualidade do Atendimento" : "Gerenciar Balanço Hídrico"}
             </h1>
             <p className="text-slate-500 text-sm font-medium">
               {activeTab === "home"

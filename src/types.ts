@@ -284,6 +284,7 @@ export interface ChecklistItem {
   id: string;
   text: string;
   completed: boolean;
+  level?: number;
 }
 
 export interface Task {

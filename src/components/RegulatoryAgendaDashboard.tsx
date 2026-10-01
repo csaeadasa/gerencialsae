@@ -1135,7 +1135,7 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
             onClose={() => setTimelineTaskId(null)}
             onEditTask={(task) => {
               setTimelineTaskId(null);
-              showToast("Visualização", `Para editar a atividade "${task.title}", acesse o módulo de Cadastrar Atividades no menu Planejamento.`, "info");
+              showToast("Visualização", `Para editar a atividade "${task.title}", acesse o módulo de Gerenciar Atividades no menu Planejamento.`, "info");
             }}
             tasks={tasks}
             taskById={taskById}

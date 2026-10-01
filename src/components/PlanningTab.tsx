@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   FolderKanban,
   ListTodo,
+  BookmarkPlus,
   Calendar,
   Layers,
   ChevronDown,
@@ -17,6 +18,7 @@ import {
   ChevronsUp,
   ChevronRight,
   ChevronLeft,
+  CornerDownRight,
   Plus,
   Minus,
   Trash2,
@@ -816,6 +818,155 @@ export function PlanningTab({
   const [genCategoryIds, setGenCategoryIds] = useState<number[]>([]);
   const [genResponsibleIds, setGenResponsibleIds] = useState<number[]>([]);
   const [genSubmitting, setGenSubmitting] = useState(false);
+
+  // Checklist (Passo a Passo) Models
+  const [checklistModels, setChecklistModels] = useState<any[]>([]);
+  const [isSaveChecklistModalOpen, setIsSaveChecklistModalOpen] = useState(false);
+  const [isUseChecklistModalOpen, setIsUseChecklistModalOpen] = useState(false);
+  const [checklistModelName, setChecklistModelName] = useState("");
+  const [checklistModelDesc, setChecklistModelDesc] = useState("");
+  const [checklistSearchTerm, setChecklistSearchTerm] = useState("");
+  const [selectedChecklistModelId, setSelectedChecklistModelId] = useState<number | null>(null);
+  const [checklistApplyMode, setChecklistApplyMode] = useState<"replace" | "append">("replace");
+
+  const loadChecklistModels = async () => {
+    try {
+      const res = await fetch(`/api/checklist-models?t=${Date.now()}`);
+      const resData = await res.json();
+      if (resData.success && Array.isArray(resData.data)) {
+        setChecklistModels(resData.data);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar modelos de checklist:", err);
+    }
+  };
+
+  useEffect(() => {
+    loadChecklistModels();
+  }, []);
+
+  const computeChecklistNumbers = (items: Array<{ level?: number }>): string[] => {
+    if (!items || items.length === 0) return [];
+    const counters: number[] = [];
+    const numbers: string[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const rawLevel = Math.max(0, items[i]?.level || 0);
+      const prevLevel = i === 0 ? 0 : Math.max(0, items[i - 1]?.level || 0);
+      const level = Math.min(rawLevel, prevLevel + 1);
+
+      while (counters.length <= level) {
+        counters.push(0);
+      }
+      counters.length = level + 1;
+
+      counters[level]++;
+      numbers.push(counters.slice(0, level + 1).join("."));
+    }
+
+    return numbers;
+  };
+
+  const handleSaveChecklistAsModel = async () => {
+    if (!checklistModelName.trim()) {
+      showToast("Validação", "Informe o nome do modelo de passo a passo.", "warning");
+      return;
+    }
+
+    const validItems = (editingTask.checklist || [])
+      .filter(it => it.text && it.text.trim().length > 0)
+      .map(it => ({
+        id: it.id || Date.now().toString() + Math.random().toString(36).substring(7),
+        text: it.text.trim(),
+        completed: false,
+        level: Math.max(0, it.level || 0)
+      }));
+
+    if (validItems.length === 0) {
+      showToast("Aviso", "O passo a passo não possui nenhum item com descrição para ser salvo.", "warning");
+      return;
+    }
+
+    try {
+      const author = currentUser?.name || currentUser?.email || "SGI Pro";
+      const res = await fetch("/api/checklist-models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: checklistModelName.trim(),
+          description: checklistModelDesc.trim(),
+          items: validItems,
+          createdBy: author
+        })
+      });
+      const resData = await res.json();
+      if (resData.success) {
+        showToast("Sucesso", `Modelo "${checklistModelName.trim()}" salvo com ${validItems.length} passos!`, "success");
+        setIsSaveChecklistModalOpen(false);
+        setChecklistModelName("");
+        setChecklistModelDesc("");
+        await loadChecklistModels();
+      } else {
+        showToast("Erro", resData.error || "Falha ao salvar modelo de passo a passo.", "error");
+      }
+    } catch (err) {
+      showToast("Erro de Rede", "Não foi possível salvar o modelo no servidor.", "error");
+    }
+  };
+
+  const handleApplyChecklistModel = (model: any) => {
+    if (!model || !Array.isArray(model.items) || model.items.length === 0) {
+      showToast("Aviso", "Este modelo não possui passos cadastrados.", "warning");
+      return;
+    }
+
+    const newItems = model.items.map((it: any) => ({
+      id: Date.now().toString() + Math.random().toString(36).substring(7),
+      text: it.text,
+      completed: false,
+      level: Math.max(0, it.level || 0)
+    }));
+
+    if (checklistApplyMode === "replace") {
+      setEditingTask(prev => ({
+        ...prev,
+        checklist: newItems
+      }));
+      showToast("Sucesso", `Modelo "${model.name}" aplicado! A lista foi substituída por ${newItems.length} passos.`, "success");
+    } else {
+      setEditingTask(prev => ({
+        ...prev,
+        checklist: [...(prev.checklist || []), ...newItems]
+      }));
+      showToast("Sucesso", `${newItems.length} passos do modelo "${model.name}" foram adicionados à lista atual.`, "success");
+    }
+
+    setIsUseChecklistModalOpen(false);
+  };
+
+  const handleDeleteChecklistModel = (model: any) => {
+    if (setConfirmState) {
+      setConfirmState({
+        type: "confirm",
+        title: "Excluir Modelo de Passo a Passo",
+        message: `Tem certeza que deseja excluir o modelo "${model.name}"?\n\nEsta ação removerá o modelo permanentemente. As atividades que já utilizaram este modelo não serão afetadas.`,
+        onConfirm: async () => {
+          try {
+            const res = await fetch(`/api/checklist-models/${model.id}`, { method: "DELETE" });
+            const resData = await res.json();
+            if (resData.success) {
+              showToast("Sucesso", "Modelo de passo a passo excluído com sucesso.", "success");
+              await loadChecklistModels();
+            } else {
+              showToast("Erro", resData.error || "Falha ao excluir modelo.", "error");
+            }
+          } catch (err) {
+            showToast("Erro de Rede", "Erro ao conectar com o servidor.", "error");
+          }
+        }
+      });
+    }
+  };
 
   const toggleGenAreaId = (aid: number) => {
     if (genAreaIds.includes(aid)) {
@@ -4596,7 +4747,10 @@ export function PlanningTab({
   }, [editingTaskIdFromPainel, tasks]);
 
   // Handle task deletion
-  const handleDeleteTask = async (id: number) => {
+  const handleDeleteTask = async (id: number, onSuccess?: () => void) => {
+    const targetTask = tasks.find(t => t.id === id);
+    const taskTitle = targetTask?.title ? `"${targetTask.title}"` : "esta atividade";
+
     const countSubtasks = (taskId: number): number => {
       let subCount = 0;
       const directChildren = tasks.filter(t => t.parentId === taskId);
@@ -4609,28 +4763,39 @@ export function PlanningTab({
     
     const subtaskCount = countSubtasks(id);
     const subtaskMessage = subtaskCount > 0 
-      ? `Esta atividade possui ${subtaskCount} atividade(s) filha(s) que também será(ão) excluída(s).\n\nDeseja realmente excluir a atividade e suas subatividades?` 
-      : "Deseja realmente excluir a atividade?";
+      ? `Tem certeza que deseja excluir ${taskTitle}?\n\n⚠️ ATENÇÃO: Esta atividade possui ${subtaskCount} ${subtaskCount === 1 ? 'subatividade vinculada' : 'subatividades vinculadas'}. Ao prosseguir com a exclusão, a atividade principal e TODAS as suas ${subtaskCount} subatividades serão excluídas permanentemente.\n\nEsta ação não poderá ser desfeita.`
+      : `Tem certeza que deseja excluir ${taskTitle}?\n\nEsta ação é permanente e não poderá ser desfeita.`;
 
-    setConfirmState({
-      type: "confirm",
-      title: "Excluir Atividade",
-      message: `Atenção: A exclusão é permanente.\n\n${subtaskMessage}`,
-      onConfirm: async () => {
-        try {
-          const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
-          const resData = await res.json();
-          if (resData.success) {
-            showToast("Sucesso", "Atividade excluída do banco.", "success");
-            await reloadTasks();
-          } else {
-            showToast("Erro", resData.error || "Ocorreu uma falha ao remover a tarefa.", "error");
+    if (setConfirmState) {
+      setConfirmState({
+        type: "confirm",
+        title: "Excluir Atividade",
+        message: subtaskMessage,
+        onConfirm: async () => {
+          try {
+            const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+            const resData = await res.json();
+            if (resData.success) {
+              showToast(
+                "Sucesso", 
+                subtaskCount > 0 
+                  ? `Atividade e suas ${subtaskCount} ${subtaskCount === 1 ? 'subatividade foram excluídas' : 'subatividades foram excluídas'} com sucesso.` 
+                  : "Atividade excluída com sucesso.", 
+                "success"
+              );
+              if (onSuccess) {
+                onSuccess();
+              }
+              await reloadTasks();
+            } else {
+              showToast("Erro", resData.error || "Ocorreu uma falha ao remover a tarefa.", "error");
+            }
+          } catch (err: any) {
+            showToast("Erro de Rede", "Erro ao conectar ao servidor para excluir tarefa.", "error");
           }
-        } catch (err: any) {
-          showToast("Erro de Rede", "Erro ao conectar ao servidor para excluir tarefa.", "error");
         }
-      }
-    });
+      });
+    }
   };
 
   const handleQuickStatusChange = async (task: Task, newStatus: string) => {
@@ -9074,10 +9239,10 @@ export function PlanningTab({
                             }
                           }}
                           className="flex-1 py-2 px-3 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
-                          title={`Abrir Cadastrar Atividades com filtro de ${item.name}`}
+                          title={`Abrir Gerenciar Atividades com filtro de ${item.name}`}
                         >
                           <ListTodo size={14} className="text-indigo-600" />
-                          <span>Cadastrar</span>
+                          <span>Gerenciar</span>
                         </button>
                         <button
                           onClick={() => {
@@ -14972,7 +15137,7 @@ export function PlanningTab({
                       title="Abrir a Linha do Tempo / Timeline completa desta atividade"
                     >
                       <Activity size={16} className="text-indigo-600 group-hover:scale-110 transition-transform" />
-                      <span>Timeline da Tarefa</span>
+                      <span>Timeline da Atividade</span>
                     </button>
                   )}
                   <button
@@ -15956,30 +16121,108 @@ export function PlanningTab({
                   </div>
                 </div>
 
-                {formMode === "edit" && editingTask.updatedAt && (
-                  <div className="space-y-1.5 md:col-span-2">
-                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider font-semibold">Atualização</label>
-                    <div className="px-3.5 py-2.5 text-sm font-semibold text-slate-500 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2">
-                      <Clock size={14} className="text-slate-400" />
-                      <span>{formatDateTime(editingTask.updatedAt)} por {editingTask.updatedBy || 'Sistema'}</span>
+                {formMode === "edit" && (
+                  <div className="md:col-span-2 pt-2 border-t border-slate-100">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Criação */}
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                          <UserPlus size={13} className="text-blue-500" />
+                          Criação
+                        </span>
+                        <div className="text-xs font-bold text-slate-700 leading-tight">
+                          {editingTask.createdBy || "Sistema"}
+                        </div>
+                        <div className="text-[11px] font-medium text-slate-400">
+                          {editingTask.createdAt ? formatDateTime(editingTask.createdAt) : "Data não registrada"}
+                        </div>
+                      </div>
+
+                      {/* Atualização */}
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                          <Clock size={13} className="text-amber-500" />
+                          Última Atualização
+                        </span>
+                        <div className="text-xs font-bold text-slate-700 leading-tight">
+                          {editingTask.updatedBy || "Sistema"}
+                        </div>
+                        <div className="text-[11px] font-medium text-slate-400">
+                          {editingTask.updatedAt ? formatDateTime(editingTask.updatedAt) : "Nenhuma alteração"}
+                        </div>
+                      </div>
+
+                      {/* Conclusão */}
+                      <div className={`p-3 border rounded-xl space-y-1 ${
+                        editingTask.progress === 100 || editingTask.status === "Concluída" || editingTask.completedAt || editingTask.completedBy
+                          ? "bg-emerald-50/50 border-emerald-200"
+                          : "bg-slate-50 border-slate-200"
+                      }`}>
+                        <span className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 text-slate-400">
+                          <CheckCircle2 size={13} className={
+                            editingTask.progress === 100 || editingTask.status === "Concluída" || editingTask.completedAt || editingTask.completedBy
+                              ? "text-emerald-600"
+                              : "text-slate-400"
+                          } />
+                          Conclusão
+                        </span>
+                        {editingTask.progress === 100 || editingTask.status === "Concluída" || editingTask.completedAt || editingTask.completedBy ? (
+                          <>
+                            <div className="text-xs font-bold text-emerald-800 leading-tight">
+                              {editingTask.completedBy || editingTask.updatedBy || "Sistema"}
+                            </div>
+                            <div className="text-[11px] font-medium text-emerald-600">
+                              {editingTask.completedAt ? formatDateTime(editingTask.completedAt) : (editingTask.updatedAt ? formatDateTime(editingTask.updatedAt) : "Concluída")}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-xs font-bold text-slate-500 leading-tight">
+                              Não concluída
+                            </div>
+                            <div className="text-[11px] font-medium text-slate-400">
+                              Em andamento ({editingTask.progress || 0}%)
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
 
-                <div className="flex gap-3 justify-end pt-4 border-t border-slate-100 md:col-span-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsFormOpen(false)}
-                    className="px-6 py-2.5 font-bold text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
-                  >
-                    Fechar
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-6 py-2.5 font-bold text-sm text-white bg-adasa-mid hover:bg-adasa-dark rounded-xl transition-colors shadow-sm cursor-pointer"
-                  >
-                    {formMode === "create" ? "Inserir Atividade" : "Gravar Alterações"}
-                  </button>
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100 md:col-span-2">
+                  <div>
+                    {formMode === "edit" && editingTask?.id && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleDeleteTask(editingTask.id, () => {
+                            setIsFormOpen(false);
+                          });
+                        }}
+                        className="px-4 py-2.5 font-bold text-sm text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors flex items-center gap-2 cursor-pointer shadow-2xs"
+                        title="Excluir esta atividade permanentemente"
+                      >
+                        <Trash2 size={16} />
+                        <span>Excluir Atividade</span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsFormOpen(false)}
+                      className="px-6 py-2.5 font-bold text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                    >
+                      Fechar
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-6 py-2.5 font-bold text-sm text-white bg-adasa-mid hover:bg-adasa-dark rounded-xl transition-colors shadow-sm cursor-pointer"
+                    >
+                      {formMode === "create" ? "Inserir Atividade" : "Gravar Alterações"}
+                    </button>
+                  </div>
                 </div>
               </form>
 
@@ -16007,119 +16250,295 @@ export function PlanningTab({
                           </span>
                         )}
                       </label>
-                      {(editingTask.checklist || []).length > 0 && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-bold text-slate-500">
-                            {Math.round(((editingTask.checklist || []).filter(c => c.completed).length / (editingTask.checklist || []).length) * 100)}%
-                          </span>
-                          <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/60">
-                            <div 
-                              className="h-full bg-emerald-500 transition-all duration-300 rounded-full" 
-                              style={{ width: `${((editingTask.checklist || []).filter(c => c.completed).length / (editingTask.checklist || []).length) * 100}%` }}
-                            />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            loadChecklistModels();
+                            setIsUseChecklistModalOpen(true);
+                          }}
+                          className="px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                          title="Carregar um modelo de passo a passo salvo nesta atividade"
+                        >
+                          <BookmarkCheck size={14} className="text-indigo-600" />
+                          <span>Usar Modelo</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const validCount = (editingTask.checklist || []).filter(it => it.text && it.text.trim().length > 0).length;
+                            if (validCount === 0) {
+                              showToast("Aviso", "Adicione pelo menos um passo com descrição antes de salvar como modelo.", "warning");
+                              return;
+                            }
+                            setChecklistModelName(editingTask.title ? `Passo a Passo: ${editingTask.title.slice(0, 40)}` : "");
+                            setChecklistModelDesc("");
+                            setIsSaveChecklistModalOpen(true);
+                          }}
+                          className="px-2.5 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                          title="Salvar os passos atuais como um modelo reutilizável"
+                        >
+                          <BookmarkPlus size={14} className="text-emerald-600" />
+                          <span>Salvar como Modelo</span>
+                        </button>
+                        {(editingTask.checklist || []).length > 0 && (
+                          <div className="flex items-center gap-2 ml-1 pl-2 border-l border-slate-200">
+                            <span className="text-[11px] font-bold text-slate-500">
+                              {Math.round(((editingTask.checklist || []).filter(c => c.completed).length / (editingTask.checklist || []).length) * 100)}%
+                            </span>
+                            <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/60">
+                              <div 
+                                className="h-full bg-emerald-500 transition-all duration-300 rounded-full" 
+                                style={{ width: `${((editingTask.checklist || []).filter(c => c.completed).length / (editingTask.checklist || []).length) * 100}%` }}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                     
-                    <div className="space-y-3">
-                      {(editingTask.checklist || []).map((item, index) => {
-                        const isDone = !!item.completed;
-                        return (
-                          <div 
-                            key={item.id} 
-                            className={`flex items-center gap-3 p-3 sm:p-3.5 rounded-xl border transition-all duration-150 shadow-2xs group ${
-                              isDone 
-                                ? "bg-emerald-50/30 border-emerald-200/80 hover:bg-emerald-50/50" 
-                                : "bg-white border-slate-200/90 hover:border-slate-300 hover:shadow-xs"
-                            }`}
-                            draggable
-                            onDragStart={(e) => e.dataTransfer.setData("text/plain", index.toString())}
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              const draggedIndex = parseInt(e.dataTransfer.getData("text/plain"));
-                              if (isNaN(draggedIndex) || draggedIndex === index) return;
-                              const newChecklist = [...(editingTask.checklist || [])];
-                              const [draggedItem] = newChecklist.splice(draggedIndex, 1);
-                              newChecklist.splice(index, 0, draggedItem);
-                              setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
-                            }}
-                          >
-                            <button 
-                              type="button"
-                              className="p-1 text-slate-300 hover:text-slate-600 rounded-md cursor-grab active:cursor-grabbing hover:bg-slate-100 transition-colors shrink-0"
-                              title="Arraste para reordenar o passo"
-                            >
-                              <GripVertical size={15} />
-                            </button>
-                            
-                            <span 
-                              className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center shrink-0 select-none transition-colors ${
-                                isDone 
-                                  ? "bg-emerald-100 text-emerald-800" 
-                                  : "bg-slate-100 text-slate-600"
-                              }`}
-                            >
-                              {index + 1}
-                            </span>
-                            
+                    {(() => {
+                      const checklistItems = editingTask.checklist || [];
+                      const checklistNumbers = computeChecklistNumbers(checklistItems);
+
+                      const handleOutdent = (idx: number) => {
+                        const newChecklist = [...checklistItems];
+                        newChecklist[idx] = {
+                          ...newChecklist[idx],
+                          level: Math.max(0, (newChecklist[idx].level || 0) - 1)
+                        };
+                        setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
+                      };
+
+                      const handleIndent = (idx: number) => {
+                        if (idx === 0) return;
+                        const prevLevel = checklistItems[idx - 1]?.level || 0;
+                        const currentLevel = checklistItems[idx]?.level || 0;
+                        if (currentLevel > prevLevel) return;
+                        const newChecklist = [...checklistItems];
+                        newChecklist[idx] = {
+                          ...newChecklist[idx],
+                          level: Math.min(4, currentLevel + 1)
+                        };
+                        setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
+                      };
+
+                      const handleAddSubstep = (idx: number) => {
+                        const parentLevel = checklistItems[idx]?.level || 0;
+                        const newItem = {
+                          id: Date.now().toString() + Math.random().toString(36).substring(7),
+                          text: "",
+                          completed: false,
+                          level: Math.min(4, parentLevel + 1)
+                        };
+                        const newChecklist = [...checklistItems];
+                        newChecklist.splice(idx + 1, 0, newItem);
+                        setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
+                      };
+
+                      return (
+                        <div className="space-y-3">
+                          {checklistItems.map((item, index) => {
+                            const isDone = !!item.completed;
+                            const level = Math.max(0, item.level || 0);
+                            const itemNum = checklistNumbers[index] || String(index + 1);
+                            const prevLevel = index === 0 ? 0 : (checklistItems[index - 1]?.level || 0);
+                            const canIndent = index > 0 && level <= prevLevel && level < 4;
+                            const canOutdent = level > 0;
+
+                            return (
+                              <div
+                                key={item.id}
+                                className={`flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-xl border transition-all duration-150 shadow-2xs group relative ${
+                                  isDone
+                                    ? "bg-emerald-50/30 border-emerald-200/80 hover:bg-emerald-50/50"
+                                    : level > 0
+                                    ? "bg-slate-50/70 border-slate-200 hover:border-indigo-300 hover:bg-white"
+                                    : "bg-white border-slate-200/90 hover:border-slate-300 hover:shadow-xs"
+                                }`}
+                                style={{
+                                  marginLeft: `${level * 24}px`
+                                }}
+                                draggable
+                                onDragStart={(e) => e.dataTransfer.setData("text/plain", index.toString())}
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  const draggedIndex = parseInt(e.dataTransfer.getData("text/plain"));
+                                  if (isNaN(draggedIndex) || draggedIndex === index) return;
+                                  const newChecklist = [...checklistItems];
+                                  const [draggedItem] = newChecklist.splice(draggedIndex, 1);
+                                  newChecklist.splice(index, 0, draggedItem);
+                                  setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
+                                }}
+                              >
+                                {level > 0 && (
+                                  <div className="text-indigo-400 shrink-0" title={`Subitem nível ${level}`}>
+                                    <CornerDownRight size={14} />
+                                  </div>
+                                )}
+
+                                <button
+                                  type="button"
+                                  className="p-1 text-slate-300 hover:text-slate-600 rounded-md cursor-grab active:cursor-grabbing hover:bg-slate-100 transition-colors shrink-0"
+                                  title="Arraste para reordenar"
+                                >
+                                  <GripVertical size={14} />
+                                </button>
+
+                                {/* Automatic Hierarchical Number Badge */}
+                                <span
+                                  className={`px-2 py-0.5 min-w-[26px] h-6 rounded-lg font-black flex items-center justify-center shrink-0 select-none transition-colors ${
+                                    isDone
+                                      ? "bg-emerald-100 text-emerald-800 text-xs"
+                                      : level === 0
+                                      ? "bg-slate-100 text-slate-700 text-xs"
+                                      : level === 1
+                                      ? "bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11px]"
+                                      : "bg-purple-50 border border-purple-200 text-purple-700 text-[10px]"
+                                  }`}
+                                  title={`Passo ${itemNum}`}
+                                >
+                                  {itemNum}
+                                </span>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newChecklist = [...checklistItems];
+                                    newChecklist[index] = { ...item, completed: !item.completed };
+                                    setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
+                                  }}
+                                  className={`shrink-0 transition-transform active:scale-95 cursor-pointer ${
+                                    isDone ? "text-emerald-600" : "text-slate-300 hover:text-indigo-500"
+                                  }`}
+                                  title={isDone ? "Marcar como pendente" : "Marcar como concluído"}
+                                >
+                                  {isDone ? <CheckCircle2 size={19} className="fill-emerald-50" /> : <Circle size={19} />}
+                                </button>
+
+                                <input
+                                  type="text"
+                                  value={item.text}
+                                  onChange={(e) => {
+                                    const newChecklist = [...checklistItems];
+                                    newChecklist[index] = { ...item, text: e.target.value };
+                                    setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      const newItem = {
+                                        id: Date.now().toString() + Math.random().toString(36).substring(7),
+                                        text: "",
+                                        completed: false,
+                                        level: level
+                                      };
+                                      const newChecklist = [...checklistItems];
+                                      newChecklist.splice(index + 1, 0, newItem);
+                                      setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
+                                    } else if (e.key === "Tab") {
+                                      e.preventDefault();
+                                      if (e.shiftKey) {
+                                        if (canOutdent) handleOutdent(index);
+                                      } else {
+                                        if (canIndent) handleIndent(index);
+                                      }
+                                    }
+                                  }}
+                                  className={`flex-1 bg-transparent border-none outline-none text-sm font-semibold transition-colors placeholder:text-slate-300 ${
+                                    isDone ? "text-slate-400 line-through font-normal" : "text-slate-800"
+                                  }`}
+                                  placeholder={level === 0 ? `Descreva o passo ${itemNum}...` : `Descreva o subpasso ${itemNum}...`}
+                                />
+
+                                {/* Hierarchy controls & Actions */}
+                                <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                                  {/* Recuar (Outdent) */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOutdent(index)}
+                                    disabled={!canOutdent}
+                                    className={`p-1 rounded-md transition-colors ${
+                                      canOutdent
+                                        ? "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer"
+                                        : "text-slate-200 cursor-not-allowed"
+                                    }`}
+                                    title="Recuar nível (Shift+Tab)"
+                                  >
+                                    <ChevronLeft size={15} />
+                                  </button>
+
+                                  {/* Avançar / Aninhar (Indent) */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleIndent(index)}
+                                    disabled={!canIndent}
+                                    className={`p-1 rounded-md transition-colors ${
+                                      canIndent
+                                        ? "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer"
+                                        : "text-slate-200 cursor-not-allowed"
+                                    }`}
+                                    title="Aninhar como subpasso (Tab)"
+                                  >
+                                    <ChevronRight size={15} />
+                                  </button>
+
+                                  {/* Adicionar Subpasso */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddSubstep(index)}
+                                    className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors cursor-pointer"
+                                    title="Adicionar subpasso aninhado"
+                                  >
+                                    <CornerDownRight size={15} />
+                                  </button>
+
+                                  {/* Remover */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newChecklist = [...checklistItems];
+                                      newChecklist.splice(index, 1);
+                                      setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
+                                    }}
+                                    className="p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                                    title="Remover este passo"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          <div className="flex flex-col sm:flex-row gap-2 pt-1">
                             <button
                               type="button"
                               onClick={() => {
-                                const newChecklist = [...(editingTask.checklist || [])];
-                                newChecklist[index] = { ...item, completed: !item.completed };
-                                setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
+                                const newItem = {
+                                  id: Date.now().toString() + Math.random().toString(36).substring(7),
+                                  text: "",
+                                  completed: false,
+                                  level: 0
+                                };
+                                setEditingTask(prev => ({ ...prev, checklist: [...(prev.checklist || []), newItem] }));
                               }}
-                              className={`shrink-0 transition-transform active:scale-95 cursor-pointer ${
-                                isDone ? "text-emerald-600" : "text-slate-300 hover:text-indigo-500"
-                              }`}
-                              title={isDone ? "Marcar como pendente" : "Marcar como concluído"}
+                              className="flex-1 py-2.5 border-2 border-dashed border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40 text-slate-600 hover:text-indigo-700 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
                             >
-                              {isDone ? <CheckCircle2 size={20} className="fill-emerald-50" /> : <Circle size={20} />}
-                            </button>
-
-                            <input
-                              type="text"
-                              value={item.text}
-                              onChange={(e) => {
-                                const newChecklist = [...(editingTask.checklist || [])];
-                                newChecklist[index] = { ...item, text: e.target.value };
-                                setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
-                              }}
-                              className={`flex-1 bg-transparent border-none outline-none text-sm font-semibold transition-colors placeholder:text-slate-300 ${
-                                isDone ? 'text-slate-400 line-through font-normal' : 'text-slate-800'
-                              }`}
-                              placeholder={`Descreva o passo ${index + 1}...`}
-                            />
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newChecklist = [...(editingTask.checklist || [])];
-                                newChecklist.splice(index, 1);
-                                setEditingTask(prev => ({ ...prev, checklist: newChecklist }));
-                              }}
-                              className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg opacity-40 group-hover:opacity-100 transition-all cursor-pointer shrink-0"
-                              title="Remover este passo"
-                            >
-                              <Trash2 size={15} />
+                              <Plus size={15} /> Adicionar novo passo
                             </button>
                           </div>
-                        );
-                      })}
-                      
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newItem = { id: Date.now().toString() + Math.random().toString(36).substring(7), text: "", completed: false };
-                          setEditingTask(prev => ({ ...prev, checklist: [...(prev.checklist || []), newItem] }));
-                        }}
-                        className="w-full py-3 border-2 border-dashed border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40 text-slate-600 hover:text-indigo-700 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
-                      >
-                        <Plus size={15} /> Adicionar novo passo
-                      </button>
-                    </div>
+
+                          <div className="text-[11px] text-slate-400 flex items-center gap-1.5 px-1">
+                            <Info size={13} className="text-slate-400 shrink-0" />
+                            <span>
+                              Dica: Use <strong>Tab</strong> / <strong>Shift+Tab</strong> ou os botões <strong>⇥</strong> e <strong>⇤</strong> para aninhar subpassos (ex: 1.1, 1.2, 1.1.1). A numeração é calculada automaticamente.
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
@@ -16491,6 +16910,304 @@ export function PlanningTab({
           showToast={showToast}
           renderProgressCalc={renderProgressCalc}
         />
+      )}
+
+      {/* Modal: Salvar Passo a Passo como Modelo */}
+      {isSaveChecklistModalOpen && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]"
+          >
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
+                  <BookmarkPlus size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 text-base">Salvar Passo a Passo como Modelo</h3>
+                  <p className="text-xs text-slate-500 font-medium">Crie um modelo reutilizável para qualquer atividade</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSaveChecklistModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider">
+                  Nome do Modelo <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={checklistModelName}
+                  onChange={(e) => setChecklistModelName(e.target.value)}
+                  placeholder="Ex: Roteiro de Vistoria de ETE, Checklist de Minuta..."
+                  className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-emerald-500 outline-none"
+                  autoFocus
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider">
+                  Descrição / Objetivo (Opcional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={checklistModelDesc}
+                  onChange={(e) => setChecklistModelDesc(e.target.value)}
+                  placeholder="Descreva a finalidade ou em quais atividades este modelo deve ser aplicado..."
+                  className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-700 focus:border-emerald-500 outline-none"
+                />
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700">
+                    Passos a serem salvos ({(editingTask.checklist || []).filter(it => it.text?.trim()).length})
+                  </span>
+                  <span className="text-[11px] text-slate-400 italic">Serão salvos como pendentes no modelo</span>
+                </div>
+                <div className="max-h-48 overflow-y-auto space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+                  {(() => {
+                    const validItems = (editingTask.checklist || []).filter(it => it.text?.trim());
+                    const nums = computeChecklistNumbers(validItems);
+                    return validItems.map((it, idx) => {
+                      const lvl = it.level || 0;
+                      const num = nums[idx] || String(idx + 1);
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-2 text-xs text-slate-700 font-medium"
+                          style={{ marginLeft: `${lvl * 16}px` }}
+                        >
+                          {lvl > 0 && <CornerDownRight size={11} className="text-indigo-400 shrink-0" />}
+                          <span className={`px-1.5 py-0.5 min-w-[20px] h-5 rounded font-black flex items-center justify-center text-[10px] shrink-0 ${
+                            lvl === 0 ? "bg-white border border-slate-200 text-slate-700" : "bg-indigo-50 border border-indigo-200 text-indigo-700"
+                          }`}>
+                            {num}
+                          </span>
+                          <span className="truncate">{it.text}</span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsSaveChecklistModalOpen(false)}
+                className="px-5 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-200 bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveChecklistAsModel}
+                className="px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <BookmarkPlus size={15} />
+                Salvar Modelo
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Modal: Usar Modelo de Passo a Passo */}
+      {isUseChecklistModalOpen && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]"
+          >
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-100 text-indigo-700">
+                  <BookmarkCheck size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 text-base">Modelos de Passo a Passo Salvos</h3>
+                  <p className="text-xs text-slate-500 font-medium">Selecione e aplique um modelo pré-configurado nesta atividade</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsUseChecklistModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Search and Application Mode */}
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+                <div className="relative flex-1">
+                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={checklistSearchTerm}
+                    onChange={(e) => setChecklistSearchTerm(e.target.value)}
+                    placeholder="Buscar modelos..."
+                    className="w-full pl-9 pr-3.5 py-2 text-xs font-semibold border-2 border-slate-200 rounded-xl focus:border-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setChecklistApplyMode("replace")}
+                    className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                      checklistApplyMode === "replace"
+                        ? "bg-white text-indigo-700 shadow-2xs font-extrabold"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Substituir lista
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChecklistApplyMode("append")}
+                    className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                      checklistApplyMode === "append"
+                        ? "bg-white text-indigo-700 shadow-2xs font-extrabold"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Acrescentar
+                  </button>
+                </div>
+              </div>
+
+              {/* Models list */}
+              {checklistModels.length === 0 ? (
+                <div className="text-center py-10 bg-slate-50 border border-dashed border-slate-200 rounded-2xl">
+                  <BookmarkPlus size={32} className="mx-auto text-slate-300 mb-2" />
+                  <p className="text-sm font-bold text-slate-700">Nenhum modelo de passo a passo cadastrado</p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                    Você pode cadastrar passos nesta ou em qualquer atividade e clicar em <strong>Salvar como Modelo</strong> para reutilizá-los.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {checklistModels
+                    .filter(m => !checklistSearchTerm || m.name.toLowerCase().includes(checklistSearchTerm.toLowerCase()) || (m.description && m.description.toLowerCase().includes(checklistSearchTerm.toLowerCase())))
+                    .map((model) => {
+                      const isSelected = selectedChecklistModelId === model.id;
+                      const itemsCount = (model.items || []).length;
+                      return (
+                        <div
+                          key={model.id}
+                          className={`border rounded-2xl transition-all ${
+                            isSelected
+                              ? "border-indigo-500 bg-indigo-50/20 shadow-sm"
+                              : "border-slate-200 hover:border-slate-300 bg-white"
+                          }`}
+                        >
+                          <div className="p-4 flex items-start justify-between gap-3">
+                            <div className="space-y-1 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="text-sm font-bold text-slate-800">{model.name}</h4>
+                                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                  {itemsCount} {itemsCount === 1 ? 'passo' : 'passos'}
+                                </span>
+                              </div>
+                              {model.description && (
+                                <p className="text-xs text-slate-500 font-medium">{model.description}</p>
+                              )}
+                              <div className="text-[11px] text-slate-400 flex items-center gap-2 pt-1">
+                                <span>Criado por {model.createdBy || 'Sistema'}</span>
+                                {model.createdAt && <span>• {formatDateTime(model.createdAt)}</span>}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedChecklistModelId(isSelected ? null : model.id)}
+                                className="px-2.5 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                              >
+                                {isSelected ? "Ocultar Passos" : "Ver Passos"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleApplyChecklistModel(model)}
+                                className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-2xs cursor-pointer flex items-center gap-1.5"
+                              >
+                                <BookmarkCheck size={14} />
+                                Aplicar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteChecklistModel(model)}
+                                className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                title="Excluir este modelo"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Expandable Preview */}
+                          {isSelected && (
+                            <div className="px-4 pb-4 pt-1 border-t border-slate-100 space-y-1.5">
+                              <span className="text-[11px] font-bold text-slate-500 block mb-1">Relação de passos do modelo:</span>
+                              <div className="space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 max-h-40 overflow-y-auto">
+                                {(() => {
+                                  const modelItems = model.items || [];
+                                  const nums = computeChecklistNumbers(modelItems);
+                                  return modelItems.map((it: any, idx: number) => {
+                                    const lvl = it.level || 0;
+                                    const num = nums[idx] || String(idx + 1);
+                                    return (
+                                      <div
+                                        key={idx}
+                                        className="flex items-center gap-2 text-xs text-slate-700"
+                                        style={{ marginLeft: `${lvl * 16}px` }}
+                                      >
+                                        {lvl > 0 && <CornerDownRight size={11} className="text-indigo-400 shrink-0" />}
+                                        <span className={`px-1.5 py-0.5 min-w-[20px] h-5 rounded font-black flex items-center justify-center text-[10px] shrink-0 ${
+                                          lvl === 0 ? "bg-white border border-slate-200 text-slate-700" : "bg-indigo-50 border border-indigo-200 text-indigo-700"
+                                        }`}>
+                                          {num}
+                                        </span>
+                                        <span>{it.text}</span>
+                                      </div>
+                                    );
+                                  });
+                                })()}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsUseChecklistModalOpen(false)}
+                className="px-5 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-200 bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </motion.div>
+        </div>
       )}
 
       </div>
