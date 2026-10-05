@@ -18,7 +18,9 @@ import {
   ExternalLink,
   Code,
   X,
-  Link2
+  Link2,
+  LayoutDashboard,
+  Sparkles
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { RequirePermission } from "../lib/auth";
@@ -32,6 +34,7 @@ interface ManagerialHubProps {
   onOpenParticipacaoSocialPainel?: () => void;
   onOpenFiscalizacao?: () => void;
   onOpenRecursoPainel?: () => void;
+  onOpenOverviewPanels?: () => void;
   isPublic?: boolean;
   showOnlyPublic?: boolean;
   showToast?: (title: string, message: string, type?: "success" | "error" | "warning" | "info") => void;
@@ -47,6 +50,7 @@ export function ManagerialHub({
   onOpenParticipacaoSocialPainel,
   onOpenFiscalizacao,
   onOpenRecursoPainel,
+  onOpenOverviewPanels,
   isPublic = false,
   showOnlyPublic = false,
   showToast,
@@ -218,6 +222,33 @@ export function ManagerialHub({
 
         {/* Master Row with relevant cards depending on public mode */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Visão Geral dos Painéis Gerenciais Card - FIRST POSITION */}
+          <motion.div 
+            whileHover={{ y: -3, scale: 1.01 }}
+            onClick={onOpenOverviewPanels}
+            className="p-8 rounded-3xl border-2 border-blue-600/40 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950 text-white shadow-xl shadow-blue-950/20 cursor-pointer hover:shadow-2xl hover:border-blue-400 transition-all duration-300 flex flex-col justify-between group h-full relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 rounded-full bg-blue-500/15 blur-2xl pointer-events-none group-hover:bg-blue-500/25 transition-all" />
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 rounded-xl bg-blue-500/20 text-blue-300 w-max border border-blue-400/30 group-hover:bg-blue-500/30 group-hover:text-white transition-colors shadow-inner">
+                  <LayoutDashboard size={24} />
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/30 text-blue-200 border border-blue-400/30">
+                  <Sparkles size={11} className="text-blue-300 animate-pulse" />
+                  Consolidado
+                </span>
+              </div>
+              <h3 className="text-lg font-black text-white leading-tight mb-2">Visão Geral dos Painéis Gerenciais</h3>
+              <p className="text-blue-100/85 text-xs font-medium leading-relaxed mb-6">
+                Dashboard executivo integrado reunindo os principais gráficos, indicadores consolidados e resumos de todos os painéis gerenciais da SAE em uma visão unificada.
+              </p>
+            </div>
+            <div className="mt-8 flex items-center gap-2 text-xs font-black text-blue-300 group-hover:text-white transition-colors relative z-10">
+              Acessar Visão Geral dos Painéis Gerenciais <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+            </div>
+          </motion.div>
+
           {/* Painel de Atividades Card - PRIVATE */}
           {!showOnlyPublic && (
             <RequirePermission moduleId="planning_dashboard" action="view">

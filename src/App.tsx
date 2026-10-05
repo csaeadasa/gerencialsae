@@ -110,6 +110,7 @@ import { PresentationControls } from "./components/PresentationMode";
 import { MapTab } from "./components/MapTab";
 import { HomeTab } from "./components/HomeTab";
 import { ManagerialHub } from "./components/ManagerialHub";
+import { PanelsOverviewDashboard } from "./components/PanelsOverviewDashboard";
 
 // Novas importações de módulos estruturados (Modularização / SRP)
 import { PlanningModule } from "./modules/planning";
@@ -4096,8 +4097,45 @@ const renderSupplyTable = () => {
                     </div>
                   </div>
                 </div>
+              ) : publicTabName === "overview_panels" || publicTabName === "overview-panels" ? (
+                <div className="space-y-6">
+                  <PanelsOverviewDashboard
+                    tasks={tasks}
+                    areas={areas}
+                    categories={categories}
+                    plans={plans}
+                    responsibles={responsibles}
+                    waterBalanceAnalysisData={analyzeBalanceAnalysisData}
+                    waterBalances={waterBalances}
+                    onBack={() => {
+                      window.location.hash = "#public-publico_hub";
+                      setPublicTabName("publico_hub");
+                    }}
+                    onOpenResolutions={() => {
+                      window.location.hash = "#public-resolutions";
+                      setPublicTabName("reg_painel");
+                    }}
+                    onOpenRegulatoryAgenda={() => {
+                      window.location.hash = "#public-reg_agenda_painel";
+                      setPublicTabName("reg_agenda_painel");
+                    }}
+                    onOpenParticipacaoSocialPainel={() => {
+                      window.location.hash = "#public-reg_subsidios_painel";
+                      setPublicTabName("reg_subsidios_painel");
+                    }}
+                    onOpenPublications={() => {
+                      window.location.hash = "#public-pub_painel";
+                      setPublicTabName("pub_painel");
+                    }}
+                    showToast={showToast}
+                  />
+                </div>
               ) : (
                 <ManagerialHub 
+                  onOpenOverviewPanels={() => {
+                    window.location.hash = "#public-overview-panels";
+                    setPublicTabName("overview_panels");
+                  }}
                   onOpenPlanning={() => {
                     window.location.hash = "#public-planning";
                     setPublicTabName("planning");
@@ -4898,7 +4936,7 @@ const renderSupplyTable = () => {
                 onClick={() => handleTabChange("gerencial")}
                 className={cn(
                   "w-full px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all duration-200 group text-xs font-semibold cursor-pointer",
-                  activeTab === "gerencial"
+                  activeTab === "gerencial" || activeTab === "overview_panels"
                     ? "bg-white/15 text-white shadow-lg border border-white/10 border-l-4 border-l-adasa-light pl-3"
                     : "text-white/60 hover:text-white hover:bg-white/5 hover:translate-x-0.5",
                 )}
@@ -4907,7 +4945,7 @@ const renderSupplyTable = () => {
                   size={16}
                   className={cn(
                     "flex-shrink-0 transition-colors",
-                    activeTab === "gerencial" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
+                    activeTab === "gerencial" || activeTab === "overview_panels" ? "text-adasa-light" : "text-white/40 group-hover:text-white/60",
                   )}
                 />
                 {!isSidebarCollapsed && <span className="hidden md:inline">Painéis Gerenciais</span>}
@@ -5772,6 +5810,8 @@ const renderSupplyTable = () => {
                 ? "Página Inicial"
                 : activeTab === "gerencial"
                 ? "Painéis Gerenciais"
+                : activeTab === "overview_panels"
+                ? "Visão Geral dos Painéis Gerenciais"
                 : activeTab === "public_hub"
                 ? "Painéis Públicos"
                 : activeTab === "compare"
@@ -5793,25 +5833,27 @@ const renderSupplyTable = () => {
                    activePlanningSubTab === "radar" ? "Radar de Atividades" : "Importar Atividades")
                 : activeTab === "reg_cadastro" ? "Gerenciar Resoluções" : activeTab === "reg_agenda" ? "Agenda Regulatória" : activeTab === "reg_subsidios" ? "Gerenciar Participação Social" : activeTab === "reg_subsidios_painel" ? "Painel Participação Social" : activeTab === "reg_painel" ? "Painel Estratégico de Resoluções" : activeTab === "reg_agenda_painel" ? "Painel da Agenda Regulatória" : activeTab === "pub_cadastro" ? "Gerenciar Publicações" : activeTab === "pub_painel" ? "Painel de Publicações" : activeTab === "fisc_operational" ? "Painel de Fiscalização" : activeTab === "recurso_painel" ? "Painel de Qualidade do Atendimento" : "Gerenciar Balanço Hídrico"}
             </h1>
-            <p className="text-slate-500 text-sm font-medium">
-              {activeTab === "home"
-                ? "Selecione um módulo abaixo para iniciar o trabalho ou visualizar relatórios."
-                : activeTab === "gerencial"
-                  ? "Centralizadores de monitoramento estratégico, estoque regulatório e resultados da superintendência ADASA."
-                : activeTab === "public_hub"
-                  ? "Acesso externo e público do estoque regulatório e biblioteca de publicações científicas e técnicas da SAE."
-                  : activeTab === "compare"
-                    ? "Compare e analise a evolução da demanda e balanço."
-                    : activeTab === "analyze"
-                      ? "Visualize de forma isolada as projeções de oferta e demanda ao longo do tempo."
-                      : activeTab === "templates"
-                        ? "Gerencie e baixe os arquivos modelo para importação no sistema."
-                        : activeTab === "users" || activeTab === "departments"
-                          ? "Gerencie as contas de usuários, papéis de acesso (RBAC) e departamentos do sistema."
-                        : activeTab === "planning"
-                          ? (isMyTasksSelected ? "Gerencie e acompanhe as atividades atribuídas diretamente ao seu usuário." : "Gerencie o cronograma consolidado, planos, áreas e status de execução.")
-                          : activeTab === "reg_cadastro" ? "Gestão do acervo de normas, atos legais e resoluções aplicados à regulação do saneamento básico e recursos hídricos." : activeTab === "reg_agenda" ? "Cadastro e acompanhamento de metas, temas e ações da agenda regulatória." : activeTab === "reg_subsidios" ? "Módulo de participação social e recebimento de contribuições para normas e resoluções." : activeTab === "reg_subsidios_painel" ? "Acompanhamento gerencial das ações de participação social, consultas públicas e tomadas de subsídios." : activeTab === "reg_painel" ? "Estoque Regulatório da Superintendência de Abastecimento de Água e Esgoto" : activeTab === "reg_agenda_painel" ? "Acompanhamento estratégico, metas, indicadores gráficos e percentual de entregas dos itens da Agenda Regulatória." : activeTab === "pub_cadastro" ? "Gestão do acervo bibliográfico, relatórios anuais de atividades, boletins informativos e artigos de pesquisa científica." : activeTab === "pub_painel" ? "Painel analítico gráfico de publicações, volumes históricos, distribuição de documentos e filtro do acervo próximo." : activeTab === "fisc_operational" ? "Painel estratégico de monitoramento das ações de fiscalização, constatações, não conformidades e termos emitidos." : activeTab === "recurso_painel" ? "Painel estratégico de acompanhamento de demandas de ouvidoria, prazos, andamento e penalidades aplicadas." : "Gerencie os balanços hídricos e cadastre novas informações."}
-            </p>
+            {activeTab !== "overview_panels" && (
+              <p className="text-slate-500 text-sm font-medium">
+                {activeTab === "home"
+                  ? "Selecione um módulo abaixo para iniciar o trabalho ou visualizar relatórios."
+                  : activeTab === "gerencial"
+                    ? "Centralizadores de monitoramento estratégico, estoque regulatório e resultados da superintendência ADASA."
+                  : activeTab === "public_hub"
+                    ? "Acesso externo e público do estoque regulatório e biblioteca de publicações científicas e técnicas da SAE."
+                    : activeTab === "compare"
+                      ? "Compare e analise a evolução da demanda e balanço."
+                      : activeTab === "analyze"
+                        ? "Visualize de forma isolada as projeções de oferta e demanda ao longo do tempo."
+                        : activeTab === "templates"
+                          ? "Gerencie e baixe os arquivos modelo para importação no sistema."
+                          : activeTab === "users" || activeTab === "departments"
+                            ? "Gerencie as contas de usuários, papéis de acesso (RBAC) e departamentos do sistema."
+                          : activeTab === "planning"
+                            ? (isMyTasksSelected ? "Gerencie e acompanhe as atividades atribuídas diretamente ao seu usuário." : "Gerencie o cronograma consolidado, planos, áreas e status de execução.")
+                            : activeTab === "reg_cadastro" ? "Gestão do acervo de normas, atos legais e resoluções aplicados à regulação do saneamento básico e recursos hídricos." : activeTab === "reg_agenda" ? "Cadastro e acompanhamento de metas, temas e ações da agenda regulatória." : activeTab === "reg_subsidios" ? "Módulo de participação social e recebimento de contribuições para normas e resoluções." : activeTab === "reg_subsidios_painel" ? "Acompanhamento gerencial das ações de participação social, consultas públicas e tomadas de subsídios." : activeTab === "reg_painel" ? "Estoque Regulatório da Superintendência de Abastecimento de Água e Esgoto" : activeTab === "reg_agenda_painel" ? "Acompanhamento estratégico, metas, indicadores gráficos e percentual de entregas dos itens da Agenda Regulatória." : activeTab === "pub_cadastro" ? "Gestão do acervo bibliográfico, relatórios anuais de atividades, boletins informativos e artigos de pesquisa científica." : activeTab === "pub_painel" ? "Painel analítico gráfico de publicações, volumes históricos, distribuição de documentos e filtro do acervo próximo." : activeTab === "fisc_operational" ? "Painel estratégico de monitoramento das ações de fiscalização, constatações, não conformidades e termos emitidos." : activeTab === "recurso_painel" ? "Painel estratégico de acompanhamento de demandas de ouvidoria, prazos, andamento e penalidades aplicadas." : "Gerencie os balanços hídricos e cadastre novas informações."}
+              </p>
+            )}
           </div>
           <div className="flex flex-col md:flex-row items-center gap-3">
             <div className="relative z-50 hidden md:block">
@@ -10003,12 +10045,15 @@ const renderSupplyTable = () => {
               className="w-full"
             >
               <ManagerialHub 
+                onOpenOverviewPanels={() => handleTabChange("overview_panels")}
                 onOpenPlanning={() => handleTabChange("planning")}
                 onOpenResolutions={() => handleTabChange("reg_painel")}
                 onOpenWaterBalance={() => handleTabChange("analyze")}
                 onOpenPublications={() => handleTabChange("pub_painel")}
                 onOpenRegulatoryAgenda={() => handleTabChange("reg_agenda_painel")}
                 onOpenParticipacaoSocialPainel={() => handleTabChange("reg_subsidios_painel")}
+                onOpenFiscalizacao={() => handleTabChange("fisc_operational")}
+                onOpenRecursoPainel={() => handleTabChange("recurso_painel")}
                 isPublic={false}
                 showOnlyPublic={false}
                 showToast={showToast}
@@ -10019,6 +10064,35 @@ const renderSupplyTable = () => {
                   setActiveTab(panels[0]);
                   if (panels[0] === "planning") setActivePlanningSubTab("dashboard");
                 }}
+              />
+            </motion.div>
+          ) : activeTab === "overview_panels" ? (
+            <motion.div
+              key="overview_panels"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="w-full"
+            >
+              <PanelsOverviewDashboard
+                tasks={tasks}
+                areas={areas}
+                categories={categories}
+                plans={plans}
+                responsibles={responsibles}
+                waterBalanceAnalysisData={analyzeBalanceAnalysisData}
+                waterBalances={waterBalances}
+                onBack={() => handleTabChange("gerencial")}
+                onOpenPlanning={() => handleTabChange("planning")}
+                onOpenResolutions={() => handleTabChange("reg_painel")}
+                onOpenRegulatoryAgenda={() => handleTabChange("reg_agenda_painel")}
+                onOpenParticipacaoSocialPainel={() => handleTabChange("reg_subsidios_painel")}
+                onOpenWaterBalance={() => handleTabChange("analyze")}
+                onOpenFiscalizacao={() => handleTabChange("fisc_operational")}
+                onOpenRecursoPainel={() => handleTabChange("recurso_painel")}
+                onOpenPublications={() => handleTabChange("pub_painel")}
+                showToast={showToast}
               />
             </motion.div>
           ) : activeTab === "public_hub" ? (

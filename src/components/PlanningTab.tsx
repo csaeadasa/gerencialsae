@@ -8770,7 +8770,7 @@ export function PlanningTab({
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-12">
-            {/* Chart 1: Status & Situation distribution -> takes 5 cols */}
+            {/* Chart 1: Status & Situation distribution -> takes 5 cols (Mapa de Calor Exclusivo) */}
             <div className="lg:col-span-5 bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm flex flex-col justify-between text-left">
               <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-3 border-b border-slate-100 pb-4">
                 <div>
@@ -8781,183 +8781,104 @@ export function PlanningTab({
                   <h4 className="text-lg font-black text-slate-800 mt-1 font-sans">Cruzamento de Prazos</h4>
                   <p className="text-xs font-medium text-slate-500 mt-0.5 leading-tight">Distribuição conjunta de andamento e criticidade.</p>
                 </div>
-                <div className="flex bg-slate-100 p-1 rounded-xl shrink-0 self-start">
-                  <button
-                    onClick={() => setStatusSituationChartType("nested-donut")}
-                    className={cn(
-                      "px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all",
-                      statusSituationChartType === "nested-donut" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >
-                    Rosca Dupla
-                  </button>
-                  <button
-                    onClick={() => setStatusSituationChartType("heatmap")}
-                    className={cn(
-                      "px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all",
-                      statusSituationChartType === "heatmap" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >
-                    Mapa Calor
-                  </button>
+                <div className="flex bg-slate-100 px-3 py-1 rounded-xl shrink-0 self-start text-[10px] font-black text-indigo-700 uppercase tracking-wider">
+                  Mapa de Calor
                 </div>
               </div>
 
-              {statusSituationChartType === "nested-donut" ? (
-                <>
-                  <div className="h-64 relative mt-4">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        {/* Outer Ring: Status */}
-                        <Pie
-                          data={nestedDonutData.outerRing}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={64}
-                          outerRadius={82}
-                          paddingAngle={3}
-                          dataKey="value"
-                        >
-                          {nestedDonutData.outerRing.map((entry, index) => (
-                            <Cell key={`cell-outer-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        {/* Inner Ring: Status & Situation */}
-                        <Pie
-                          data={nestedDonutData.innerRing}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={40}
-                          outerRadius={58}
-                          paddingAngle={2}
-                          dataKey="value"
-                        >
-                          {nestedDonutData.innerRing.map((entry, index) => (
-                            <Cell key={`cell-inner-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<CustomNestedStatusTooltip totalTasks={dashboardStats.total} />} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    {/* Embedded centered label */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-4 text-center">
-                      <span className="text-3xl font-black text-slate-800 leading-none">{dashboardStats.total}</span>
-                      <span className="text-[9px] font-black tracking-wider text-slate-400 uppercase mt-0.5">Total</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 mt-4 pt-4 border-t border-slate-100 text-[10px] text-slate-500 font-medium">
-                    <div className="flex justify-between items-center bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-                        <strong className="text-slate-600 font-extrabold">Externa (Status):</strong>
-                        <span>Categorização principal de andamento das tarefas.</span>
+              <div className="flex flex-col justify-between h-full pt-2">
+                <div className="overflow-x-auto">
+                  <div className="min-w-[280px] mt-4">
+                    {/* Grid 4 columns: 1 header row, 3 value rows */}
+                    <div className="grid grid-cols-4 gap-1.5 text-center">
+                      {/* Header corner */}
+                      <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider text-left flex items-center pl-1 font-sans">
+                        Status / Prazo
                       </div>
-                    </div>
-                    <div className="flex justify-between items-center bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-red-400"></span>
-                        <strong className="text-slate-600 font-extrabold">Interna (Situação):</strong>
-                        <span>Status cruzado com prazo (No Prazo, Crítica, Atrasada).</span>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-col justify-between h-full pt-2">
-                  <div className="overflow-x-auto">
-                    <div className="min-w-[280px] mt-4">
-                      {/* Grid 4 columns: 1 header row, 3 value rows */}
-                      <div className="grid grid-cols-4 gap-1.5 text-center">
-                        {/* Header corner */}
-                        <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider text-left flex items-center pl-1 font-sans">
-                          Status / Prazo
+                      {heatmapData.cols.map(c => (
+                        <div key={c.key} className="text-[9px] font-black text-slate-500 uppercase tracking-wider py-1 font-sans">
+                          {c.label}
                         </div>
-                        {heatmapData.cols.map(c => (
-                          <div key={c.key} className="text-[9px] font-black text-slate-500 uppercase tracking-wider py-1 font-sans">
-                            {c.label}
-                          </div>
-                        ))}
+                      ))}
 
-                        {/* Rows */}
-                        {heatmapData.rows.map(r => {
-                          let rowColor = "text-slate-700";
-                          if (r.key === "Em andamento") rowColor = "text-blue-700";
-                          else if (r.key === "Concluída") rowColor = "text-emerald-700";
+                      {/* Rows */}
+                      {heatmapData.rows.map(r => {
+                        let rowColor = "text-slate-700";
+                        if (r.key === "Em andamento") rowColor = "text-blue-700";
+                        else if (r.key === "Concluída") rowColor = "text-emerald-700";
 
-                          return (
-                            <React.Fragment key={r.key}>
-                              <div className={cn("text-[9px] font-bold text-left flex items-center pl-1 font-sans leading-tight", rowColor)}>
-                                {r.label}
-                              </div>
+                        return (
+                          <React.Fragment key={r.key}>
+                            <div className={cn("text-[9px] font-bold text-left flex items-center pl-1 font-sans leading-tight", rowColor)}>
+                              {r.label}
+                            </div>
 
-                              {heatmapData.cols.map(c => {
-                                const count = heatmapData.matrix[r.key][c.key];
-                                const hasValue = count > 0;
-                                
-                                let cellStyle = {};
-                                let cellClass = "border border-slate-100 rounded-xl transition-all duration-300 flex flex-col items-center justify-center py-4 relative group cursor-pointer hover:shadow-xs";
-                                
-                                if (hasValue) {
-                                  let rColor = 99, gColor = 102, bColor = 241;
-                                  if (r.key === "Concluída") {
-                                    rColor = 16; gColor = 185; bColor = 129;
-                                  } else if (r.key === "Em andamento") {
-                                    rColor = 59; gColor = 130; bColor = 246;
-                                  } else {
-                                    rColor = 148; gColor = 163; bColor = 184;
-                                  }
-
-                                  if (c.key === "Crítica") {
-                                    rColor = 244; gColor = 63; bColor = 94;
-                                  } else if (c.key === "Atrasada") {
-                                    rColor = 239; gColor = 68; bColor = 68;
-                                  }
-
-                                  const ratio = heatmapData.maxCount > 0 ? count / heatmapData.maxCount : 1;
-                                  const alpha = 0.12 + ratio * 0.78;
-                                  
-                                  cellStyle = {
-                                    backgroundColor: `rgba(${rColor}, ${gColor}, ${bColor}, ${alpha})`,
-                                    color: alpha > 0.45 ? '#ffffff' : `rgba(${Math.max(0, rColor-80)}, ${Math.max(0, gColor-80)}, ${Math.max(0, bColor-80)}, 1)`
-                                  };
-                                  cellClass += " font-black shadow-2xs border-transparent";
+                            {heatmapData.cols.map(c => {
+                              const count = heatmapData.matrix[r.key][c.key];
+                              const hasValue = count > 0;
+                              
+                              let cellStyle = {};
+                              let cellClass = "border border-slate-100 rounded-xl transition-all duration-300 flex flex-col items-center justify-center py-4 relative group cursor-pointer hover:shadow-xs";
+                              
+                              if (hasValue) {
+                                let rColor = 99, gColor = 102, bColor = 241;
+                                if (r.key === "Concluída") {
+                                  rColor = 16; gColor = 185; bColor = 129;
+                                } else if (r.key === "Em andamento") {
+                                  rColor = 59; gColor = 130; bColor = 246;
                                 } else {
-                                  cellClass += " bg-slate-50 border-dashed text-slate-300 border-slate-200 select-none";
+                                  rColor = 148; gColor = 163; bColor = 184;
                                 }
 
-                                const percentFromTotal = dashboardStats.total > 0 
-                                  ? ((count / dashboardStats.total) * 100).toFixed(1).replace('.0', '')
-                                  : '0';
+                                if (c.key === "Crítica") {
+                                  rColor = 244; gColor = 63; bColor = 94;
+                                } else if (c.key === "Atrasada") {
+                                  rColor = 239; gColor = 68; bColor = 68;
+                                }
 
-                                return (
-                                  <div
-                                    key={`${r.key}-${c.key}`}
-                                    className={cellClass}
-                                    style={cellStyle}
-                                    title={`${r.label} / ${c.label}: ${count} tarefas (${percentFromTotal}% do total)`}
-                                  >
-                                    <span className="text-sm md:text-base leading-none font-extrabold">{count}</span>
-                                    {hasValue && (
-                                      <span className="text-[8px] opacity-80 font-bold mt-0.5 uppercase tracking-tighter">
-                                        {percentFromTotal}%
-                                      </span>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </React.Fragment>
-                          );
-                        })}
-                      </div>
+                                const ratio = heatmapData.maxCount > 0 ? count / heatmapData.maxCount : 1;
+                                const alpha = 0.12 + ratio * 0.78;
+                                
+                                cellStyle = {
+                                  backgroundColor: `rgba(${rColor}, ${gColor}, ${bColor}, ${alpha})`,
+                                  color: alpha > 0.45 ? "#ffffff" : `rgba(${Math.max(0, rColor-80)}, ${Math.max(0, gColor-80)}, ${Math.max(0, bColor-80)}, 1)`
+                                };
+                                cellClass += " font-black shadow-2xs border-transparent";
+                              } else {
+                                cellClass += " bg-slate-50 border-dashed text-slate-300 border-slate-200 select-none";
+                              }
+
+                              const percentFromTotal = dashboardStats.total > 0 
+                                ? ((count / dashboardStats.total) * 100).toFixed(1).replace(".0", "")
+                                : "0";
+
+                              return (
+                                <div
+                                  key={`${r.key}-${c.key}`}
+                                  className={cellClass}
+                                  style={cellStyle}
+                                  title={`${r.label} / ${c.label}: ${count} tarefas (${percentFromTotal}% do total)`}
+                                >
+                                  <span className="text-sm md:text-base leading-none font-extrabold">{count}</span>
+                                  {hasValue && (
+                                    <span className="text-[8px] opacity-80 font-bold mt-0.5 uppercase tracking-tighter">
+                                      {percentFromTotal}%
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </React.Fragment>
+                        );
+                      })}
                     </div>
                   </div>
-
-                  <div className="text-[10px] text-slate-400 font-medium leading-normal border-t border-slate-100 pt-3 mt-4 text-center select-none bg-slate-50/50 p-2 rounded-xl">
-                    <strong>Dica:</strong> Tons mais vibrantes mostram maior volume. Prazos <em>Críticos</em> ou <em>Atrasados</em> demandam suporte da equipe.
-                  </div>
                 </div>
-              )}
+
+                <div className="text-[10px] text-slate-400 font-medium leading-normal border-t border-slate-100 pt-3 mt-4 text-center select-none bg-slate-50/50 p-2 rounded-xl">
+                  <strong>Dica:</strong> Tons mais vibrantes mostram maior volume. Prazos <em>Críticos</em> ou <em>Atrasados</em> demandam suporte da equipe.
+                </div>
+              </div>
             </div>
 
             {/* Chart 2: Average progress per Area -> takes 7 cols */}
