@@ -12,6 +12,7 @@ import {
   BookmarkPlus,
   Calendar,
   Layers,
+  Target,
   ChevronDown,
   ChevronUp,
   ChevronsDown,
@@ -2900,6 +2901,87 @@ export function PlanningTab({
     return { total, completed, inProgress, pending, avgProgress };
   }, [filteredTasks]);
 
+  // ----------------------------------------------------
+  // Entregas por Plano (Gráfico com Barras Horizontais)
+  // ----------------------------------------------------
+  const planDeliveriesData = useMemo(() => {
+    const list = filteredTasks;
+    const planMap = new Map<string, {
+      id: string | number;
+      name: string;
+      description?: string;
+      total: number;
+      completed: number;
+      inProgress: number;
+      pending: number;
+      progressSum: number;
+    }>();
+
+    if (plans && plans.length > 0) {
+      plans.forEach(p => {
+        const pKey = String(p.id);
+        planMap.set(pKey, {
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          total: 0,
+          completed: 0,
+          inProgress: 0,
+          pending: 0,
+          progressSum: 0
+        });
+      });
+    }
+
+    list.forEach(t => {
+      const pKey = t.planId !== undefined && t.planId !== null ? String(t.planId) : "geral";
+      const norm = normalizeStatus(t.status);
+      const prog = Number(t.progress) || 0;
+      const isCompleted = norm === "Concluída" || prog === 100;
+
+      if (!planMap.has(pKey)) {
+        const found = plans?.find(p => String(p.id) === pKey);
+        const planName = found ? found.name : (pKey === "geral" ? "Plano Operacional Padrão" : `Plano ${pKey}`);
+        planMap.set(pKey, {
+          id: found ? found.id : pKey,
+          name: planName,
+          description: found?.description,
+          total: 0,
+          completed: 0,
+          inProgress: 0,
+          pending: 0,
+          progressSum: 0
+        });
+      }
+
+      const entry = planMap.get(pKey)!;
+      entry.total += 1;
+      entry.progressSum += prog;
+      if (isCompleted) entry.completed += 1;
+      else if (norm === "Em andamento") entry.inProgress += 1;
+      else entry.pending += 1;
+    });
+
+    return Array.from(planMap.values())
+      .filter(p => p.total > 0 || p.completed > 0)
+      .map(p => {
+        const avgProgress = p.total > 0 ? Math.round(p.progressSum / p.total) : 0;
+        const completionRate = p.total > 0 ? Math.round((p.completed / p.total) * 100) : 0;
+        return {
+          id: p.id,
+          name: p.name.length > 32 ? p.name.slice(0, 32) + "..." : p.name,
+          fullName: p.name,
+          description: p.description,
+          "Concluídas": p.completed,
+          "Total": p.total,
+          "Em Andamento": p.inProgress,
+          "Não Iniciadas": p.pending,
+          avgProgress,
+          completionRate
+        };
+      })
+      .sort((a, b) => b["Concluídas"] - a["Concluídas"] || b["Total"] - a["Total"]);
+  }, [filteredTasks, plans]);
 
   // ----------------------------------------------------
   // Entregas por Mês (Painel de Atividades)
@@ -8643,6 +8725,152 @@ export function PlanningTab({
           </div>
         </div>
 
+        {/* 2.5. Entregas por Plano (Gráfico com Barras Horizontais) */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4 w-full text-left">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center shrink-0">
+                <Target size={18} className="stroke-[2.2]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm sm:text-base font-black text-slate-800 tracking-tight">
+                    Entregas por Plano
+                  </h4>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-800 border border-indigo-200">
+                    {planDeliveriesData.length} {planDeliveriesData.length === 1 ? "plano" : "planos"}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Total de tarefas concluídas e percentual de entrega computado para cada plano.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className="text-xs font-bold text-slate-600 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-3xs">
+                <CheckCircle2 size={14} className="text-emerald-600" />
+                Total Concluído: <strong className="text-slate-900 font-black">{dashboardStats.completed}</strong>
+              </span>
+            </div>
+          </div>
+
+          {planDeliveriesData.length === 0 ? (
+            <div className="py-8 text-center text-slate-400 text-xs italic">
+              Nenhum plano com atividades registrado.
+            </div>
+          ) : (
+            <div className="space-y-4 pt-1">
+              {/* Horizontal Bar Chart for Plans */}
+              <div style={{ height: Math.max(160, Math.min(420, planDeliveriesData.length * 56 + 40)) }} className="w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={planDeliveriesData}
+                    layout="vertical"
+                    margin={{ top: 10, right: 80, left: 10, bottom: 5 }}
+                    barCategoryGap="22%"
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                    <XAxis type="number" tick={{ fill: "#64748b", fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      tick={{ fill: "#334155", fontSize: 12, fontWeight: "bold" }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={170}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-slate-900 text-white p-3.5 rounded-2xl shadow-xl text-xs space-y-2 border border-slate-700 min-w-[230px]">
+                              <div className="font-black text-sm border-b border-slate-800 pb-1.5 text-blue-300">
+                                {data.fullName}
+                              </div>
+                              <div className="space-y-1 text-slate-300">
+                                <div className="flex justify-between items-center text-emerald-400 font-bold">
+                                  <span>Tarefas Concluídas:</span>
+                                  <span className="text-white text-sm font-black">{data["Concluídas"]} ({data.completionRate}%)</span>
+                                </div>
+                                <div className="flex justify-between items-center text-blue-300 font-medium">
+                                  <span>Em Andamento:</span>
+                                  <span className="text-white font-bold">{data["Em Andamento"]}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-slate-400 font-medium">
+                                  <span>Não Iniciadas:</span>
+                                  <span className="text-white font-bold">{data["Não Iniciadas"]}</span>
+                                </div>
+                                <div className="flex justify-between items-center pt-1 border-t border-slate-800 font-bold text-slate-200">
+                                  <span>Total no Plano:</span>
+                                  <span className="text-white font-black">{data.Total}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                      cursor={{ fill: "rgba(99, 102, 241, 0.04)" }}
+                    />
+                    <Bar
+                      dataKey="Concluídas"
+                      radius={[0, 8, 8, 0]}
+                      maxBarSize={22}
+                      background={{ fill: "#f8fafc", radius: [0, 8, 8, 0] }}
+                    >
+                      {planDeliveriesData.map((entry, index) => (
+                        <Cell
+                          key={`cell-plan-${index}`}
+                          fill={entry.completionRate === 100 ? "#10b981" : entry.completionRate >= 50 ? "#4f46e5" : "#3b82f6"}
+                        />
+                      ))}
+                      <LabelList
+                        dataKey="Concluídas"
+                        position="right"
+                        formatter={(value: any) => `${value} conc.`}
+                        fill="#475569"
+                        fontSize={12}
+                        fontWeight="800"
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Scorecard badges for quick overview */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
+                {planDeliveriesData.slice(0, 6).map((plan) => (
+                  <div
+                    key={plan.id}
+                    className="p-3 bg-slate-50/80 rounded-2xl border border-slate-200/70 flex items-center justify-between gap-3 hover:bg-white hover:shadow-xs transition-all text-left"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-slate-800 truncate" title={plan.fullName}>
+                        {plan.fullName}
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-medium flex items-center gap-2 mt-0.5">
+                        <span>{plan.Total} tarefas</span>
+                        <span>•</span>
+                        <span className="text-indigo-600 font-semibold">{plan.avgProgress}% progresso</span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-sm font-black text-emerald-600">
+                        {plan["Concluídas"]}
+                      </div>
+                      <div className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
+                        concluídas
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Linha do Tempo: Entregas por Mês (Replicado após o box Concluídas) */}
         <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4 w-full text-left">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
@@ -8664,24 +8892,6 @@ export function PlanningTab({
                 </p>
               </div>
             </div>
-
-            {availableDashboardDeliveriesYears.length > 1 && (
-              <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-100 p-1 rounded-xl border border-slate-200/70">
-                {availableDashboardDeliveriesYears.map(y => (
-                  <button
-                    key={y}
-                    onClick={() => setDashboardDeliveriesYear(y)}
-                    className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                      dashboardDeliveriesYear === y
-                        ? "bg-white text-emerald-700 shadow-xs border border-slate-200/60"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    {y}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Timeline Track with 12 months */}

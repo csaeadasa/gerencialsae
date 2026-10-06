@@ -600,7 +600,7 @@ export default function App() {
       const tempoStr = searchParams.get('tempo');
       const tempo = tempoStr ? parseInt(tempoStr, 10) : 30;
       const paineisStr = searchParams.get('paineis');
-      const panels = paineisStr ? paineisStr.split(',') : ["planning", "reg_painel", "reg_agenda_painel", "reg_subsidios_painel", "analyze", "fisc_operational", "pub_painel"];
+      const panels = paineisStr ? paineisStr.split(',') : ["overview_panels", "planning", "reg_painel", "reg_agenda_painel", "reg_subsidios_painel", "analyze", "fisc_operational", "recurso_painel", "pub_painel"];
       setPresentationConfig({ isActive: true, intervalSeconds: tempo, panels });
       setPresentationIndex(0);
       setActiveTab(panels[0] as any);
@@ -624,7 +624,7 @@ export default function App() {
     if (prevTab === 'planning') setActivePlanningSubTab("dashboard");
   }, [presentationIndex, presentationConfig.panels]);
 
-  const [activeTab, setActiveTab] = useState<"home" | "gerencial" | "public_hub" | "edit" | "compare" | "manage" | "analyze" | "templates" | "planning" | "users" | "departments" | "reg_cadastro" | "reg_agenda" | "reg_subsidios" | "reg_subsidios_painel" | "reg_painel" | "reg_agenda_painel" | "pub_cadastro" | "pub_painel" | "fisc_operational" | "recurso_painel">(
+  const [activeTab, setActiveTab] = useState<"home" | "gerencial" | "public_hub" | "edit" | "compare" | "manage" | "analyze" | "templates" | "planning" | "users" | "departments" | "reg_cadastro" | "reg_agenda" | "reg_subsidios" | "reg_subsidios_painel" | "reg_painel" | "reg_agenda_painel" | "pub_cadastro" | "pub_painel" | "fisc_operational" | "recurso_painel" | "overview_panels">(
     "home",
   );
   const [editingTaskIdFromPainel, setEditingTaskIdFromPainel] = useState<number | null>(null);

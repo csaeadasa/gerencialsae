@@ -60,7 +60,7 @@ export function ManagerialHub({
   const [isPresentationModalOpen, setIsPresentationModalOpen] = useState(false);
   const [presentationInterval, setPresentationInterval] = useState(30);
   const [selectedPanels, setSelectedPanels] = useState<string[]>([
-    "planning", "reg_painel", "reg_agenda_painel", "reg_subsidios_painel", "analyze", "fisc_operational", "pub_painel"
+    "overview_panels", "planning", "reg_painel", "reg_agenda_painel", "reg_subsidios_painel", "analyze", "fisc_operational", "recurso_painel", "pub_painel"
   ]);
 
   const togglePanelSelection = (panelId: string) => {
@@ -791,39 +791,56 @@ export function ManagerialHub({
               </div>
 
               <div className="p-6 overflow-y-auto custom-scrollbar space-y-6">
-                <div>
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-3">
-                    Tempo de Exibição por Painel
-                  </label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {[15, 30, 60, 120].map(time => (
-                      <button
-                        key={time}
-                        onClick={() => setPresentationInterval(time)}
-                        className={`py-2 rounded-xl text-sm font-bold border transition-colors ${
-                          presentationInterval === time
-                            ? "bg-indigo-50 border-indigo-200 text-indigo-700"
-                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                        }`}
-                      >
-                        {time}s
-                      </button>
-                    ))}
+                {/* Smart Auto-Scroll Info Banner */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50/80 border border-blue-100 rounded-2xl p-4 flex items-start gap-3.5">
+                  <div className="p-2 bg-blue-600 text-white rounded-xl shrink-0 mt-0.5 shadow-sm shadow-blue-500/30">
+                    <Sparkles size={18} />
+                  </div>
+                  <div className="text-left">
+                    <span className="block text-xs font-black text-slate-800 uppercase tracking-tight">
+                      Rolagem Dinâmica Inteligente
+                    </span>
+                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                      Cada painel é apresentado do topo ao rodapé em velocidade contínua de leitura. Ao término, avança para o próximo ou retorna ao topo sem recarregar o banco de dados.
+                    </p>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-3">
-                    Painéis Selecionados
-                  </label>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-widest">
+                      Painéis Selecionados ({selectedPanels.length})
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPanels([
+                          "overview_panels", "planning", "reg_painel", "reg_agenda_painel", "reg_subsidios_painel", "analyze", "fisc_operational", "recurso_painel", "pub_painel"
+                        ])}
+                        className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+                      >
+                        Todos
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPanels([])}
+                        className="text-[11px] font-bold text-slate-500 hover:text-slate-700 transition-colors"
+                      >
+                        Nenhum
+                      </button>
+                    </div>
+                  </div>
                   <div className="space-y-2">
                     {[
+                      { id: "overview_panels", title: "Visão Geral dos Painéis Gerenciais", icon: LayoutDashboard },
                       { id: "planning", title: "Painel de Atividades", icon: FolderKanban },
                       { id: "reg_painel", title: "Painel de Resoluções", icon: FileText },
                       { id: "reg_agenda_painel", title: "Painel da Agenda Regulatória", icon: BookOpen },
                       { id: "reg_subsidios_painel", title: "Painel Participação Social", icon: MessageSquare },
                       { id: "analyze", title: "Painel do Balanço Hídrico", icon: Droplets },
                       { id: "fisc_operational", title: "Painel de Fiscalização", icon: Shield },
+                      { id: "recurso_painel", title: "Painel de Recursos e Ouvidoria", icon: Scale },
                       { id: "pub_painel", title: "Painel de Publicações", icon: BookOpen },
                     ].map(panel => (
                       <div 

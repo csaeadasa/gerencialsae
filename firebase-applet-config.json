@@ -1,9 +1,12 @@
 {
-  "projectId": "remixed-project-id",
-  "appId": "remixed-app-id",
-  "apiKey": "remixed-api-key",
-  "authDomain": "remixed-auth-domain",
-  "storageBucket": "remixed-storage-bucket",
-  "messagingSenderId": "remixed-messaging-sender-id",
-  "measurementId": "remixed-measurement-id"
+  "projectId": "stable-pod-ck6n5",
+  "appId": "1:572512372733:web:3040a17d43d13d7cfabb94",
+  "apiKey": "AIzaSyAk7BDzwgI3gAb6Bsht931ViZfDTWZWrzs",
+  "authDomain": "stable-pod-ck6n5.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-gerencialsae-5b6c6890-eff5-4445-9b94-64cc7368de8b",
+  "storageBucket": "stable-pod-ck6n5.firebasestorage.app",
+  "messagingSenderId": "572512372733",
+  "measurementId": "",
+  "oAuthClientId": "572512372733-lqcvmhpkr2rof0teri8dslq38n9cj8tp.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }
