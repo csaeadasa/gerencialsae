@@ -2285,30 +2285,44 @@ const renderCustomBarLabel = (props: any) => {
           {/* BOX 1: Visão Geral Consolidada (Todos os Painéis) */}
           <div
             onClick={() => setActiveSectionFilter("all")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 cursor-pointer select-none group flex flex-col justify-between relative ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
               activeSectionFilter === "all"
-                ? "bg-gradient-to-br from-blue-900 to-indigo-950 text-white border-blue-600 ring-2 ring-blue-500/40 shadow-lg scale-[1.02]"
-                : "bg-slate-900 text-white border-slate-700 shadow-2xs hover:shadow-md hover:border-blue-400 hover:-translate-y-0.5"
+                ? "bg-gradient-to-br from-blue-900 via-indigo-950 to-slate-900 text-white border-blue-400 ring-2 ring-blue-500/40 shadow-xl scale-[1.02]"
+                : "bg-slate-900 text-white border-slate-700 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/50 hover:border-blue-400 hover:ring-2 hover:ring-blue-400/30"
             }`}
           >
+            {/* Linha de brilho superior ao passar o mouse */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            
+            {/* Brilho radial ambiente de fundo */}
+            <div className="absolute -top-10 -right-10 w-28 h-28 bg-cyan-500/10 rounded-full blur-xl group-hover:scale-150 group-hover:bg-cyan-500/25 transition-all duration-500 pointer-events-none" />
+
             {activeSectionFilter === "all" && (
               <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-500 text-white shadow-xs">
                 Visão Geral
               </span>
             )}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-[10px] font-black uppercase tracking-wider ${activeSectionFilter === "all" ? "text-blue-300 font-extrabold" : "text-slate-400 group-hover:text-blue-300"}`}>
-                  Consolidado
-                </span>
-                <div className="p-2 rounded-xl bg-white/10 text-white border border-white/10 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                  <LayoutDashboard size={16} />
+              {/* Header com Título em Destaque */}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="p-2.5 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/20 group-hover:bg-blue-600 group-hover:text-white group-hover:scale-110 group-hover:-rotate-3 group-hover:shadow-md group-hover:shadow-blue-500/30 transition-all duration-300 shrink-0">
+                    <LayoutDashboard size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm sm:text-[14px] font-black text-white tracking-tight leading-tight group-hover:text-cyan-200 transition-colors">
+                      Visão Consolidada
+                    </h4>
+                    <span className="text-[10px] font-bold text-blue-300 block uppercase tracking-wider">
+                      Todos os Painéis
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="mb-3">
                 <div className="text-2xl font-black text-white leading-none">9 Painéis</div>
-                <div className="text-[11px] font-semibold text-blue-200 mt-0.5">Visão Executiva Completa</div>
+                <div className="text-[11px] font-semibold text-blue-200 mt-0.5">Visão Executiva Integrada</div>
               </div>
 
               <div className="space-y-1.5 pt-2.5 border-t border-white/10 text-xs">
@@ -2335,43 +2349,61 @@ const renderCustomBarLabel = (props: any) => {
                 e.stopPropagation();
                 setActiveSectionFilter("all");
               }}
-              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeSectionFilter === "all"
                   ? "bg-white text-blue-900 shadow-xs font-black"
-                  : "bg-white/15 hover:bg-white text-white hover:text-blue-900 group-hover:bg-white group-hover:text-blue-900"
+                  : "bg-white/15 hover:bg-white text-white hover:text-blue-900 group-hover:bg-white group-hover:text-blue-900 group-hover:shadow-md"
               }`}
             >
               <span>{activeSectionFilter === "all" ? "Exibindo Todos" : "Ver Todos"}</span>
-              <ArrowRight size={13} />
+              <ArrowRight size={13} className="transition-transform duration-300 group-hover:translate-x-1" />
             </button>
           </div>
 
           {/* BOX 2: Atividades */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "atividades" ? "all" : "atividades")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 cursor-pointer select-none group flex flex-col justify-between relative ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
               activeSectionFilter === "atividades"
-                ? "bg-blue-50/90 border-blue-600 ring-2 ring-blue-600/30 shadow-md scale-[1.02]"
-                : "bg-white border-slate-200 shadow-2xs hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5"
+                ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
+                : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
             }`}
           >
+            {/* Linha de brilho superior ao passar o mouse */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1A3E8A] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            
+            {/* Brilho radial ambiente de fundo */}
+            <div className="absolute -top-10 -right-10 w-28 h-28 bg-blue-500/10 rounded-full blur-xl group-hover:scale-150 group-hover:bg-blue-500/20 transition-all duration-500 pointer-events-none" />
+
             {activeSectionFilter === "atividades" && (
               <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-600 text-white shadow-xs">
                 Filtrado
               </span>
             )}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-[10px] font-black uppercase tracking-wider ${activeSectionFilter === "atividades" ? "text-blue-700 font-extrabold" : "text-slate-400 group-hover:text-blue-600"}`}>
-                  Atividades
-                </span>
-                <div className={`p-2 rounded-xl transition-all ${activeSectionFilter === "atividades" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-600 border border-blue-100 group-hover:bg-blue-600 group-hover:text-white"}`}>
-                  <FolderKanban size={16} />
+              {/* Header com Título em Destaque */}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                    activeSectionFilter === "atividades"
+                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                  }`}>
+                    <FolderKanban size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
+                      Atividades
+                    </h4>
+                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
+                      Painel Gerencial
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none">{activitiesData.total}</div>
+                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{activitiesData.total}</div>
                 <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Atividades em Monitoramento</div>
               </div>
 
@@ -2401,43 +2433,61 @@ const renderCustomBarLabel = (props: any) => {
                 e.stopPropagation();
                 setActiveSectionFilter(prev => prev === "atividades" ? "all" : "atividades");
               }}
-              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeSectionFilter === "atividades"
-                  ? "bg-blue-600 text-white shadow-xs font-black"
-                  : "bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 group-hover:bg-blue-600 group-hover:text-white"
+                  ? "bg-adasa-dark text-white shadow-xs font-black"
+                  : "bg-slate-100 text-slate-700 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/20"
               }`}
             >
               <span>{activeSectionFilter === "atividades" ? "Resumo Ativo" : "Ver Resumo"}</span>
-              <ArrowRight size={13} />
+              <ArrowRight size={13} className="transition-transform duration-300 group-hover:translate-x-1" />
             </button>
           </div>
 
           {/* BOX 3: Resoluções */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "resolucoes" ? "all" : "resolucoes")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 cursor-pointer select-none group flex flex-col justify-between relative ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
               activeSectionFilter === "resolucoes"
-                ? "bg-blue-50/90 border-blue-600 ring-2 ring-blue-600/30 shadow-md scale-[1.02]"
-                : "bg-white border-slate-200 shadow-2xs hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5"
+                ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
+                : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
             }`}
           >
+            {/* Linha de brilho superior ao passar o mouse */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1A3E8A] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            
+            {/* Brilho radial ambiente de fundo */}
+            <div className="absolute -top-10 -right-10 w-28 h-28 bg-blue-500/10 rounded-full blur-xl group-hover:scale-150 group-hover:bg-blue-500/20 transition-all duration-500 pointer-events-none" />
+
             {activeSectionFilter === "resolucoes" && (
               <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-600 text-white shadow-xs">
                 Filtrado
               </span>
             )}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-[10px] font-black uppercase tracking-wider ${activeSectionFilter === "resolucoes" ? "text-blue-700 font-extrabold" : "text-slate-400 group-hover:text-blue-600"}`}>
-                  Resoluções
-                </span>
-                <div className={`p-2 rounded-xl transition-all ${activeSectionFilter === "resolucoes" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-600 border border-blue-100 group-hover:bg-blue-600 group-hover:text-white"}`}>
-                  <FileText size={16} />
+              {/* Header com Título em Destaque */}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                    activeSectionFilter === "resolucoes"
+                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                  }`}>
+                    <FileText size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
+                      Resoluções
+                    </h4>
+                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
+                      Painel Gerencial
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none">{resolutionsData.total}</div>
+                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{resolutionsData.total}</div>
                 <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Normas &amp; Atos Regulatórios</div>
               </div>
 
@@ -2463,43 +2513,61 @@ const renderCustomBarLabel = (props: any) => {
                 e.stopPropagation();
                 setActiveSectionFilter(prev => prev === "resolucoes" ? "all" : "resolucoes");
               }}
-              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeSectionFilter === "resolucoes"
-                  ? "bg-blue-600 text-white shadow-xs font-black"
-                  : "bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 group-hover:bg-blue-600 group-hover:text-white"
+                  ? "bg-adasa-dark text-white shadow-xs font-black"
+                  : "bg-slate-100 text-slate-700 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/20"
               }`}
             >
               <span>{activeSectionFilter === "resolucoes" ? "Resumo Ativo" : "Ver Resumo"}</span>
-              <ArrowRight size={13} />
+              <ArrowRight size={13} className="transition-transform duration-300 group-hover:translate-x-1" />
             </button>
           </div>
 
           {/* BOX 4: Agenda Regulatória */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "agenda" ? "all" : "agenda")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 cursor-pointer select-none group flex flex-col justify-between relative ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
               activeSectionFilter === "agenda"
-                ? "bg-blue-50/90 border-blue-600 ring-2 ring-blue-600/30 shadow-md scale-[1.02]"
-                : "bg-white border-slate-200 shadow-2xs hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5"
+                ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
+                : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
             }`}
           >
+            {/* Linha de brilho superior ao passar o mouse */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1A3E8A] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            
+            {/* Brilho radial ambiente de fundo */}
+            <div className="absolute -top-10 -right-10 w-28 h-28 bg-blue-500/10 rounded-full blur-xl group-hover:scale-150 group-hover:bg-blue-500/20 transition-all duration-500 pointer-events-none" />
+
             {activeSectionFilter === "agenda" && (
               <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-600 text-white shadow-xs">
                 Filtrado
               </span>
             )}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-[10px] font-black uppercase tracking-wider ${activeSectionFilter === "agenda" ? "text-blue-700 font-extrabold" : "text-slate-400 group-hover:text-blue-600"}`}>
-                  Agenda Reg.
-                </span>
-                <div className={`p-2 rounded-xl transition-all ${activeSectionFilter === "agenda" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-600 border border-blue-100 group-hover:bg-blue-600 group-hover:text-white"}`}>
-                  <BookOpen size={16} />
+              {/* Header com Título em Destaque */}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                    activeSectionFilter === "agenda"
+                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                  }`}>
+                    <BookOpen size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
+                      Agenda Regulatória
+                    </h4>
+                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
+                      Painel Gerencial
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none">{agendaData.totalMetas} Metas</div>
+                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{agendaData.totalMetas} Metas</div>
                 <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Planejamento Normativo</div>
               </div>
 
@@ -2525,43 +2593,61 @@ const renderCustomBarLabel = (props: any) => {
                 e.stopPropagation();
                 setActiveSectionFilter(prev => prev === "agenda" ? "all" : "agenda");
               }}
-              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeSectionFilter === "agenda"
-                  ? "bg-blue-600 text-white shadow-xs font-black"
-                  : "bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 group-hover:bg-blue-600 group-hover:text-white"
+                  ? "bg-adasa-dark text-white shadow-xs font-black"
+                  : "bg-slate-100 text-slate-700 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/20"
               }`}
             >
               <span>{activeSectionFilter === "agenda" ? "Resumo Ativo" : "Ver Resumo"}</span>
-              <ArrowRight size={13} />
+              <ArrowRight size={13} className="transition-transform duration-300 group-hover:translate-x-1" />
             </button>
           </div>
 
           {/* BOX 5: Participação Social */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "participacao" ? "all" : "participacao")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 cursor-pointer select-none group flex flex-col justify-between relative ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
               activeSectionFilter === "participacao"
-                ? "bg-blue-50/90 border-blue-600 ring-2 ring-blue-600/30 shadow-md scale-[1.02]"
-                : "bg-white border-slate-200 shadow-2xs hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5"
+                ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
+                : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
             }`}
           >
+            {/* Linha de brilho superior ao passar o mouse */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1A3E8A] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            
+            {/* Brilho radial ambiente de fundo */}
+            <div className="absolute -top-10 -right-10 w-28 h-28 bg-blue-500/10 rounded-full blur-xl group-hover:scale-150 group-hover:bg-blue-500/20 transition-all duration-500 pointer-events-none" />
+
             {activeSectionFilter === "participacao" && (
               <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-600 text-white shadow-xs">
                 Filtrado
               </span>
             )}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-[10px] font-black uppercase tracking-wider ${activeSectionFilter === "participacao" ? "text-blue-700 font-extrabold" : "text-slate-400 group-hover:text-blue-600"}`}>
-                  Part. Social
-                </span>
-                <div className={`p-2 rounded-xl transition-all ${activeSectionFilter === "participacao" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-600 border border-blue-100 group-hover:bg-blue-600 group-hover:text-white"}`}>
-                  <MessageSquare size={16} />
+              {/* Header com Título em Destaque */}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                    activeSectionFilter === "participacao"
+                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                  }`}>
+                    <MessageSquare size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
+                      Participação Social
+                    </h4>
+                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
+                      Painel Gerencial
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none">{participacaoData.total} Processos</div>
+                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{participacaoData.total} Processos</div>
                 <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Consultas &amp; Audiências</div>
               </div>
 
@@ -2587,14 +2673,14 @@ const renderCustomBarLabel = (props: any) => {
                 e.stopPropagation();
                 setActiveSectionFilter(prev => prev === "participacao" ? "all" : "participacao");
               }}
-              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeSectionFilter === "participacao"
-                  ? "bg-blue-600 text-white shadow-xs font-black"
-                  : "bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 group-hover:bg-blue-600 group-hover:text-white"
+                  ? "bg-adasa-dark text-white shadow-xs font-black"
+                  : "bg-slate-100 text-slate-700 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/20"
               }`}
             >
               <span>{activeSectionFilter === "participacao" ? "Resumo Ativo" : "Ver Resumo"}</span>
-              <ArrowRight size={13} />
+              <ArrowRight size={13} className="transition-transform duration-300 group-hover:translate-x-1" />
             </button>
           </div>
 
@@ -2605,33 +2691,51 @@ const renderCustomBarLabel = (props: any) => {
           {/* BOX 6: Balanço Hídrico */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "balanco" ? "all" : "balanco")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 cursor-pointer select-none group flex flex-col justify-between relative ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
               activeSectionFilter === "balanco"
-                ? "bg-blue-50/90 border-blue-600 ring-2 ring-blue-600/30 shadow-md scale-[1.02]"
-                : "bg-white border-slate-200 shadow-2xs hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5"
+                ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
+                : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
             }`}
           >
+            {/* Linha de brilho superior ao passar o mouse */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1A3E8A] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            
+            {/* Brilho radial ambiente de fundo */}
+            <div className="absolute -top-10 -right-10 w-28 h-28 bg-blue-500/10 rounded-full blur-xl group-hover:scale-150 group-hover:bg-blue-500/20 transition-all duration-500 pointer-events-none" />
+
             {activeSectionFilter === "balanco" && (
               <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-600 text-white shadow-xs">
                 Filtrado
               </span>
             )}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-[10px] font-black uppercase tracking-wider ${activeSectionFilter === "balanco" ? "text-blue-700 font-extrabold" : "text-slate-400 group-hover:text-blue-600"}`}>
-                  Bal. Hídrico
-                </span>
-                <div className={`p-2 rounded-xl transition-all ${activeSectionFilter === "balanco" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-600 border border-blue-100 group-hover:bg-blue-600 group-hover:text-white"}`}>
-                  <Droplets size={16} />
+              {/* Header com Título em Destaque */}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                    activeSectionFilter === "balanco"
+                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                  }`}>
+                    <Droplets size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
+                      Balanço Hídrico SAA
+                    </h4>
+                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
+                      Painel Gerencial
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-xl font-black text-slate-800 leading-tight">
-                  Balanço Hídrico SAA
+                <div className="text-xl font-black text-slate-800 leading-tight group-hover:text-slate-950 transition-colors">
+                  Oferta &amp; Demanda
                 </div>
                 <div className="text-[11px] font-semibold text-slate-500 mt-0.5">
-                  Oferta, Demanda &amp; Saldo
+                  Projeções &amp; Saldo Hídrico
                 </div>
               </div>
 
@@ -2672,43 +2776,61 @@ const renderCustomBarLabel = (props: any) => {
                 e.stopPropagation();
                 setActiveSectionFilter(prev => prev === "balanco" ? "all" : "balanco");
               }}
-              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeSectionFilter === "balanco"
-                  ? "bg-blue-600 text-white shadow-xs font-black"
-                  : "bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 group-hover:bg-blue-600 group-hover:text-white"
+                  ? "bg-adasa-dark text-white shadow-xs font-black"
+                  : "bg-slate-100 text-slate-700 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/20"
               }`}
             >
               <span>{activeSectionFilter === "balanco" ? "Resumo Ativo" : "Ver Resumo"}</span>
-              <ArrowRight size={13} />
+              <ArrowRight size={13} className="transition-transform duration-300 group-hover:translate-x-1" />
             </button>
           </div>
 
           {/* BOX 7: Fiscalização */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "fiscalizacao" ? "all" : "fiscalizacao")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 cursor-pointer select-none group flex flex-col justify-between relative ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
               activeSectionFilter === "fiscalizacao"
-                ? "bg-blue-50/90 border-blue-600 ring-2 ring-blue-600/30 shadow-md scale-[1.02]"
-                : "bg-white border-slate-200 shadow-2xs hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5"
+                ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
+                : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
             }`}
           >
+            {/* Linha de brilho superior ao passar o mouse */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1A3E8A] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            
+            {/* Brilho radial ambiente de fundo */}
+            <div className="absolute -top-10 -right-10 w-28 h-28 bg-blue-500/10 rounded-full blur-xl group-hover:scale-150 group-hover:bg-blue-500/20 transition-all duration-500 pointer-events-none" />
+
             {activeSectionFilter === "fiscalizacao" && (
               <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-600 text-white shadow-xs">
                 Filtrado
               </span>
             )}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-[10px] font-black uppercase tracking-wider ${activeSectionFilter === "fiscalizacao" ? "text-blue-700 font-extrabold" : "text-slate-400 group-hover:text-blue-600"}`}>
-                  Fiscalização
-                </span>
-                <div className={`p-2 rounded-xl transition-all ${activeSectionFilter === "fiscalizacao" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-600 border border-blue-100 group-hover:bg-blue-600 group-hover:text-white"}`}>
-                  <Shield size={16} />
+              {/* Header com Título em Destaque */}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                    activeSectionFilter === "fiscalizacao"
+                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                  }`}>
+                    <Shield size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
+                      Fiscalização
+                    </h4>
+                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
+                      Painel Gerencial
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none">{fiscalizacaoData.total} Ações</div>
+                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{fiscalizacaoData.total} Ações</div>
                 <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Auditorias &amp; Vistorias</div>
               </div>
 
@@ -2734,43 +2856,61 @@ const renderCustomBarLabel = (props: any) => {
                 e.stopPropagation();
                 setActiveSectionFilter(prev => prev === "fiscalizacao" ? "all" : "fiscalizacao");
               }}
-              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeSectionFilter === "fiscalizacao"
-                  ? "bg-blue-600 text-white shadow-xs font-black"
-                  : "bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 group-hover:bg-blue-600 group-hover:text-white"
+                  ? "bg-adasa-dark text-white shadow-xs font-black"
+                  : "bg-slate-100 text-slate-700 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/20"
               }`}
             >
               <span>{activeSectionFilter === "fiscalizacao" ? "Resumo Ativo" : "Ver Resumo"}</span>
-              <ArrowRight size={13} />
+              <ArrowRight size={13} className="transition-transform duration-300 group-hover:translate-x-1" />
             </button>
           </div>
 
           {/* BOX 8: Recursos de Revisão */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "recurso_revisao" ? "all" : "recurso_revisao")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 cursor-pointer select-none group flex flex-col justify-between relative ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
               activeSectionFilter === "recurso_revisao"
-                ? "bg-blue-50/90 border-blue-600 ring-2 ring-blue-600/30 shadow-md scale-[1.02]"
-                : "bg-white border-slate-200 shadow-2xs hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5"
+                ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
+                : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
             }`}
           >
+            {/* Linha de brilho superior ao passar o mouse */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1A3E8A] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            
+            {/* Brilho radial ambiente de fundo */}
+            <div className="absolute -top-10 -right-10 w-28 h-28 bg-blue-500/10 rounded-full blur-xl group-hover:scale-150 group-hover:bg-blue-500/20 transition-all duration-500 pointer-events-none" />
+
             {activeSectionFilter === "recurso_revisao" && (
               <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-600 text-white shadow-xs">
                 Filtrado
               </span>
             )}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-[10px] font-black uppercase tracking-wider ${activeSectionFilter === "recurso_revisao" ? "text-blue-700 font-extrabold" : "text-slate-400 group-hover:text-blue-600"}`}>
-                  Rec. Revisão
-                </span>
-                <div className={`p-2 rounded-xl transition-all ${activeSectionFilter === "recurso_revisao" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-600 border border-blue-100 group-hover:bg-blue-600 group-hover:text-white"}`}>
-                  <Scale size={16} />
+              {/* Header com Título em Destaque */}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                    activeSectionFilter === "recurso_revisao"
+                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                  }`}>
+                    <Scale size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
+                      Recursos de Revisão
+                    </h4>
+                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
+                      Painel Gerencial
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none">{recursosRevisaoData.totalDemandas} Processos</div>
+                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{recursosRevisaoData.totalDemandas} Processos</div>
                 <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Penalidades &amp; Julgamentos</div>
               </div>
 
@@ -2796,43 +2936,61 @@ const renderCustomBarLabel = (props: any) => {
                 e.stopPropagation();
                 setActiveSectionFilter(prev => prev === "recurso_revisao" ? "all" : "recurso_revisao");
               }}
-              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeSectionFilter === "recurso_revisao"
-                  ? "bg-blue-600 text-white shadow-xs font-black"
-                  : "bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 group-hover:bg-blue-600 group-hover:text-white"
+                  ? "bg-adasa-dark text-white shadow-xs font-black"
+                  : "bg-slate-100 text-slate-700 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/20"
               }`}
             >
               <span>{activeSectionFilter === "recurso_revisao" ? "Resumo Ativo" : "Ver Resumo"}</span>
-              <ArrowRight size={13} />
+              <ArrowRight size={13} className="transition-transform duration-300 group-hover:translate-x-1" />
             </button>
           </div>
 
           {/* BOX 9: Demandas de Ouvidoria */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "ouvidoria" ? "all" : "ouvidoria")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 cursor-pointer select-none group flex flex-col justify-between relative ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
               activeSectionFilter === "ouvidoria"
-                ? "bg-blue-50/90 border-blue-600 ring-2 ring-blue-600/30 shadow-md scale-[1.02]"
-                : "bg-white border-slate-200 shadow-2xs hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5"
+                ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
+                : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
             }`}
           >
+            {/* Linha de brilho superior ao passar o mouse */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1A3E8A] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            
+            {/* Brilho radial ambiente de fundo */}
+            <div className="absolute -top-10 -right-10 w-28 h-28 bg-blue-500/10 rounded-full blur-xl group-hover:scale-150 group-hover:bg-blue-500/20 transition-all duration-500 pointer-events-none" />
+
             {activeSectionFilter === "ouvidoria" && (
               <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-600 text-white shadow-xs">
                 Filtrado
               </span>
             )}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-[10px] font-black uppercase tracking-wider ${activeSectionFilter === "ouvidoria" ? "text-blue-700 font-extrabold" : "text-slate-400 group-hover:text-blue-600"}`}>
-                  Ouvidoria
-                </span>
-                <div className={`p-2 rounded-xl transition-all ${activeSectionFilter === "ouvidoria" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-600 border border-blue-100 group-hover:bg-blue-600 group-hover:text-white"}`}>
-                  <MessageSquare size={16} />
+              {/* Header com Título em Destaque */}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                    activeSectionFilter === "ouvidoria"
+                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                  }`}>
+                    <MessageSquare size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
+                      Ouvidoria
+                    </h4>
+                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
+                      Painel Gerencial
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none">{demandasOuvidoriaData.totalDemandas} Demandas</div>
+                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{demandasOuvidoriaData.totalDemandas} Demandas</div>
                 <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Atendimento ao Usuário</div>
               </div>
 
@@ -2858,43 +3016,61 @@ const renderCustomBarLabel = (props: any) => {
                 e.stopPropagation();
                 setActiveSectionFilter(prev => prev === "ouvidoria" ? "all" : "ouvidoria");
               }}
-              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeSectionFilter === "ouvidoria"
-                  ? "bg-blue-600 text-white shadow-xs font-black"
-                  : "bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 group-hover:bg-blue-600 group-hover:text-white"
+                  ? "bg-adasa-dark text-white shadow-xs font-black"
+                  : "bg-slate-100 text-slate-700 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/20"
               }`}
             >
               <span>{activeSectionFilter === "ouvidoria" ? "Resumo Ativo" : "Ver Resumo"}</span>
-              <ArrowRight size={13} />
+              <ArrowRight size={13} className="transition-transform duration-300 group-hover:translate-x-1" />
             </button>
           </div>
 
           {/* BOX 10: Publicações */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "publicacoes" ? "all" : "publicacoes")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 cursor-pointer select-none group flex flex-col justify-between relative ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
               activeSectionFilter === "publicacoes"
-                ? "bg-blue-50/90 border-blue-600 ring-2 ring-blue-600/30 shadow-md scale-[1.02]"
-                : "bg-white border-slate-200 shadow-2xs hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5"
+                ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
+                : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
             }`}
           >
+            {/* Linha de brilho superior ao passar o mouse */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1A3E8A] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            
+            {/* Brilho radial ambiente de fundo */}
+            <div className="absolute -top-10 -right-10 w-28 h-28 bg-blue-500/10 rounded-full blur-xl group-hover:scale-150 group-hover:bg-blue-500/20 transition-all duration-500 pointer-events-none" />
+
             {activeSectionFilter === "publicacoes" && (
               <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-600 text-white shadow-xs">
                 Filtrado
               </span>
             )}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-[10px] font-black uppercase tracking-wider ${activeSectionFilter === "publicacoes" ? "text-blue-700 font-extrabold" : "text-slate-400 group-hover:text-blue-600"}`}>
-                  Publicações
-                </span>
-                <div className={`p-2 rounded-xl transition-all ${activeSectionFilter === "publicacoes" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-600 border border-blue-100 group-hover:bg-blue-600 group-hover:text-white"}`}>
-                  <FileCheck size={16} />
+              {/* Header com Título em Destaque */}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                    activeSectionFilter === "publicacoes"
+                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                  }`}>
+                    <FileCheck size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
+                      Publicações
+                    </h4>
+                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
+                      Painel Gerencial
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none">{publicationsData.totalCount} Documentos</div>
+                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{publicationsData.totalCount} Documentos</div>
                 <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Acervo Técnico Oficial</div>
               </div>
 
@@ -2920,14 +3096,14 @@ const renderCustomBarLabel = (props: any) => {
                 e.stopPropagation();
                 setActiveSectionFilter(prev => prev === "publicacoes" ? "all" : "publicacoes");
               }}
-              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`w-full mt-4 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeSectionFilter === "publicacoes"
-                  ? "bg-blue-600 text-white shadow-xs font-black"
-                  : "bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 group-hover:bg-blue-600 group-hover:text-white"
+                  ? "bg-adasa-dark text-white shadow-xs font-black"
+                  : "bg-slate-100 text-slate-700 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/20"
               }`}
             >
               <span>{activeSectionFilter === "publicacoes" ? "Resumo Ativo" : "Ver Resumo"}</span>
-              <ArrowRight size={13} />
+              <ArrowRight size={13} className="transition-transform duration-300 group-hover:translate-x-1" />
             </button>
           </div>
         </div>
