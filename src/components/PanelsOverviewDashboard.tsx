@@ -43,7 +43,9 @@ import {
   Filter,
   CalendarRange,
   ChevronDown,
-  X
+  X,
+  Play,
+  Pause
 } from "lucide-react";
 import { PanelAccessBadge } from "./PanelAccessBadge";
 import { usePanelAccess } from "../lib/panelAccess";
@@ -124,6 +126,115 @@ export function PanelsOverviewDashboard({
   const [activeSectionFilter, setActiveSectionFilter] = useState<string>("all");
   const [pubViewMode, setPubViewMode] = useState<"chart" | "scorecards">("scorecards");
   const [selectedYear, setSelectedYear] = useState<string>("all");
+  const [isAutoScrolling, setIsAutoScrolling] = useState(false);
+
+  // Auto-scroll reference for continuous presentation scroll down and back to top
+  const autoScrollRef = React.useRef<{
+    animId: number | null;
+    timeoutId: any | null;
+    active: boolean;
+  }>({
+    animId: null,
+    timeoutId: null,
+    active: false,
+  });
+
+  const getScrollContainer = (): HTMLElement => {
+    const mainEl = document.querySelector("main");
+    if (mainEl && mainEl.scrollHeight > mainEl.clientHeight + 50) {
+      return mainEl;
+    }
+    return (document.scrollingElement as HTMLElement) || document.documentElement || document.body;
+  };
+
+  const stopAutoScroll = () => {
+    if (autoScrollRef.current.animId) {
+      cancelAnimationFrame(autoScrollRef.current.animId);
+      autoScrollRef.current.animId = null;
+    }
+    if (autoScrollRef.current.timeoutId) {
+      clearTimeout(autoScrollRef.current.timeoutId);
+      autoScrollRef.current.timeoutId = null;
+    }
+    autoScrollRef.current.active = false;
+    setIsAutoScrolling(false);
+  };
+
+  const toggleAutoScroll = () => {
+    if (autoScrollRef.current.active) {
+      stopAutoScroll();
+      if (showToast) {
+        showToast("Rolagem Pausada", "A apresentação contínua foi interrompida.", "info");
+      }
+      return;
+    }
+
+    const container = getScrollContainer();
+    if (!container) return;
+
+    setIsAutoScrolling(true);
+    autoScrollRef.current.active = true;
+
+    if (showToast) {
+      showToast(
+        "Rolagem Contínua Ativada",
+        "Apresentação contínua rolando suavemente e recomeçando automaticamente até ser pausada.",
+        "info"
+      );
+    }
+
+    const scrollSpeed = 1.1; // pixels per frame (leitura suave e confortável)
+
+    const step = () => {
+      if (!autoScrollRef.current.active) return;
+
+      const currentScroll = container.scrollTop !== undefined ? container.scrollTop : window.scrollY;
+      const maxScroll = Math.max(
+        0,
+        (container.scrollHeight || document.documentElement.scrollHeight) -
+          (container.clientHeight || window.innerHeight)
+      );
+
+      if (currentScroll < maxScroll - 6) {
+        if (container.scrollTop !== undefined && container !== document.documentElement && container !== document.body) {
+          container.scrollTop = currentScroll + scrollSpeed;
+        } else {
+          window.scrollBy(0, scrollSpeed);
+        }
+        autoScrollRef.current.animId = requestAnimationFrame(step);
+      } else {
+        // Chegou ao final: pausa para visualização do rodapé, retorna ao topo e recomeça o ciclo
+        autoScrollRef.current.timeoutId = setTimeout(() => {
+          if (!autoScrollRef.current.active) return;
+
+          if (container.scrollTo) {
+            container.scrollTo({ top: 0, behavior: "smooth" });
+          } else {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }
+
+          // Aguarda o retorno suave ao topo e reinicia a descida automaticamente em loop contínuo
+          autoScrollRef.current.timeoutId = setTimeout(() => {
+            if (!autoScrollRef.current.active) return;
+            autoScrollRef.current.animId = requestAnimationFrame(step);
+          }, 1500);
+        }, 1800);
+      }
+    };
+
+    autoScrollRef.current.animId = requestAnimationFrame(step);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (autoScrollRef.current.animId) {
+        cancelAnimationFrame(autoScrollRef.current.animId);
+      }
+      if (autoScrollRef.current.timeoutId) {
+        clearTimeout(autoScrollRef.current.timeoutId);
+      }
+    };
+  }, []);
 
   const tasks = propTasks.length > 0 ? propTasks : fetchedTasks;
   const plans = propPlans.length > 0 ? propPlans : fetchedPlans;
@@ -2173,8 +2284,8 @@ const renderCustomBarLabel = (props: any) => {
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-3.5 max-w-4xl">
-            <div className="flex items-center gap-3 flex-wrap">
-              {onBack && (
+            {onBack && (
+              <div className="flex items-center gap-3 flex-wrap">
                 <button
                   onClick={onBack}
                   className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer backdrop-blur-md border border-white/10 active:scale-95"
@@ -2182,12 +2293,8 @@ const renderCustomBarLabel = (props: any) => {
                 >
                   <ArrowLeft size={14} /> Voltar aos Painéis
                 </button>
-              )}
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/20 text-blue-200 border border-blue-400/30">
-                <TrendingUp size={12} className="text-blue-300 animate-pulse" />
-                Painel Consolidado SAE
-              </span>
-            </div>
+              </div>
+            )}
 
             <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white flex items-center gap-3">
               <LayoutDashboard className="text-blue-300 shrink-0" size={32} />
@@ -2210,19 +2317,43 @@ const renderCustomBarLabel = (props: any) => {
                   </span>
                 </div>
               </div>
-              <p className="text-xs text-blue-100/80 font-medium">
-                Série histórica e registros estratégicos consolidados da Superintendência de Apoio Estratégico.
-              </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3 shrink-0 flex-wrap">
+            {/* Ícone de Nível de Acesso (Público / Privado) e Compartilhar */}
             <PanelAccessBadge 
               panelId="overview_panels" 
               panelName="Visão Geral Consolidada" 
               variant="header" 
+              theme="dark"
               showToast={showToast} 
             />
+
+            {/* Botão de Rolagem Automática / Modo Apresentação */}
+            <button
+              type="button"
+              onClick={toggleAutoScroll}
+              className={`p-2.5 rounded-xl border transition-all flex items-center justify-center cursor-pointer backdrop-blur-md active:scale-95 shadow-sm ${
+                isAutoScrolling
+                  ? "bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/30 ring-2 ring-emerald-400/50 animate-pulse"
+                  : "bg-white/10 hover:bg-white/20 border-white/20 text-white hover:text-cyan-200"
+              }`}
+              title={
+                isAutoScrolling
+                  ? "Pausar apresentação contínua"
+                  : "Apresentação Contínua • Rola suavemente até o final, retorna ao início e recomeça em loop"
+              }
+              aria-label="Apresentação contínua com rolagem suave em loop"
+            >
+              {isAutoScrolling ? (
+                <Pause size={16} className="fill-current" />
+              ) : (
+                <Play size={16} className="fill-current text-white" />
+              )}
+            </button>
+
+            {/* Botão de Atualizar Dados */}
             <button
               onClick={() => {
                 fetchAllData();
@@ -2230,6 +2361,7 @@ const renderCustomBarLabel = (props: any) => {
               }}
               disabled={loading}
               className="px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer backdrop-blur-md active:scale-95 shadow-sm"
+              title="Atualizar dados do painel"
             >
               <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
               Atualizar Dados
@@ -6065,6 +6197,21 @@ const renderCustomBarLabel = (props: any) => {
             </div>
           </div>
         </section>
+      )}
+
+      {/* Floating Auto-Scroll Control Button when active */}
+      {isAutoScrolling && (
+        <div className="fixed bottom-6 right-6 z-50 animate-bounce-subtle">
+          <button
+            type="button"
+            onClick={stopAutoScroll}
+            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white px-4 py-2 rounded-full font-bold text-xs shadow-2xl border border-red-400/50 backdrop-blur-md transition-all cursor-pointer ring-4 ring-red-500/20"
+            title="Pausar apresentação contínua"
+          >
+            <Pause size={14} className="fill-current" />
+            <span>Pausar</span>
+          </button>
+        </div>
       )}
     </div>
   );

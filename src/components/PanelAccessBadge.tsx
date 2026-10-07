@@ -67,68 +67,75 @@ export const PanelAccessBadge: React.FC<PanelAccessBadgeProps> = ({
   };
 
   if (variant === 'header') {
+    const isDark = theme === 'dark';
     const tooltipText = isPublic
       ? 'Nível de Privacidade: Público • Clique para tornar este painel Privado'
       : 'Nível de Privacidade: Privado • Clique para tornar este painel Público';
 
     return (
       <div className={`flex items-center gap-2 flex-wrap ${className}`}>
-        {/* Toggle Access Button in Header */}
+        {/* Toggle Access Button in Header (Icon only) */}
         {showToggle ? (
           <button
             type="button"
             onClick={handleToggle}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 border cursor-pointer shadow-xs active:scale-95 ${
-              isPublic
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 hover:border-emerald-400'
-                : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200 hover:border-slate-400'
+            className={`inline-flex items-center justify-center p-2 sm:p-2.5 rounded-xl transition-all duration-200 border cursor-pointer shadow-xs active:scale-95 ${
+              isDark
+                ? isPublic
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40 hover:bg-emerald-500/30 shadow-emerald-500/20'
+                  : 'bg-white/10 text-slate-300 border-white/20 hover:bg-white/20'
+                : isPublic
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 hover:border-emerald-400'
+                  : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200 hover:border-slate-400'
             }`}
             title={tooltipText}
             aria-label={tooltipText}
           >
             {isPublic ? (
-              <>
-                <Globe size={13} className="text-emerald-600 animate-pulse" />
-                <span>Painel Público</span>
-                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-200/80 px-1.5 py-0.5 rounded-md ml-1">
-                  Mudar para Privado
-                </span>
-              </>
+              <Globe size={16} className={isDark ? "text-emerald-300 animate-pulse" : "text-emerald-600 animate-pulse"} />
             ) : (
-              <>
-                <Lock size={13} className="text-slate-500" />
-                <span>Painel Privado</span>
-                <span className="text-[9px] font-bold text-slate-600 bg-slate-200 px-1.5 py-0.5 rounded-md ml-1">
-                  Mudar para Público
-                </span>
-              </>
+              <Lock size={16} className={isDark ? "text-slate-300" : "text-slate-600"} />
             )}
           </button>
         ) : (
           <div
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold uppercase tracking-wider border ${
-              isPublic
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                : 'bg-slate-100 text-slate-600 border-slate-200'
+            className={`inline-flex items-center justify-center p-2 sm:p-2.5 rounded-xl border ${
+              isDark
+                ? isPublic
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+                  : 'bg-white/10 text-slate-300 border-white/20'
+                : isPublic
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-slate-100 text-slate-600 border-slate-200'
             }`}
             title={isPublic ? 'Nível de Privacidade: Público' : 'Nível de Privacidade: Privado'}
           >
-            {isPublic ? <Globe size={12} className="text-emerald-600" /> : <Lock size={12} className="text-slate-500" />}
-            <span>{isPublic ? 'Público' : 'Privado'}</span>
+            {isPublic ? (
+              <Globe size={16} className={isDark ? "text-emerald-300 animate-pulse" : "text-emerald-600 animate-pulse"} />
+            ) : (
+              <Lock size={16} className={isDark ? "text-slate-300" : "text-slate-600"} />
+            )}
           </div>
         )}
 
-        {/* Share Button (if public) */}
+        {/* Share Button (if public) - Icon only */}
         {isPublic && showShare && (
           <button
             type="button"
             onClick={handleCopyLink}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
-            title={`Copiar link público (${publicUrl})`}
-            aria-label={`Copiar link público (${publicUrl})`}
+            className={`inline-flex items-center justify-center p-2 sm:p-2.5 rounded-xl border transition-all cursor-pointer shadow-xs active:scale-95 ${
+              isDark
+                ? 'bg-blue-500/20 text-blue-200 hover:bg-blue-500/30 border-blue-400/30'
+                : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200'
+            }`}
+            title={copied ? 'Link público copiado com sucesso!' : `Copiar link público (${publicUrl})`}
+            aria-label={copied ? 'Link público copiado com sucesso!' : `Copiar link público (${publicUrl})`}
           >
-            {copied ? <Check size={13} className="text-emerald-600" /> : <Share2 size={13} className="text-blue-600" />}
-            <span>{copied ? 'Link Copiado!' : 'Copiar Link'}</span>
+            {copied ? (
+              <Check size={16} className="text-emerald-500" />
+            ) : (
+              <Share2 size={16} className={isDark ? "text-blue-300" : "text-blue-600"} />
+            )}
           </button>
         )}
       </div>
