@@ -41,9 +41,12 @@ import {
   ExternalLink,
   AlertCircle,
   Filter,
+  CalendarRange,
   ChevronDown,
   X
 } from "lucide-react";
+import { PanelAccessBadge } from "./PanelAccessBadge";
+import { usePanelAccess } from "../lib/panelAccess";
 import {
   ResponsiveContainer,
   BarChart,
@@ -88,11 +91,11 @@ interface PanelsOverviewDashboardProps {
 }
 
 export function PanelsOverviewDashboard({
-  tasks = [],
-  areas = [],
-  categories = [],
-  plans = [],
-  responsibles = [],
+  tasks: propTasks = [],
+  areas: propAreas = [],
+  categories: propCategories = [],
+  plans: propPlans = [],
+  responsibles: propResponsibles = [],
   waterBalanceAnalysisData = [],
   waterBalances = [],
   onBack,
@@ -112,16 +115,27 @@ export function PanelsOverviewDashboard({
   const [participations, setParticipations] = useState<any[]>([]);
   const [publications, setPublications] = useState<any[]>([]);
   const [fetchedWaterData, setFetchedWaterData] = useState<any>(null);
+  const [fetchedTasks, setFetchedTasks] = useState<Task[]>([]);
+  const [fetchedPlans, setFetchedPlans] = useState<any[]>([]);
+  const [fetchedAreas, setFetchedAreas] = useState<any[]>([]);
+  const [fetchedCategories, setFetchedCategories] = useState<any[]>([]);
+  const [fetchedResponsibles, setFetchedResponsibles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeSectionFilter, setActiveSectionFilter] = useState<string>("all");
   const [pubViewMode, setPubViewMode] = useState<"chart" | "scorecards">("scorecards");
   const [selectedYear, setSelectedYear] = useState<string>("all");
 
+  const tasks = propTasks.length > 0 ? propTasks : fetchedTasks;
+  const plans = propPlans.length > 0 ? propPlans : fetchedPlans;
+  const areas = propAreas.length > 0 ? propAreas : fetchedAreas;
+  const categories = propCategories.length > 0 ? propCategories : fetchedCategories;
+  const responsibles = propResponsibles.length > 0 ? propResponsibles : fetchedResponsibles;
+
   // Fetch all panel datasets dynamically
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      const [resRes, agRes, partRes, pubRes, waterRes] = await Promise.allSettled([
+      const [resRes, agRes, partRes, pubRes, waterRes, tasksRes, cloudRes] = await Promise.allSettled([
         fetch("/api/resolutions").then(r => r.json()),
         fetch("/api/agendas").then(r => r.json()),
         fetch("/api/reg/participations-dashboard").then(async r => {
@@ -129,7 +143,9 @@ export function PanelsOverviewDashboard({
           return fetch("/api/reg/participations").then(res => res.json());
         }),
         fetch("/api/publications").then(r => r.json()),
-        fetch("/api/load-data?scope=water-balance").then(r => r.json())
+        fetch("/api/load-data?scope=water-balance").then(r => r.json()),
+        fetch("/api/tasks").then(r => r.json()),
+        fetch("/api/load-data").then(r => r.json())
       ]);
 
       if (resRes.status === "fulfilled" && resRes.value?.data) {
@@ -151,6 +167,19 @@ export function PanelsOverviewDashboard({
       }
       if (waterRes.status === "fulfilled" && waterRes.value?.data) {
         setFetchedWaterData(waterRes.value.data);
+      }
+      if (tasksRes.status === "fulfilled" && tasksRes.value?.data) {
+        setFetchedTasks(Array.isArray(tasksRes.value.data) ? tasksRes.value.data : []);
+      }
+      if (cloudRes.status === "fulfilled" && cloudRes.value?.data) {
+        const cData = cloudRes.value.data;
+        if (cData.tasks && (!tasksRes.status || tasksRes.status !== "fulfilled" || !tasksRes.value?.data)) {
+          setFetchedTasks(Array.isArray(cData.tasks) ? cData.tasks : []);
+        }
+        if (cData.plans) setFetchedPlans(cData.plans);
+        if (cData.areas) setFetchedAreas(cData.areas);
+        if (cData.categories) setFetchedCategories(cData.categories);
+        if (cData.responsibles) setFetchedResponsibles(cData.responsibles);
       }
     } catch (err) {
       console.error("Erro ao carregar dados consolidados da visão geral:", err);
@@ -457,6 +486,26 @@ const renderCustomBarLabel = (props: any) => {
 
     return Array.from(yearsSet).sort((a, b) => b - a);
   }, [tasks, resolutions, agendas, participations, waterBalances, fetchedWaterData, publications]);
+
+  // Período de disponibilidade dos dados (Ano Inicial e Ano Final da Série Histórica)
+  const dataPeriodInfo = useMemo(() => {
+    if (!availableYears || availableYears.length === 0) {
+      return {
+        initialYear: 2020,
+        finalYear: 2026,
+        totalYears: 7
+      };
+    }
+    const sortedAsc = [...availableYears].sort((a, b) => a - b);
+    const initialYear = sortedAsc[0];
+    const finalYear = sortedAsc[sortedAsc.length - 1];
+    const totalYears = sortedAsc.length;
+    return {
+      initialYear,
+      finalYear,
+      totalYears
+    };
+  }, [availableYears]);
 
   // Filtered dataset slices based on selectedYear
   const filteredTasks = useMemo(() => {
@@ -2123,8 +2172,8 @@ const renderCustomBarLabel = (props: any) => {
         <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 rounded-full bg-blue-400/10 blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-3 max-w-3xl">
-            <div className="flex items-center gap-3">
+          <div className="space-y-3.5 max-w-4xl">
+            <div className="flex items-center gap-3 flex-wrap">
               {onBack && (
                 <button
                   onClick={onBack}
@@ -2144,9 +2193,36 @@ const renderCustomBarLabel = (props: any) => {
               <LayoutDashboard className="text-blue-300 shrink-0" size={32} />
               Visão Geral dos Painéis Gerenciais
             </h1>
+
+            {/* Bloco Informativo do Período de Disponibilidade dos Dados */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-1">
+              <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-2xl bg-blue-950/50 backdrop-blur-md border border-blue-400/30 text-white shadow-inner">
+                <CalendarRange size={16} className="text-cyan-300 shrink-0" />
+                <div className="text-xs flex items-center gap-1.5 flex-wrap">
+                  <span className="text-blue-200 font-bold uppercase tracking-wider text-[11px]">Período de Disponibilidade dos Dados:</span>
+                  <span className="font-medium text-slate-200">Ano Inicial</span>
+                  <span className="font-black text-cyan-300 bg-blue-900/70 px-2 py-0.5 rounded-lg border border-cyan-400/30">{dataPeriodInfo.initialYear}</span>
+                  <span className="text-blue-200 font-bold mx-0.5">a</span>
+                  <span className="font-medium text-slate-200">Ano Final</span>
+                  <span className="font-black text-cyan-300 bg-blue-900/70 px-2 py-0.5 rounded-lg border border-cyan-400/30">{dataPeriodInfo.finalYear}</span>
+                  <span className="text-[10px] text-cyan-200 bg-cyan-500/20 border border-cyan-400/30 px-2 py-0.5 rounded-full font-bold ml-1">
+                    {dataPeriodInfo.totalYears} exercícios
+                  </span>
+                </div>
+              </div>
+              <p className="text-xs text-blue-100/80 font-medium">
+                Série histórica e registros estratégicos consolidados da Superintendência de Apoio Estratégico.
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-3 shrink-0 flex-wrap">
+            <PanelAccessBadge 
+              panelId="overview_panels" 
+              panelName="Visão Geral Consolidada" 
+              variant="header" 
+              showToast={showToast} 
+            />
             <button
               onClick={() => {
                 fetchAllData();
@@ -2185,7 +2261,7 @@ const renderCustomBarLabel = (props: any) => {
             </div>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
               {selectedYear === "all" 
-                ? "Exibindo dados consolidados e gráficos de toda a série histórica do relatório." 
+                ? `Exibindo dados consolidados de toda a série histórica (Ano Inicial ${dataPeriodInfo.initialYear} a Ano Final ${dataPeriodInfo.finalYear}).` 
                 : `Indicadores e gráficos deste painel filtrados exclusivamente para o exercício de ${selectedYear}.`}
             </p>
           </div>
@@ -2277,7 +2353,7 @@ const renderCustomBarLabel = (props: any) => {
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-4 relative z-0">
           {/* ========================================== */}
           {/* LINHA 1 (5 BOXES) */}
           {/* ========================================== */}
@@ -2285,7 +2361,7 @@ const renderCustomBarLabel = (props: any) => {
           {/* BOX 1: Visão Geral Consolidada (Todos os Painéis) */}
           <div
             onClick={() => setActiveSectionFilter("all")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-3 hover:scale-[1.08] hover:z-30 hover:shadow-2xl active:scale-[0.99] ${
               activeSectionFilter === "all"
                 ? "bg-gradient-to-br from-blue-900 via-indigo-950 to-slate-900 text-white border-blue-400 ring-2 ring-blue-500/40 shadow-xl scale-[1.02]"
                 : "bg-slate-900 text-white border-slate-700 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/50 hover:border-blue-400 hover:ring-2 hover:ring-blue-400/30"
@@ -2297,26 +2373,19 @@ const renderCustomBarLabel = (props: any) => {
             {/* Brilho radial ambiente de fundo */}
             <div className="absolute -top-10 -right-10 w-28 h-28 bg-cyan-500/10 rounded-full blur-xl group-hover:scale-150 group-hover:bg-cyan-500/25 transition-all duration-500 pointer-events-none" />
 
-            {activeSectionFilter === "all" && (
-              <span className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-500 text-white shadow-xs">
-                Visão Geral
-              </span>
-            )}
             <div>
               {/* Header com Título em Destaque */}
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="p-2.5 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/20 group-hover:bg-blue-600 group-hover:text-white group-hover:scale-110 group-hover:-rotate-3 group-hover:shadow-md group-hover:shadow-blue-500/30 transition-all duration-300 shrink-0">
-                    <LayoutDashboard size={18} />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-sm sm:text-[14px] font-black text-white tracking-tight leading-tight group-hover:text-cyan-200 transition-colors">
-                      Visão Consolidada
-                    </h4>
-                    <span className="text-[10px] font-bold text-blue-300 block uppercase tracking-wider">
-                      Todos os Painéis
-                    </span>
-                  </div>
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="p-2.5 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/20 group-hover:bg-blue-600 group-hover:text-white group-hover:scale-110 group-hover:-rotate-3 group-hover:shadow-md group-hover:shadow-blue-500/30 transition-all duration-300 shrink-0">
+                  <LayoutDashboard size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm sm:text-[14px] font-black uppercase text-white tracking-wider leading-tight group-hover:text-cyan-200 transition-colors">
+                    VISÃO CONSOLIDADA
+                  </h4>
+                  <span className="text-[10px] font-bold text-blue-300 block uppercase tracking-wider mt-0.5">
+                    Todos os Painéis
+                  </span>
                 </div>
               </div>
 
@@ -2360,10 +2429,10 @@ const renderCustomBarLabel = (props: any) => {
             </button>
           </div>
 
-          {/* BOX 2: Atividades */}
+          {/* BOX 2: Plano de Atividades */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "atividades" ? "all" : "atividades")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-3 hover:scale-[1.08] hover:z-30 hover:shadow-2xl active:scale-[0.99] ${
               activeSectionFilter === "atividades"
                 ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
                 : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
@@ -2382,29 +2451,24 @@ const renderCustomBarLabel = (props: any) => {
             )}
             <div>
               {/* Header com Título em Destaque */}
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
-                    activeSectionFilter === "atividades"
-                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
-                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
-                  }`}>
-                    <FolderKanban size={18} />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
-                      Atividades
-                    </h4>
-                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
-                      Painel Gerencial
-                    </span>
-                  </div>
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                  activeSectionFilter === "atividades"
+                    ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                    : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                }`}>
+                  <FolderKanban size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm sm:text-[14px] font-black uppercase text-adasa-dark text-[#1A3E8A] tracking-wider leading-tight group-hover:text-blue-950 transition-colors">
+                    PLANO DE ATIVIDADES
+                  </h4>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{activitiesData.total}</div>
-                <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Atividades em Monitoramento</div>
+                <div className="text-2xl font-black text-adasa-dark text-[#1A3E8A] leading-none transition-colors">{activitiesData.total}</div>
+                <div className="text-[11px] font-bold text-adasa-dark text-[#1A3E8A] mt-0.5">Atividades em Monitoramento</div>
               </div>
 
               <div className="space-y-1.5 pt-2.5 border-t border-slate-100 text-xs">
@@ -2447,7 +2511,7 @@ const renderCustomBarLabel = (props: any) => {
           {/* BOX 3: Resoluções */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "resolucoes" ? "all" : "resolucoes")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-3 hover:scale-[1.08] hover:z-30 hover:shadow-2xl active:scale-[0.99] ${
               activeSectionFilter === "resolucoes"
                 ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
                 : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
@@ -2466,29 +2530,24 @@ const renderCustomBarLabel = (props: any) => {
             )}
             <div>
               {/* Header com Título em Destaque */}
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
-                    activeSectionFilter === "resolucoes"
-                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
-                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
-                  }`}>
-                    <FileText size={18} />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
-                      Resoluções
-                    </h4>
-                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
-                      Painel Gerencial
-                    </span>
-                  </div>
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                  activeSectionFilter === "resolucoes"
+                    ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                    : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                }`}>
+                  <FileText size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm sm:text-[14px] font-black uppercase text-adasa-dark text-[#1A3E8A] tracking-wider leading-tight group-hover:text-blue-950 transition-colors">
+                    RESOLUÇÕES
+                  </h4>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{resolutionsData.total}</div>
-                <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Normas &amp; Atos Regulatórios</div>
+                <div className="text-2xl font-black text-adasa-dark text-[#1A3E8A] leading-none transition-colors">{resolutionsData.total}</div>
+                <div className="text-[11px] font-bold text-adasa-dark text-[#1A3E8A] mt-0.5">Normas &amp; Atos Regulatórios</div>
               </div>
 
               <div className="space-y-1.5 pt-2.5 border-t border-slate-100 text-xs">
@@ -2527,7 +2586,7 @@ const renderCustomBarLabel = (props: any) => {
           {/* BOX 4: Agenda Regulatória */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "agenda" ? "all" : "agenda")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-3 hover:scale-[1.08] hover:z-30 hover:shadow-2xl active:scale-[0.99] ${
               activeSectionFilter === "agenda"
                 ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
                 : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
@@ -2546,29 +2605,24 @@ const renderCustomBarLabel = (props: any) => {
             )}
             <div>
               {/* Header com Título em Destaque */}
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
-                    activeSectionFilter === "agenda"
-                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
-                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
-                  }`}>
-                    <BookOpen size={18} />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
-                      Agenda Regulatória
-                    </h4>
-                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
-                      Painel Gerencial
-                    </span>
-                  </div>
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                  activeSectionFilter === "agenda"
+                    ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                    : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                }`}>
+                  <BookOpen size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm sm:text-[14px] font-black uppercase text-adasa-dark text-[#1A3E8A] tracking-wider leading-tight group-hover:text-blue-950 transition-colors">
+                    AGENDA REGULATÓRIA
+                  </h4>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{agendaData.totalMetas} Metas</div>
-                <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Planejamento Normativo</div>
+                <div className="text-2xl font-black text-adasa-dark text-[#1A3E8A] leading-none transition-colors">{agendaData.totalMetas} Metas</div>
+                <div className="text-[11px] font-bold text-adasa-dark text-[#1A3E8A] mt-0.5">Planejamento Normativo</div>
               </div>
 
               <div className="space-y-1.5 pt-2.5 border-t border-slate-100 text-xs">
@@ -2607,7 +2661,7 @@ const renderCustomBarLabel = (props: any) => {
           {/* BOX 5: Participação Social */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "participacao" ? "all" : "participacao")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-3 hover:scale-[1.08] hover:z-30 hover:shadow-2xl active:scale-[0.99] ${
               activeSectionFilter === "participacao"
                 ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
                 : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
@@ -2626,29 +2680,24 @@ const renderCustomBarLabel = (props: any) => {
             )}
             <div>
               {/* Header com Título em Destaque */}
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
-                    activeSectionFilter === "participacao"
-                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
-                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
-                  }`}>
-                    <MessageSquare size={18} />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
-                      Participação Social
-                    </h4>
-                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
-                      Painel Gerencial
-                    </span>
-                  </div>
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                  activeSectionFilter === "participacao"
+                    ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                    : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                }`}>
+                  <MessageSquare size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm sm:text-[14px] font-black uppercase text-adasa-dark text-[#1A3E8A] tracking-wider leading-tight group-hover:text-blue-950 transition-colors">
+                    PARTICIPAÇÃO SOCIAL
+                  </h4>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{participacaoData.total} Processos</div>
-                <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Consultas &amp; Audiências</div>
+                <div className="text-2xl font-black text-adasa-dark text-[#1A3E8A] leading-none transition-colors">{participacaoData.total} Processos</div>
+                <div className="text-[11px] font-bold text-adasa-dark text-[#1A3E8A] mt-0.5">Consultas &amp; Audiências</div>
               </div>
 
               <div className="space-y-1.5 pt-2.5 border-t border-slate-100 text-xs">
@@ -2688,10 +2737,10 @@ const renderCustomBarLabel = (props: any) => {
           {/* LINHA 2 (5 BOXES) */}
           {/* ========================================== */}
 
-          {/* BOX 6: Balanço Hídrico */}
+          {/* BOX 6: Balanço Hídrico SAA */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "balanco" ? "all" : "balanco")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-3 hover:scale-[1.08] hover:z-30 hover:shadow-2xl active:scale-[0.99] ${
               activeSectionFilter === "balanco"
                 ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
                 : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
@@ -2710,31 +2759,26 @@ const renderCustomBarLabel = (props: any) => {
             )}
             <div>
               {/* Header com Título em Destaque */}
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
-                    activeSectionFilter === "balanco"
-                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
-                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
-                  }`}>
-                    <Droplets size={18} />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
-                      Balanço Hídrico SAA
-                    </h4>
-                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
-                      Painel Gerencial
-                    </span>
-                  </div>
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                  activeSectionFilter === "balanco"
+                    ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                    : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                }`}>
+                  <Droplets size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm sm:text-[14px] font-black uppercase text-adasa-dark text-[#1A3E8A] tracking-wider leading-tight group-hover:text-blue-950 transition-colors">
+                    BALANÇO HÍDRICO SAA
+                  </h4>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-xl font-black text-slate-800 leading-tight group-hover:text-slate-950 transition-colors">
+                <div className="text-xl font-black text-adasa-dark text-[#1A3E8A] leading-tight transition-colors">
                   Oferta &amp; Demanda
                 </div>
-                <div className="text-[11px] font-semibold text-slate-500 mt-0.5">
+                <div className="text-[11px] font-bold text-adasa-dark text-[#1A3E8A] mt-0.5">
                   Projeções &amp; Saldo Hídrico
                 </div>
               </div>
@@ -2790,7 +2834,7 @@ const renderCustomBarLabel = (props: any) => {
           {/* BOX 7: Fiscalização */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "fiscalizacao" ? "all" : "fiscalizacao")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-3 hover:scale-[1.08] hover:z-30 hover:shadow-2xl active:scale-[0.99] ${
               activeSectionFilter === "fiscalizacao"
                 ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
                 : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
@@ -2809,29 +2853,24 @@ const renderCustomBarLabel = (props: any) => {
             )}
             <div>
               {/* Header com Título em Destaque */}
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
-                    activeSectionFilter === "fiscalizacao"
-                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
-                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
-                  }`}>
-                    <Shield size={18} />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
-                      Fiscalização
-                    </h4>
-                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
-                      Painel Gerencial
-                    </span>
-                  </div>
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                  activeSectionFilter === "fiscalizacao"
+                    ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                    : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                }`}>
+                  <Shield size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm sm:text-[14px] font-black uppercase text-adasa-dark text-[#1A3E8A] tracking-wider leading-tight group-hover:text-blue-950 transition-colors">
+                    FISCALIZAÇÃO
+                  </h4>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{fiscalizacaoData.total} Ações</div>
-                <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Auditorias &amp; Vistorias</div>
+                <div className="text-2xl font-black text-adasa-dark text-[#1A3E8A] leading-none transition-colors">{fiscalizacaoData.total} Ações</div>
+                <div className="text-[11px] font-bold text-adasa-dark text-[#1A3E8A] mt-0.5">Auditorias &amp; Vistorias</div>
               </div>
 
               <div className="space-y-1.5 pt-2.5 border-t border-slate-100 text-xs">
@@ -2870,7 +2909,7 @@ const renderCustomBarLabel = (props: any) => {
           {/* BOX 8: Recursos de Revisão */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "recurso_revisao" ? "all" : "recurso_revisao")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-3 hover:scale-[1.08] hover:z-30 hover:shadow-2xl active:scale-[0.99] ${
               activeSectionFilter === "recurso_revisao"
                 ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
                 : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
@@ -2889,29 +2928,24 @@ const renderCustomBarLabel = (props: any) => {
             )}
             <div>
               {/* Header com Título em Destaque */}
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
-                    activeSectionFilter === "recurso_revisao"
-                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
-                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
-                  }`}>
-                    <Scale size={18} />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
-                      Recursos de Revisão
-                    </h4>
-                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
-                      Painel Gerencial
-                    </span>
-                  </div>
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                  activeSectionFilter === "recurso_revisao"
+                    ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                    : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                }`}>
+                  <Scale size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm sm:text-[14px] font-black uppercase text-adasa-dark text-[#1A3E8A] tracking-wider leading-tight group-hover:text-blue-950 transition-colors">
+                    RECURSOS DE REVISÃO
+                  </h4>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{recursosRevisaoData.totalDemandas} Processos</div>
-                <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Penalidades &amp; Julgamentos</div>
+                <div className="text-2xl font-black text-adasa-dark text-[#1A3E8A] leading-none transition-colors">{recursosRevisaoData.totalDemandas} Processos</div>
+                <div className="text-[11px] font-bold text-adasa-dark text-[#1A3E8A] mt-0.5">Penalidades &amp; Julgamentos</div>
               </div>
 
               <div className="space-y-1.5 pt-2.5 border-t border-slate-100 text-xs">
@@ -2950,7 +2984,7 @@ const renderCustomBarLabel = (props: any) => {
           {/* BOX 9: Demandas de Ouvidoria */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "ouvidoria" ? "all" : "ouvidoria")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-3 hover:scale-[1.08] hover:z-30 hover:shadow-2xl active:scale-[0.99] ${
               activeSectionFilter === "ouvidoria"
                 ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
                 : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
@@ -2969,29 +3003,24 @@ const renderCustomBarLabel = (props: any) => {
             )}
             <div>
               {/* Header com Título em Destaque */}
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
-                    activeSectionFilter === "ouvidoria"
-                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
-                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
-                  }`}>
-                    <MessageSquare size={18} />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
-                      Ouvidoria
-                    </h4>
-                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
-                      Painel Gerencial
-                    </span>
-                  </div>
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                  activeSectionFilter === "ouvidoria"
+                    ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                    : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                }`}>
+                  <MessageSquare size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm sm:text-[14px] font-black uppercase text-adasa-dark text-[#1A3E8A] tracking-wider leading-tight group-hover:text-blue-950 transition-colors">
+                    OUVIDORIA
+                  </h4>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{demandasOuvidoriaData.totalDemandas} Demandas</div>
-                <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Atendimento ao Usuário</div>
+                <div className="text-2xl font-black text-adasa-dark text-[#1A3E8A] leading-none transition-colors">{demandasOuvidoriaData.totalDemandas} Demandas</div>
+                <div className="text-[11px] font-bold text-adasa-dark text-[#1A3E8A] mt-0.5">Atendimento ao Usuário</div>
               </div>
 
               <div className="space-y-1.5 pt-2.5 border-t border-slate-100 text-xs">
@@ -3030,7 +3059,7 @@ const renderCustomBarLabel = (props: any) => {
           {/* BOX 10: Publicações */}
           <div
             onClick={() => setActiveSectionFilter(prev => prev === "publicacoes" ? "all" : "publicacoes")}
-            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-2 hover:scale-[1.02] active:scale-[0.99] ${
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ease-out cursor-pointer select-none group flex flex-col justify-between relative overflow-hidden transform hover:-translate-y-3 hover:scale-[1.08] hover:z-30 hover:shadow-2xl active:scale-[0.99] ${
               activeSectionFilter === "publicacoes"
                 ? "bg-blue-50/90 border-adasa-dark ring-2 ring-adasa-dark/30 shadow-xl scale-[1.02]"
                 : "bg-white border-slate-200/90 shadow-2xs hover:shadow-2xl hover:shadow-blue-900/15 hover:border-adasa-dark hover:ring-2 hover:ring-adasa-dark/25"
@@ -3049,29 +3078,24 @@ const renderCustomBarLabel = (props: any) => {
             )}
             <div>
               {/* Header com Título em Destaque */}
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
-                    activeSectionFilter === "publicacoes"
-                      ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
-                      : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
-                  }`}>
-                    <FileCheck size={18} />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-sm sm:text-[14px] font-black text-adasa-dark text-[#1A3E8A] tracking-tight leading-tight group-hover:text-blue-950 transition-colors">
-                      Publicações
-                    </h4>
-                    <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wider">
-                      Painel Gerencial
-                    </span>
-                  </div>
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className={`p-2.5 rounded-xl transition-all duration-300 shrink-0 transform group-hover:scale-110 group-hover:-rotate-3 ${
+                  activeSectionFilter === "publicacoes"
+                    ? "bg-adasa-dark text-white shadow-md shadow-blue-900/30"
+                    : "bg-adasa-light/10 text-adasa-dark border border-blue-100/80 group-hover:bg-adasa-dark group-hover:text-white group-hover:shadow-md group-hover:shadow-blue-900/25"
+                }`}>
+                  <FileCheck size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm sm:text-[14px] font-black uppercase text-adasa-dark text-[#1A3E8A] tracking-wider leading-tight group-hover:text-blue-950 transition-colors">
+                    PUBLICAÇÕES
+                  </h4>
                 </div>
               </div>
 
               <div className="mb-3">
-                <div className="text-2xl font-black text-slate-800 leading-none group-hover:text-slate-950 transition-colors">{publicationsData.totalCount} Documentos</div>
-                <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Acervo Técnico Oficial</div>
+                <div className="text-2xl font-black text-adasa-dark text-[#1A3E8A] leading-none transition-colors">{publicationsData.totalCount} Documentos</div>
+                <div className="text-[11px] font-bold text-adasa-dark text-[#1A3E8A] mt-0.5">Acervo Técnico Oficial</div>
               </div>
 
               <div className="space-y-1.5 pt-2.5 border-t border-slate-100 text-xs">

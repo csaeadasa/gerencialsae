@@ -495,6 +495,7 @@ export function UserManagementTab({ initialTab = "users" }: UserManagementTabPro
     recurso_painel: 'Painel de Qualidade do Atendimento',
     dashboard: 'Painel Geral Gerencial (Hub)',
     public_hub: 'Portal da Transparência / Consulta Pública',
+    overview_panels: 'Visão Geral Consolidada (Painéis Gerenciais)',
     geo: 'Mapa Interativo Avançado',
     users: 'Gestão de Usuários e Permissões'
   };

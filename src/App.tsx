@@ -124,7 +124,8 @@ import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { FiscalizacaoPainel } from "./components/FiscalizacaoPainel";
 import { RecursoPainel } from "./components/RecursoPainel";
 import { WaterBalanceCategoryModal, DEFAULT_WATER_BALANCE_CATEGORIES, getCategoryBadgeClasses } from "./components/WaterBalanceCategoryModal";
-
+import { PanelAccessBadge } from "./components/PanelAccessBadge";
+import { usePanelAccess, isPanelPublic, PUBLIC_DOMAIN, getPanelPublicUrl } from "./lib/panelAccess";
 
 import { enrichTasksWithStageDates } from "./utils/stageDatesGenerator";
 
@@ -999,7 +1000,7 @@ export default function App() {
         return null;
       }
     },
-    enabled: !!currentUser && isSessionVerified,
+    enabled: (!!currentUser && isSessionVerified) || isPublicMode,
     staleTime: 5 * 60 * 1000, 
   });
 
@@ -3854,6 +3855,14 @@ const renderSupplyTable = () => {
       publicTabTitle = "Estoque Regulatório • ADASA";
     } else if (publicTabName === "planning" || publicTabName === "planejamento") {
       publicTabTitle = "Painel de Atividades • ADASA";
+    } else if (publicTabName === "overview_panels" || publicTabName === "overview-panels" || publicTabName === "visao_consolidada" || publicTabName === "consolidado") {
+      publicTabTitle = "Visão Geral Consolidada • ADASA";
+    } else if (publicTabName === "pub_painel" || publicTabName === "publications" || publicTabName === "publicacoes") {
+      publicTabTitle = "Painel de Publicações • ADASA";
+    } else if (publicTabName === "reg_agenda_painel" || publicTabName === "agenda") {
+      publicTabTitle = "Painel da Agenda Regulatória • ADASA";
+    } else if (publicTabName === "reg_subsidios_painel" || publicTabName === "subsidios" || publicTabName === "participacao") {
+      publicTabTitle = "Painel de Participação Social • ADASA";
     } else {
       publicTabTitle = "Painéis Públicos • ADASA";
     }
@@ -4097,7 +4106,7 @@ const renderSupplyTable = () => {
                     </div>
                   </div>
                 </div>
-              ) : publicTabName === "overview_panels" || publicTabName === "overview-panels" ? (
+              ) : publicTabName === "overview_panels" || publicTabName === "overview-panels" || publicTabName === "visao_consolidada" || publicTabName === "consolidado" ? (
                 <div className="space-y-6">
                   <PanelsOverviewDashboard
                     tasks={tasks}
@@ -4111,6 +4120,10 @@ const renderSupplyTable = () => {
                       window.location.hash = "#public-publico_hub";
                       setPublicTabName("publico_hub");
                     }}
+                    onOpenPlanning={() => {
+                      window.location.hash = "#public-planning";
+                      setPublicTabName("planning");
+                    }}
                     onOpenResolutions={() => {
                       window.location.hash = "#public-resolutions";
                       setPublicTabName("reg_painel");
@@ -4122,6 +4135,10 @@ const renderSupplyTable = () => {
                     onOpenParticipacaoSocialPainel={() => {
                       window.location.hash = "#public-reg_subsidios_painel";
                       setPublicTabName("reg_subsidios_painel");
+                    }}
+                    onOpenWaterBalance={() => {
+                      window.location.hash = "#public-analyze";
+                      setPublicTabName("analyze");
                     }}
                     onOpenPublications={() => {
                       window.location.hash = "#public-pub_painel";
@@ -5805,34 +5822,71 @@ const renderSupplyTable = () => {
       <main className="flex-1 flex flex-col p-4 md:p-8 gap-6 overflow-y-auto w-full max-w-full">
         <header className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-2">
           <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tighter leading-none mb-2">
-              {activeTab === "home"
-                ? "Página Inicial"
-                : activeTab === "gerencial"
-                ? "Painéis Gerenciais"
-                : activeTab === "overview_panels"
-                ? "Visão Geral dos Painéis Gerenciais"
-                : activeTab === "public_hub"
-                ? "Painéis Públicos"
-                : activeTab === "compare"
-                ? "Comparar Balanços"
-                : activeTab === "analyze"
-                ? "Painel de Análise do Balanço Hídrico"
-                : activeTab === "templates"
-                ? "Arquivos Modelo"
-                : activeTab === "users" || activeTab === "departments"
-                ? "Usuários e Permissões"
-                : activeTab === "planning"
-                ? (activePlanningSubTab === "dashboard" ? "Painel de Atividades" :
-                   activePlanningSubTab === "tasks" ? (isMyTasksSelected ? "Minhas Atividades" : "Gerenciar Atividades") : 
-                   activePlanningSubTab === "plans" ? "Gerenciar Planos" : 
-                   activePlanningSubTab === "areas" ? "Gerenciar Áreas Temáticas" : 
-                   activePlanningSubTab === "categories" ? "Gerenciar Categorias" :
-                   activePlanningSubTab === "responsibles" ? "Gerenciar Responsáveis" :
-                   activePlanningSubTab === "models" ? "Gerenciar Modelos de Atividades" :
-                   activePlanningSubTab === "radar" ? "Radar de Atividades" : "Importar Atividades")
-                : activeTab === "reg_cadastro" ? "Gerenciar Resoluções" : activeTab === "reg_agenda" ? "Agenda Regulatória" : activeTab === "reg_subsidios" ? "Gerenciar Participação Social" : activeTab === "reg_subsidios_painel" ? "Painel Participação Social" : activeTab === "reg_painel" ? "Painel Estratégico de Resoluções" : activeTab === "reg_agenda_painel" ? "Painel da Agenda Regulatória" : activeTab === "pub_cadastro" ? "Gerenciar Publicações" : activeTab === "pub_painel" ? "Painel de Publicações" : activeTab === "fisc_operational" ? "Painel de Fiscalização" : activeTab === "recurso_painel" ? "Painel de Qualidade do Atendimento" : "Gerenciar Balanço Hídrico"}
-            </h1>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-2 flex-wrap">
+              <h1 className="text-3xl font-black text-slate-900 tracking-tighter leading-none">
+                {activeTab === "home"
+                  ? "Página Inicial"
+                  : activeTab === "gerencial"
+                  ? "Painéis Gerenciais"
+                  : activeTab === "overview_panels"
+                  ? "Visão Geral dos Painéis Gerenciais"
+                  : activeTab === "public_hub"
+                  ? "Painéis Públicos"
+                  : activeTab === "compare"
+                  ? "Comparar Balanços"
+                  : activeTab === "analyze"
+                  ? "Painel de Análise do Balanço Hídrico"
+                  : activeTab === "templates"
+                  ? "Arquivos Modelo"
+                  : activeTab === "users" || activeTab === "departments"
+                  ? "Usuários e Permissões"
+                  : activeTab === "planning"
+                  ? (activePlanningSubTab === "dashboard" ? "Painel de Atividades" :
+                     activePlanningSubTab === "tasks" ? (isMyTasksSelected ? "Minhas Atividades" : "Gerenciar Atividades") : 
+                     activePlanningSubTab === "plans" ? "Gerenciar Planos" : 
+                     activePlanningSubTab === "areas" ? "Gerenciar Áreas Temáticas" : 
+                     activePlanningSubTab === "categories" ? "Gerenciar Categorias" :
+                     activePlanningSubTab === "responsibles" ? "Gerenciar Responsáveis" :
+                     activePlanningSubTab === "models" ? "Gerenciar Modelos de Atividades" :
+                     activePlanningSubTab === "radar" ? "Radar de Atividades" : "Importar Atividades")
+                  : activeTab === "reg_cadastro" ? "Gerenciar Resoluções" : activeTab === "reg_agenda" ? "Agenda Regulatória" : activeTab === "reg_subsidios" ? "Gerenciar Participação Social" : activeTab === "reg_subsidios_painel" ? "Painel Participação Social" : activeTab === "reg_painel" ? "Painel Estratégico de Resoluções" : activeTab === "reg_agenda_painel" ? "Painel da Agenda Regulatória" : activeTab === "pub_cadastro" ? "Gerenciar Publicações" : activeTab === "pub_painel" ? "Painel de Publicações" : activeTab === "fisc_operational" ? "Painel de Fiscalização" : activeTab === "recurso_painel" ? "Painel de Qualidade do Atendimento" : "Gerenciar Balanço Hídrico"}
+              </h1>
+
+              {/* Botão interativo para Tornar Painel Público / Tornar Painel Privado e Copiar Link no Título do Painel */}
+              {(() => {
+                const currentPanelId = 
+                  activeTab === "overview_panels" ? "overview_panels" :
+                  activeTab === "planning" && activePlanningSubTab === "dashboard" ? "planning" :
+                  activeTab === "reg_painel" ? "reg_painel" :
+                  activeTab === "reg_agenda_painel" ? "reg_agenda_painel" :
+                  activeTab === "reg_subsidios_painel" ? "reg_subsidios_painel" :
+                  activeTab === "analyze" ? "analyze" :
+                  activeTab === "fisc_operational" ? "fisc_operational" :
+                  activeTab === "recurso_painel" ? "recurso_painel" :
+                  activeTab === "pub_painel" ? "pub_painel" : null;
+
+                const currentPanelName = 
+                  currentPanelId === "overview_panels" ? "Visão Geral Consolidada" :
+                  currentPanelId === "planning" ? "Plano de Atividades" :
+                  currentPanelId === "reg_painel" ? "Painel de Resoluções" :
+                  currentPanelId === "reg_agenda_painel" ? "Painel da Agenda Regulatória" :
+                  currentPanelId === "reg_subsidios_painel" ? "Painel de Participação Social" :
+                  currentPanelId === "analyze" ? "Painel do Balanço Hídrico" :
+                  currentPanelId === "fisc_operational" ? "Painel de Fiscalização" :
+                  currentPanelId === "recurso_painel" ? "Painel de Qualidade do Atendimento" :
+                  currentPanelId === "pub_painel" ? "Painel de Publicações" : "";
+
+                if (!currentPanelId) return null;
+                return (
+                  <PanelAccessBadge
+                    panelId={currentPanelId}
+                    panelName={currentPanelName}
+                    variant="header"
+                    showToast={showToast}
+                  />
+                );
+              })()}
+            </div>
             {activeTab !== "overview_panels" && (
               <p className="text-slate-500 text-sm font-medium">
                 {activeTab === "home"
@@ -10105,12 +10159,15 @@ const renderSupplyTable = () => {
               className="w-full"
             >
               <ManagerialHub 
+                onOpenOverviewPanels={() => handleTabChange("overview_panels")}
                 onOpenPlanning={() => handleTabChange("planning")}
                 onOpenResolutions={() => handleTabChange("reg_painel")}
                 onOpenWaterBalance={() => handleTabChange("analyze")}
                 onOpenPublications={() => handleTabChange("pub_painel")}
                 onOpenRegulatoryAgenda={() => handleTabChange("reg_agenda_painel")}
                 onOpenParticipacaoSocialPainel={() => handleTabChange("reg_subsidios_painel")}
+                onOpenFiscalizacao={() => handleTabChange("fisc_operational")}
+                onOpenRecursoPainel={() => handleTabChange("recurso_painel")}
                 isPublic={false}
                 showOnlyPublic={true}
                 showToast={showToast}

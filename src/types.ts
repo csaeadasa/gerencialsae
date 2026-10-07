@@ -13,7 +13,7 @@ export type ModuleId =
   | 'reg_subsidios' | 'reg_subsidios_painel' | 'reg_subsidios_portal' | 'reg_subsidios_oral' | 'reg_subsidios_analise' | 'reg_subsidios_minuta'
   | 'pub_cadastro' | 'pub_painel'
   | 'fisc_operational' | 'recurso_painel'
-  | 'dashboard' | 'public_hub' | 'geo' | 'users';
+  | 'dashboard' | 'public_hub' | 'geo' | 'users' | 'overview_panels';
 
 export interface RadarComment {
   id: string;

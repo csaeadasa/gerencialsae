@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { RequirePermission } from "../lib/auth";
+import { PanelAccessBadge } from "./PanelAccessBadge";
+import { usePanelAccess, PUBLIC_DOMAIN, getPanelPublicUrl, PANEL_METADATA_LIST } from "../lib/panelAccess";
 
 interface ManagerialHubProps {
   onOpenPlanning: () => void;
@@ -69,12 +71,14 @@ export function ManagerialHub({
     );
   };
 
+  const { checkIsPublic, toggleAccess } = usePanelAccess();
+
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [activeShareTab, setActiveShareTab] = useState<"links" | "embed">("links");
 
   const getBaseUrl = () => {
-    return `${window.location.origin}${window.location.pathname}`;
+    return PUBLIC_DOMAIN;
   };
 
   const publicLinks = [
@@ -84,40 +88,33 @@ export function ManagerialHub({
       desc: "Acesso externo com menu de todos os painéis públicos abertos da SAE.",
       param: "?public=publico_hub",
       icon: Globe,
-      color: "text-emerald-600 bg-emerald-50 border-emerald-100"
+      color: "text-emerald-600 bg-emerald-50 border-emerald-100",
+      isPublic: true
     },
-    {
-      id: "reg_painel",
-      title: "Painel de Resoluções (Estoque Regulatório)",
-      desc: "Consulta ao acervo de resoluções vigentes, atas e normas.",
-      param: "?public=reg_painel",
-      icon: FileText,
-      color: "text-blue-600 bg-blue-50 border-blue-100"
-    },
-    {
-      id: "reg_agenda_painel",
-      title: "Painel da Agenda Regulatória",
-      desc: "Metas, temas, indicadores gráficos e percentual de entregas.",
-      param: "?public=reg_agenda_painel",
-      icon: BookOpen,
-      color: "text-indigo-600 bg-indigo-50 border-indigo-100"
-    },
-    {
-      id: "reg_subsidios_painel",
-      title: "Painel de Participação Social",
-      desc: "Acompanhamento de consultas públicas, audiências e contribuições.",
-      param: "?public=reg_subsidios_painel",
-      icon: MessageSquare,
-      color: "text-cyan-600 bg-cyan-50 border-cyan-100"
-    },
-    {
-      id: "pub_painel",
-      title: "Painel de Publicações",
-      desc: "Acervo bibliográfico, relatórios anuais, boletins e pesquisas.",
-      param: "?public=pub_painel",
-      icon: BookOpen,
-      color: "text-purple-600 bg-purple-50 border-purple-100"
-    }
+    ...PANEL_METADATA_LIST.map(p => ({
+      id: p.id,
+      title: p.name,
+      desc: p.description,
+      param: `?public=${p.publicParam}`,
+      icon: p.id === "overview_panels" ? LayoutDashboard :
+            p.id === "planning" ? FolderKanban :
+            p.id === "reg_painel" ? FileText :
+            p.id === "reg_agenda_painel" ? BookOpen :
+            p.id === "reg_subsidios_painel" ? MessageSquare :
+            p.id === "analyze" ? Droplets :
+            p.id === "fisc_operational" ? Shield :
+            p.id === "recurso_painel" ? Scale : BookOpen,
+      color: p.id === "overview_panels" ? "text-blue-700 bg-blue-50 border-blue-200" :
+             p.id === "planning" ? "text-indigo-700 bg-indigo-50 border-indigo-200" :
+             p.id === "reg_painel" ? "text-blue-600 bg-blue-50 border-blue-100" :
+             p.id === "reg_agenda_painel" ? "text-indigo-600 bg-indigo-50 border-indigo-100" :
+             p.id === "reg_subsidios_painel" ? "text-cyan-600 bg-cyan-50 border-cyan-100" :
+             p.id === "analyze" ? "text-sky-600 bg-sky-50 border-sky-100" :
+             p.id === "fisc_operational" ? "text-emerald-600 bg-emerald-50 border-emerald-100" :
+             p.id === "recurso_painel" ? "text-amber-600 bg-amber-50 border-amber-100" :
+             "text-purple-600 bg-purple-50 border-purple-100",
+      isPublic: checkIsPublic(p.id)
+    }))
   ];
 
   const handleCopy = (key: string, text: string, label: string) => {
@@ -170,7 +167,7 @@ export function ManagerialHub({
             <p className="text-blue-100 text-xs sm:text-sm font-medium max-w-lg leading-relaxed">
               {showOnlyPublic 
                 ? "Portal aberto de transparência para consulta ao estoque regulatório e acervo de publicações técnicas da Superintendência de Abastecimento de Água e Esgoto."
-                : "Central de monitoramento e coordenação das atividades finalísticas e regulatórias da ADASA para superintendentes e técnicos."}
+                : "Central de monitoramento e coordenação das atividades finalísticas e regulatórias da SAE para superintendentes e técnicos."}
             </p>
           </div>
 
@@ -225,32 +222,53 @@ export function ManagerialHub({
           {/* Visão Geral dos Painéis Gerenciais Card - FIRST POSITION */}
           <motion.div 
             whileHover={{ y: -3, scale: 1.01 }}
-            onClick={onOpenOverviewPanels}
-            className="p-8 rounded-3xl border-2 border-blue-600/40 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950 text-white shadow-xl shadow-blue-950/20 cursor-pointer hover:shadow-2xl hover:border-blue-400 transition-all duration-300 flex flex-col justify-between group h-full relative overflow-hidden"
+            className="p-8 rounded-3xl border-2 border-blue-600/40 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950 text-white shadow-xl shadow-blue-950/20 hover:shadow-2xl hover:border-blue-400 transition-all duration-300 flex flex-col justify-between group h-full relative overflow-hidden"
           >
             <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 rounded-full bg-blue-500/15 blur-2xl pointer-events-none group-hover:bg-blue-500/25 transition-all" />
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-4">
+            <div onClick={onOpenOverviewPanels} className="cursor-pointer relative z-10">
+              <div className="flex items-center justify-between gap-2 mb-4">
                 <div className="p-3 rounded-xl bg-blue-500/20 text-blue-300 w-max border border-blue-400/30 group-hover:bg-blue-500/30 group-hover:text-white transition-colors shadow-inner">
                   <LayoutDashboard size={24} />
                 </div>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/30 text-blue-200 border border-blue-400/30">
-                  <Sparkles size={11} className="text-blue-300 animate-pulse" />
-                  Consolidado
-                </span>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/30 text-blue-200 border border-blue-400/30">
+                    <Sparkles size={11} className="text-blue-300 animate-pulse" />
+                    Consolidado
+                  </span>
+                  <PanelAccessBadge 
+                    panelId="overview_panels" 
+                    panelName="Visão Geral Consolidada" 
+                    variant="card-tag" 
+                    theme="dark"
+                    showToast={showToast} 
+                  />
+                </div>
               </div>
               <h3 className="text-lg font-black text-white leading-tight mb-2">Visão Geral dos Painéis Gerenciais</h3>
               <p className="text-blue-100/85 text-xs font-medium leading-relaxed mb-6">
                 Dashboard executivo integrado reunindo os principais gráficos, indicadores consolidados e resumos de todos os painéis gerenciais da SAE em uma visão unificada.
               </p>
             </div>
-            <div className="mt-8 flex items-center gap-2 text-xs font-black text-blue-300 group-hover:text-white transition-colors relative z-10">
-              Acessar Visão Geral dos Painéis Gerenciais <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+            <div className="mt-8 flex items-center justify-between pt-4 border-t border-blue-800/60 relative z-10">
+              <button 
+                onClick={onOpenOverviewPanels}
+                className="flex items-center gap-2 text-xs font-black text-blue-300 group-hover:text-white transition-colors cursor-pointer"
+              >
+                Acessar Visão Geral dos Painéis Gerenciais <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+              </button>
+              {checkIsPublic("overview_panels") && (
+                <button
+                  onClick={() => handleCopy("card_overview_panels", `${getBaseUrl()}?public=overview_panels`, "Link da Visão Geral Consolidada")}
+                  className="text-[11px] font-bold text-blue-300 hover:text-white flex items-center gap-1 cursor-pointer"
+                >
+                  <Share2 size={12} /> Compartilhar
+                </button>
+              )}
             </div>
           </motion.div>
 
-          {/* Painel de Atividades Card - PRIVATE */}
-          {!showOnlyPublic && (
+          {/* Painel de Atividades Card */}
+          {(!showOnlyPublic || checkIsPublic("planning")) && (
             <RequirePermission moduleId="planning_dashboard" action="view">
             <motion.div 
               whileHover={{ y: -2 }}
@@ -258,22 +276,44 @@ export function ManagerialHub({
               className="p-8 rounded-3xl border border-blue-200 bg-gradient-to-br from-white to-blue-50/20 shadow-sm cursor-pointer hover:shadow-md transition-all duration-300 flex flex-col justify-between group h-full"
             >
               <div>
-                <div className="mb-4 p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
-                  <FolderKanban size={24} />
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
+                    <FolderKanban size={24} />
+                  </div>
+                  <PanelAccessBadge 
+                    panelId="planning" 
+                    panelName="Plano de Atividades" 
+                    variant="card-tag" 
+                    showToast={showToast} 
+                  />
                 </div>
-                <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Painel de Atividades</h3>
+                <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Plano de Atividades</h3>
                 <p className="text-slate-600 text-xs font-medium leading-relaxed mb-6">
                   Acompanhe o andamento geral das tarefas e metas. Visualize status, progressos acumulados e índices gerenciais por área operacional em gráficos de tempo real.
                 </p>
               </div>
-              <div className="mt-8 flex items-center gap-2 text-xs font-bold text-blue-700">
-                Abrir Painel de Atividades <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+              <div className="mt-8 flex items-center justify-between pt-4 border-t border-slate-100">
+                <span className="flex items-center gap-2 text-xs font-bold text-blue-700">
+                  Abrir Plano de Atividades <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+                </span>
+                {checkIsPublic("planning") && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCopy("card_planning", `${getBaseUrl()}?public=planning`, "Link do Plano de Atividades");
+                    }}
+                    className="text-[11px] font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Share2 size={12} /> Compartilhar
+                  </button>
+                )}
               </div>
             </motion.div>
             </RequirePermission>
           )}
 
-          {/* Painel de Resoluções Card - PUBLIC */}
+          {/* Painel de Resoluções Card */}
+          {(!showOnlyPublic || checkIsPublic("reg_painel")) && (
           <RequirePermission moduleId="reg_painel" action="view">
           <motion.div 
             whileHover={{ y: -2 }}
@@ -284,19 +324,12 @@ export function ManagerialHub({
                 <div className="p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
                   <FileText size={24} />
                 </div>
-                {showOnlyPublic && (
-                  <button
-                    type="button"
-                    title="Copiar Link Público"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCopy("card_reg_painel", `${getBaseUrl()}?public=reg_painel`, "Link do Painel de Resoluções");
-                    }}
-                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-transparent hover:border-blue-200 cursor-pointer"
-                  >
-                    {copiedKey === "card_reg_painel" ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />}
-                  </button>
-                )}
+                <PanelAccessBadge 
+                  panelId="reg_painel" 
+                  panelName="Painel de Resoluções" 
+                  variant="card-tag" 
+                  showToast={showToast} 
+                />
               </div>
               <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Painel de Resoluções</h3>
               <p className="text-slate-600 text-xs font-medium leading-relaxed mb-6">
@@ -310,7 +343,7 @@ export function ManagerialHub({
               >
                 Abrir Painel de Resoluções <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
               </button>
-              {showOnlyPublic && (
+              {checkIsPublic("reg_painel") && (
                 <button
                   onClick={() => handleCopy("card_reg_painel", `${getBaseUrl()}?public=reg_painel`, "Link do Painel de Resoluções")}
                   className="text-[11px] font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1 cursor-pointer"
@@ -321,8 +354,10 @@ export function ManagerialHub({
             </div>
           </motion.div>
           </RequirePermission>
+          )}
 
-          {/* Painel da Agenda Regulatória Card - PUBLIC */}
+          {/* Painel da Agenda Regulatória Card */}
+          {(!showOnlyPublic || checkIsPublic("reg_agenda_painel")) && (
           <RequirePermission moduleId="reg_agenda_painel" action="view">
           <motion.div 
             whileHover={{ y: -2 }}
@@ -333,19 +368,12 @@ export function ManagerialHub({
                 <div className="p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
                   <BookOpen size={24} className="text-blue-600" />
                 </div>
-                {showOnlyPublic && (
-                  <button
-                    type="button"
-                    title="Copiar Link Público"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCopy("card_reg_agenda", `${getBaseUrl()}?public=reg_agenda_painel`, "Link da Agenda Regulatória");
-                    }}
-                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-transparent hover:border-blue-200 cursor-pointer"
-                  >
-                    {copiedKey === "card_reg_agenda" ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />}
-                  </button>
-                )}
+                <PanelAccessBadge 
+                  panelId="reg_agenda_painel" 
+                  panelName="Painel da Agenda Regulatória" 
+                  variant="card-tag" 
+                  showToast={showToast} 
+                />
               </div>
               <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Painel da Agenda Regulatória</h3>
               <p className="text-slate-600 text-xs font-medium leading-relaxed mb-6">
@@ -359,7 +387,7 @@ export function ManagerialHub({
               >
                 Abrir Painel da Agenda <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
               </button>
-              {showOnlyPublic && (
+              {checkIsPublic("reg_agenda_painel") && (
                 <button
                   onClick={() => handleCopy("card_reg_agenda", `${getBaseUrl()}?public=reg_agenda_painel`, "Link da Agenda Regulatória")}
                   className="text-[11px] font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1 cursor-pointer"
@@ -370,8 +398,10 @@ export function ManagerialHub({
             </div>
           </motion.div>
           </RequirePermission>
+          )}
 
-          {/* Painel de Participação Social Card - PUBLIC */}
+          {/* Painel de Participação Social Card */}
+          {(!showOnlyPublic || checkIsPublic("reg_subsidios_painel")) && (
           <RequirePermission moduleId="reg_subsidios_painel" action="view">
           <motion.div 
             whileHover={{ y: -2 }}
@@ -382,19 +412,12 @@ export function ManagerialHub({
                 <div className="p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
                   <MessageSquare size={24} className="text-blue-600" />
                 </div>
-                {showOnlyPublic && (
-                  <button
-                    type="button"
-                    title="Copiar Link Público"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCopy("card_reg_subsidios", `${getBaseUrl()}?public=reg_subsidios_painel`, "Link de Participação Social");
-                    }}
-                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-transparent hover:border-blue-200 cursor-pointer"
-                  >
-                    {copiedKey === "card_reg_subsidios" ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />}
-                  </button>
-                )}
+                <PanelAccessBadge 
+                  panelId="reg_subsidios_painel" 
+                  panelName="Painel de Participação Social" 
+                  variant="card-tag" 
+                  showToast={showToast} 
+                />
               </div>
               <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Painel de Participação Social</h3>
               <p className="text-slate-600 text-xs font-medium leading-relaxed mb-6">
@@ -408,7 +431,7 @@ export function ManagerialHub({
               >
                 Abrir Painel Participação Social <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
               </button>
-              {showOnlyPublic && (
+              {checkIsPublic("reg_subsidios_painel") && (
                 <button
                   onClick={() => handleCopy("card_reg_subsidios", `${getBaseUrl()}?public=reg_subsidios_painel`, "Link de Participação Social")}
                   className="text-[11px] font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1 cursor-pointer"
@@ -419,9 +442,10 @@ export function ManagerialHub({
             </div>
           </motion.div>
           </RequirePermission>
+          )}
 
-          {/* Painel do Balanço Hídrico Card - PRIVATE */}
-          {!showOnlyPublic && (
+          {/* Painel do Balanço Hídrico Card */}
+          {(!showOnlyPublic || checkIsPublic("analyze")) && (
             <RequirePermission moduleId="analyze" action="view">
             <motion.div 
               whileHover={{ y: -2 }}
@@ -429,23 +453,44 @@ export function ManagerialHub({
               className="p-8 rounded-3xl border border-blue-200 bg-gradient-to-br from-white to-blue-50/20 shadow-sm cursor-pointer hover:shadow-md transition-all duration-300 flex flex-col justify-between group h-full"
             >
               <div>
-                <div className="mb-4 p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
-                  <Droplets size={24} className="text-blue-600" />
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
+                    <Droplets size={24} className="text-blue-600" />
+                  </div>
+                  <PanelAccessBadge 
+                    panelId="analyze" 
+                    panelName="Painel do Balanço Hídrico" 
+                    variant="card-tag" 
+                    showToast={showToast} 
+                  />
                 </div>
                 <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Painel do Balanço Hídrico</h3>
                 <p className="text-slate-600 text-xs font-medium leading-relaxed mb-6">
                   Visualize de forma isolada as projeções de oferta e demanda ao longo do tempo. Explore os subsistemas e mapas do Balanço Hídrico.
                 </p>
               </div>
-              <div className="mt-8 flex items-center gap-2 text-xs font-bold text-blue-700">
-                Abrir Painel do Balanço Hídrico <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+              <div className="mt-8 flex items-center justify-between pt-4 border-t border-slate-100">
+                <span className="flex items-center gap-2 text-xs font-bold text-blue-700">
+                  Abrir Painel do Balanço Hídrico <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+                </span>
+                {checkIsPublic("analyze") && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCopy("card_analyze", `${getBaseUrl()}?public=analyze`, "Link do Balanço Hídrico");
+                    }}
+                    className="text-[11px] font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Share2 size={12} /> Compartilhar
+                  </button>
+                )}
               </div>
             </motion.div>
             </RequirePermission>
           )}
 
-          {/* Painel de Fiscalização Card - PRIVATE */}
-          {!showOnlyPublic && (
+          {/* Painel de Fiscalização Card */}
+          {(!showOnlyPublic || checkIsPublic("fisc_operational")) && (
             <RequirePermission moduleId="fisc_operational" action="view">
             <motion.div 
               whileHover={{ y: -2 }}
@@ -453,23 +498,44 @@ export function ManagerialHub({
               className="p-8 rounded-3xl border border-blue-200 bg-gradient-to-br from-white to-blue-50/20 shadow-sm cursor-pointer hover:shadow-md transition-all duration-300 flex flex-col justify-between group h-full"
             >
               <div>
-                <div className="mb-4 p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
-                  <Shield size={24} className="text-blue-600" />
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
+                    <Shield size={24} className="text-blue-600" />
+                  </div>
+                  <PanelAccessBadge 
+                    panelId="fisc_operational" 
+                    panelName="Painel de Fiscalização" 
+                    variant="card-tag" 
+                    showToast={showToast} 
+                  />
                 </div>
                 <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Painel de Fiscalização</h3>
                 <p className="text-slate-600 text-xs font-medium leading-relaxed mb-6">
                   Painel estratégico de monitoramento das ações de fiscalização, constatações, não conformidades e termos emitidos.
                 </p>
               </div>
-              <div className="mt-8 flex items-center gap-2 text-xs font-bold text-blue-700">
-                Abrir Painel de Fiscalização <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+              <div className="mt-8 flex items-center justify-between pt-4 border-t border-slate-100">
+                <span className="flex items-center gap-2 text-xs font-bold text-blue-700">
+                  Abrir Painel de Fiscalização <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+                </span>
+                {checkIsPublic("fisc_operational") && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCopy("card_fisc_operational", `${getBaseUrl()}?public=fisc_operational`, "Link de Fiscalização");
+                    }}
+                    className="text-[11px] font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Share2 size={12} /> Compartilhar
+                  </button>
+                )}
               </div>
             </motion.div>
             </RequirePermission>
           )}
 
-          {/* Painel Demanda Ouvidoria Card - PRIVATE */}
-          {!showOnlyPublic && (
+          {/* Painel Demanda Ouvidoria Card */}
+          {(!showOnlyPublic || checkIsPublic("recurso_painel")) && (
             <RequirePermission moduleId="recurso_painel" action="view">
             <motion.div 
               whileHover={{ y: -2 }}
@@ -477,22 +543,44 @@ export function ManagerialHub({
               className="p-8 rounded-3xl border border-blue-200 bg-gradient-to-br from-white to-blue-50/20 shadow-sm cursor-pointer hover:shadow-md transition-all duration-300 flex flex-col justify-between group h-full"
             >
               <div>
-                <div className="mb-4 p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
-                  <Scale size={24} className="text-blue-600" />
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
+                    <Scale size={24} className="text-blue-600" />
+                  </div>
+                  <PanelAccessBadge 
+                    panelId="recurso_painel" 
+                    panelName="Painel de Qualidade do Atendimento" 
+                    variant="card-tag" 
+                    showToast={showToast} 
+                  />
                 </div>
                 <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Painel de Qualidade do Atendimento</h3>
                 <p className="text-slate-600 text-xs font-medium leading-relaxed mb-6">
                   Painel estratégico de acompanhamento de demandas de ouvidoria, prazos, andamento e penalidades aplicadas.
                 </p>
               </div>
-              <div className="mt-8 flex items-center gap-2 text-xs font-bold text-blue-700">
-                Abrir Painel de Qualidade do Atendimento <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+              <div className="mt-8 flex items-center justify-between pt-4 border-t border-slate-100">
+                <span className="flex items-center gap-2 text-xs font-bold text-blue-700">
+                  Abrir Painel de Qualidade do Atendimento <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+                </span>
+                {checkIsPublic("recurso_painel") && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCopy("card_recurso_painel", `${getBaseUrl()}?public=recurso_painel`, "Link de Qualidade do Atendimento");
+                    }}
+                    className="text-[11px] font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Share2 size={12} /> Compartilhar
+                  </button>
+                )}
               </div>
             </motion.div>
             </RequirePermission>
           )}
 
-          {/* Painel de Publicações Card - PUBLIC */}
+          {/* Painel de Publicações Card */}
+          {(!showOnlyPublic || checkIsPublic("pub_painel")) && (
           <RequirePermission moduleId="pub_painel" action="view">
           <motion.div 
             whileHover={{ y: -2 }}
@@ -503,19 +591,12 @@ export function ManagerialHub({
                 <div className="p-3 rounded-xl bg-blue-50 text-blue-600 w-max border border-blue-100 group-hover:bg-blue-100 transition-colors">
                   <BookOpen size={24} className="text-blue-600" />
                 </div>
-                {showOnlyPublic && (
-                  <button
-                    type="button"
-                    title="Copiar Link Público"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCopy("card_pub_painel", `${getBaseUrl()}?public=pub_painel`, "Link do Painel de Publicações");
-                    }}
-                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-transparent hover:border-blue-200 cursor-pointer"
-                  >
-                    {copiedKey === "card_pub_painel" ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />}
-                  </button>
-                )}
+                <PanelAccessBadge 
+                  panelId="pub_painel" 
+                  panelName="Painel de Publicações" 
+                  variant="card-tag" 
+                  showToast={showToast} 
+                />
               </div>
               <h3 className="text-lg font-black text-slate-800 leading-tight mb-2">Painel de Publicações</h3>
               <p className="text-slate-600 text-xs font-medium leading-relaxed mb-6">
@@ -529,7 +610,7 @@ export function ManagerialHub({
               >
                 Abrir Painel de Publicações <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
               </button>
-              {showOnlyPublic && (
+              {checkIsPublic("pub_painel") && (
                 <button
                   onClick={() => handleCopy("card_pub_painel", `${getBaseUrl()}?public=pub_painel`, "Link do Painel de Publicações")}
                   className="text-[11px] font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1 cursor-pointer"
@@ -540,6 +621,7 @@ export function ManagerialHub({
             </div>
           </motion.div>
           </RequirePermission>
+          )}
         </div>
       </section>
 

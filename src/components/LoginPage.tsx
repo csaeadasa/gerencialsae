@@ -79,10 +79,10 @@ export function LoginPage() {
           </div>
 
           <div className="mt-9 flex flex-wrap gap-3 text-xs font-bold text-slate-300">
-            {["Planejamento", "Regulação", "Fiscalização"].map((label) => (
+            {["Planejamento", "Regulação", "Fiscalização", "Qualidade do Atendimento"].map((label) => (
               <span
                 key={label}
-                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.045] px-4 py-2.5 backdrop-blur-sm"
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.045] px-4 py-2.5 backdrop-blur-sm shadow-sm"
               >
                 <CheckCircle2 size={14} className="text-emerald-400" />
                 {label}

@@ -43,6 +43,7 @@ export const DEFAULT_ROLES: UserRole[] = [
       { moduleId: 'users', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'fisc_operational', actions: ['view', 'create', 'edit', 'delete'] },
       { moduleId: 'recurso_painel', actions: ['view', 'create', 'edit', 'delete'] },
+      { moduleId: 'overview_panels', actions: ['view'] },
     ]
   },
   {
@@ -86,6 +87,7 @@ export const DEFAULT_ROLES: UserRole[] = [
       { moduleId: 'users', actions: ['view'] },
       { moduleId: 'fisc_operational', actions: ['view', 'create', 'edit'] },
       { moduleId: 'recurso_painel', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'overview_panels', actions: ['view'] },
     ]
   },
   {
@@ -128,6 +130,7 @@ export const DEFAULT_ROLES: UserRole[] = [
       { moduleId: 'geo', actions: ['view'] },
       { moduleId: 'fisc_operational', actions: ['view', 'create', 'edit'] },
       { moduleId: 'recurso_painel', actions: ['view', 'create', 'edit'] },
+      { moduleId: 'overview_panels', actions: ['view'] },
     ]
   }
 ];
@@ -290,32 +293,78 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const checkPermission = (moduleId: ModuleId, action: ActionType): boolean => {
-    // Modo de apresentação público (TV) permite visualizar painéis sem login
-    const isTvMode = typeof window !== 'undefined' && window.location.search.includes('modo=tv');
-    if (isTvMode && action === 'view') {
+    // Modo de apresentação público (TV) ou links públicos externos permitem visualização irrestrita de painéis
+    const isPublicContext = typeof window !== 'undefined' && (
+      window.location.search.includes('modo=tv') ||
+      window.location.search.includes('public=') ||
+      window.location.search.includes('share=') ||
+      window.location.hash.startsWith('#public-') ||
+      window.location.hash.startsWith('#share-')
+    );
+    if (isPublicContext && action === 'view') {
       return true;
     }
 
-    if (!currentUser) return false;
+    // Painéis gerais e hubs são livres para visualização
+    if (action === 'view' && (moduleId === 'public_hub' || moduleId === 'overview_panels' || moduleId === 'dashboard')) {
+      return true;
+    }
+
+    // Se o usuário não está logado, permite apenas a visualização de painéis abertos
+    if (!currentUser) {
+      if (action === 'view') {
+        const publicPanels: ModuleId[] = [
+          'overview_panels', 'public_hub', 'reg_painel', 'reg_agenda_painel',
+          'reg_subsidios_painel', 'pub_painel', 'analyze', 'fisc_operational',
+          'recurso_painel', 'planning_dashboard', 'dashboard'
+        ];
+        return publicPanels.includes(moduleId);
+      }
+      return false;
+    }
+
     if (currentUser.roleId === 'admin') return true;
 
     // Check permissions attached directly from database user session
     const userPerms = (currentUser as any).permissions;
     if (Array.isArray(userPerms) && userPerms.length > 0) {
       const modPerm = userPerms.find((p: any) => p.moduleId === moduleId);
-      if (modPerm) {
-        return modPerm.actions?.includes(action) || false;
+      if (modPerm && modPerm.actions?.includes(action)) {
+        return true;
       }
     }
 
     const role = roles.find(r => r.id === currentUser.roleId);
     if (role?.id === 'admin') return true;
-    if (!role) return false;
 
-    const modulePerms = role.permissions.find(p => p.moduleId === moduleId);
-    if (!modulePerms) return false;
+    if (role) {
+      const modulePerms = role.permissions.find(p => p.moduleId === moduleId);
+      if (modulePerms && modulePerms.actions.includes(action)) {
+        return true;
+      }
+    }
 
-    return modulePerms.actions.includes(action);
+    // Fallback de visualização mútua para módulos integrados/painéis
+    if (action === 'view') {
+      const permList = Array.isArray(userPerms) && userPerms.length > 0 
+        ? userPerms 
+        : (role?.permissions || []);
+
+      const hasAction = (mod: ModuleId, act: ActionType = 'view') => 
+        permList.some((p: any) => p.moduleId === mod && p.actions?.includes(act));
+
+      if (moduleId === 'planning_dashboard' && (hasAction('planning_tasks') || hasAction('planning_my_tasks') || hasAction('planning_plans'))) return true;
+      if (moduleId === 'planning_tasks' && hasAction('planning_dashboard')) return true;
+      if (moduleId === 'planning_my_tasks' && (hasAction('planning_tasks') || hasAction('planning_dashboard'))) return true;
+      if (moduleId === 'reg_painel' && hasAction('reg_cadastro')) return true;
+      if (moduleId === 'reg_agenda_painel' && hasAction('reg_agenda')) return true;
+      if (moduleId === 'reg_subsidios_painel' && (hasAction('reg_subsidios') || hasAction('reg_subsidios_portal'))) return true;
+      if (moduleId === 'pub_painel' && hasAction('pub_cadastro')) return true;
+      if (moduleId === 'analyze' && (hasAction('water_balances') || hasAction('explore') || hasAction('compare'))) return true;
+      if (moduleId === 'overview_panels') return true;
+    }
+
+    return false;
   };
 
   const hasRole = (roleId: string): boolean => {

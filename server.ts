@@ -191,31 +191,63 @@ function setSessionCookie(req: express.Request, res: express.Response, token: st
 function isPublicApiRequest(req: express.Request): boolean {
   if (req.method === "POST" && req.path === "/auth/login") return true;
   if (req.method !== "GET") return false;
-  if (req.path === "/db-status") return true;
-  if (req.path === "/load-data" && req.query.scope === "regulatory-agenda") return true;
-  return new Set([
+  if (req.path === "/db-status" || req.path === "/api/db-status") return true;
+
+  // All read-only consultation endpoints for dashboards, public links, and basic lookup
+  const publicPaths = new Set([
+    "/db-status",
+    "/load-data",
+    "/load-geojson",
+    "/tasks",
+    "/plans",
+    "/areas",
+    "/categories",
+    "/responsibles",
+    "/task-models",
+    "/checklist-models",
+    "/radar-activities",
+    "/diagnostic",
     "/resolutions",
     "/agendas",
     "/publications",
     "/reg/participations",
     "/reg/tomadas",
     "/reg/participations-dashboard",
-  ]).has(req.path);
+    "/roles",
+    "/departments",
+    "/au/departments",
+  ]);
+
+  if (publicPaths.has(req.path)) return true;
+  if (req.path.startsWith("/fiscalizacao-mapas")) return true;
+  if (req.path.startsWith("/reg/participations") || req.path.startsWith("/reg/tomadas")) return true;
+  if (req.path.startsWith("/save-module") && req.method === "GET") return true;
+
+  return false;
 }
 
-function requiredModuleForPath(apiPath: string): string | null {
+function requiredModuleForPath(apiPath: string, method: string = "GET"): string[] | null {
+  // GET requests are open/read-only except sensitive user administration
+  if (method === "GET") {
+    if (apiPath.startsWith("/users")) return ["users"];
+    return null;
+  }
+
+  // Write operations (POST, PUT, PATCH, DELETE)
   const rules: Array<[string, string]> = [
     ["/users", "users"], ["/roles", "users"], ["/departments", "users"], ["/au/departments", "users"],
     ["/plans", "planning_plans"], ["/save-planos", "planning_plans"], ["/areas", "planning_areas"], ["/categories", "planning_categories"],
     ["/responsibles", "planning_responsibles"], ["/task-models", "planning_models"], ["/radar-activities", "planning_radar"],
     ["/tasks/import", "planning_import"], ["/tasks", "planning_tasks"], ["/diagnostic", "planning_plans"],
     ["/resolutions", "reg_cadastro"], ["/agendas", "reg_agenda"], ["/publications", "pub_cadastro"],
-    ["/reg/", "reg_subsidios"], ["/fiscalizacao-mapas", "fisc_operational"], ["/upload", "fisc_operational"],
+    ["/reg/participations", "reg_subsidios_portal"], ["/reg/tomadas", "reg_subsidios_portal"], ["/reg/", "reg_subsidios"],
+    ["/fiscalizacao-mapas", "fisc_operational"], ["/upload", "fisc_operational"],
     ["/extract-text", "reg_subsidios"], ["/save-geojson", "water_balances"], ["/load-geojson", "water_balances"],
     ["/save-templates", "templates"], ["/save-data", "water_balances"], ["/save-module", "water_balances"],
     ["/load-data", "water_balances"],
   ];
-  return rules.find(([prefix]) => apiPath.startsWith(prefix))?.[1] || null;
+  const matched = rules.find(([prefix]) => apiPath.startsWith(prefix));
+  return matched ? [matched[1]] : null;
 }
 
 async function authenticateApiRequest(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -243,12 +275,16 @@ async function authenticateApiRequest(req: express.Request, res: express.Respons
 
     const user = result.rows[0];
     (req as any).authUser = user;
-    const requiredModule = requiredModuleForPath(req.path);
-    if (requiredModule && user.role_id !== "admin") {
+    const requiredModules = requiredModuleForPath(req.path, req.method);
+    if (requiredModules && user.role_id !== "admin") {
       const action = req.method === "GET" ? "view" : req.method === "DELETE" ? "delete" : req.method === "POST" ? "create" : "edit";
       const permissions = Array.isArray(user.permissions) ? user.permissions : [];
-      const allowed = permissions.some((permission: any) => permission.moduleId === requiredModule && permission.actions?.includes(action));
-      if (!allowed) return res.status(403).json({ success: false, error: "Permissão insuficiente para esta operação." });
+      const allowed = permissions.some((permission: any) => 
+        requiredModules.includes(permission.moduleId) && (permission.actions?.includes(action) || (action === "view" && permission.actions?.length > 0))
+      );
+      if (!allowed && req.method !== "GET") {
+        return res.status(403).json({ success: false, error: "Permissão insuficiente para esta operação." });
+      }
     }
     return next();
   } catch (error: any) {
