@@ -4999,28 +4999,34 @@ const renderCustomBarLabel = (props: any) => {
                     <Line
                       type="monotone"
                       dataKey="Oferta Total"
-                      stroke="#2563eb"
+                      stroke="#0091DA"
                       strokeWidth={3}
-                      dot={{ r: 3, fill: '#fff', stroke: '#2563eb' }}
+                      strokeDasharray="5 5"
+                      dot={{ r: 4, strokeWidth: 2 }}
                       activeDot={{ r: 6 }}
                       name="Oferta Total"
                     />
                     <Line
                       type="monotone"
                       dataKey="Demanda Total"
-                      stroke="#16a34a"
+                      stroke="#1A3E8A"
                       strokeWidth={3}
-                      dot={{ r: 3, fill: '#fff', stroke: '#16a34a' }}
+                      dot={{ r: 4, strokeWidth: 2 }}
                       activeDot={{ r: 6 }}
                       name="Demanda Total"
                     />
                     <Bar
                       dataKey="Saldo Total"
-                      fill="#93c5fd"
-                      opacity={0.6}
+                      fill="#64748b"
                       radius={[4, 4, 0, 0]}
                       name="Saldo Hídrico"
-                    />
+                    >
+                      {waterBalanceProcessed.chartData.map((entry: any, index: number) => {
+                        const val = entry["Saldo Total"];
+                        const color = val >= 0 ? "#10b981" : "#ef4444";
+                        return <Cell key={`cell-${index}`} fill={color} />;
+                      })}
+                    </Bar>
                   </ComposedChart>
                 </ResponsiveContainer>
               )}

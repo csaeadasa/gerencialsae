@@ -621,11 +621,11 @@ export function PublicationsTab({ showToast, currentUser }: PublicationsTabProps
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold text-slate-700"
                   >
                     <option value="Relatório de Atividades">Relatório de Atividades</option>
-                    <option value="Boletim">Boletim Informativo</option>
+                    <option value="Boletins">Boletins</option>
                     <option value="Informativo">Informativo</option>
-                    <option value="Guia">Guia / Manual técnico</option>
-                    <option value="Artigo">Artigo técnico / Científico</option>
-                    <option value="Resolução">Resolução</option>
+                    <option value="Guias Técnicos">Guias Técnicos</option>
+                    <option value="Artigos Técnicos">Artigos Técnicos</option>
+                    <option value="Dissertações">Dissertações</option>
                   </select>
                 </div>
 

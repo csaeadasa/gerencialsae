@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { ResponsiveContainer, ComposedChart, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Line, LabelList } from "recharts";
-import { BookOpen, FileText, Search, ArrowUpDown, Filter, ExternalLink, Share2, ClipboardList, TrendingUp, Inbox, Image as ImageIcon, Maximize2, X, ZoomIn, Check } from "lucide-react";
+import { BookOpen, FileText, Search, ArrowUpDown, Filter, ExternalLink, Share2, ClipboardList, TrendingUp, Inbox, Image as ImageIcon, Maximize2, X, ZoomIn, Check, FileCheck, Award } from "lucide-react";
 
 // Helper component for Document Thumbnail
 const DocumentThumbnail = ({ 
@@ -81,6 +81,12 @@ const DocumentThumbnail = ({
   } else if (docType.includes("boletim")) {
     themeClass = "from-orange-500 to-red-600 border-orange-600 text-orange-50";
     icon = <ClipboardList size={iconSize} className="opacity-90 drop-shadow-sm" />;
+  } else if (docType.includes("artigo")) {
+    themeClass = "from-teal-600 to-cyan-700 border-teal-600 text-teal-50";
+    icon = <FileCheck size={iconSize} className="opacity-90 drop-shadow-sm" />;
+  } else if (docType.includes("disserta")) {
+    themeClass = "from-purple-600 to-indigo-700 border-purple-600 text-purple-50";
+    icon = <Award size={iconSize} className="opacity-90 drop-shadow-sm" />;
   } else if (docType.includes("estudo")) {
     themeClass = "from-purple-500 to-purple-700 border-purple-600 text-purple-50";
     icon = <TrendingUp size={iconSize} className="opacity-90 drop-shadow-sm" />;
@@ -220,7 +226,7 @@ export function PublicationsDashboard({ showToast }: PublicationsDashboardProps)
   const totalCount = publications.length;
 
   const relatoriosCount = publications.filter(p => p.tipo_documento === "Relatório de Atividades").length;
-  const boletinsCount = publications.filter(p => p.tipo_documento === "Boletim").length;
+  const boletinsCount = publications.filter(p => p.tipo_documento === "Boletins" || p.tipo_documento === "Boletim").length;
   const outrosCount = totalCount - (relatoriosCount + boletinsCount);
 
   // Extract years to calculate Average per year
@@ -406,7 +412,7 @@ export function PublicationsDashboard({ showToast }: PublicationsDashboardProps)
             <BookOpen size={22} />
           </div>
           <div>
-            <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Boletins Informativos</span>
+            <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Boletins</span>
             <span className="text-2xl font-black text-slate-800 leading-tight">{boletinsCount}</span>
             <span className="block text-[10px] text-violet-600 font-bold mt-0.5">
               {totalCount > 0 ? `${((boletinsCount / totalCount) * 100).toFixed(0)}%` : "0%"} do acervo total
@@ -420,10 +426,10 @@ export function PublicationsDashboard({ showToast }: PublicationsDashboardProps)
             <FileText size={22} />
           </div>
           <div>
-            <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Guias, Manuais e Artigos</span>
+            <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Guias, Artigos e Dissertações</span>
             <span className="text-2xl font-black text-slate-800 leading-tight">{outrosCount}</span>
             <span className="block text-[10px] text-indigo-600 font-bold mt-0.5">
-              {totalCount > 0 ? `${((outrosCount / totalCount) * 100).toFixed(0)}%` : "0%"} artigos e cartilhas
+              {totalCount > 0 ? `${((outrosCount / totalCount) * 100).toFixed(0)}%` : "0%"} artigos e publicações
             </span>
           </div>
         </div>
