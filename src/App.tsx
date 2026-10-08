@@ -126,6 +126,7 @@ import { RecursoPainel } from "./components/RecursoPainel";
 import { WaterBalanceCategoryModal, DEFAULT_WATER_BALANCE_CATEGORIES, getCategoryBadgeClasses } from "./components/WaterBalanceCategoryModal";
 import { PanelAccessBadge } from "./components/PanelAccessBadge";
 import { usePanelAccess, isPanelPublic, PUBLIC_DOMAIN, getPanelPublicUrl } from "./lib/panelAccess";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 import { enrichTasksWithStageDates } from "./utils/stageDatesGenerator";
 
@@ -3931,7 +3932,18 @@ const renderSupplyTable = () => {
 
         {/* Portal Body */}
         <main className="flex-1 p-4 md:p-8 w-full">
-          <AnimatePresence mode="wait">
+          <ErrorBoundary
+            sectionName={`Portal Público (${publicTabName || "Geral"})`}
+            resetKeys={[publicTabName]}
+            fallbackTitle="Instabilidade Temporária no Portal Público"
+            fallbackMessage="Ocorreu uma falha inesperada ao exibir este painel público. Seus dados continuam seguros no servidor."
+            showHomeButton={publicTabName !== "publico_hub"}
+            onGoHome={() => {
+              window.location.hash = "#public-publico_hub";
+              setPublicTabName("publico_hub");
+            }}
+          >
+            <AnimatePresence mode="wait">
             <motion.div
               key={publicTabName || "gerencial"}
               initial={{ opacity: 0, y: 15 }}
@@ -4184,6 +4196,7 @@ const renderSupplyTable = () => {
               )}
             </motion.div>
           </AnimatePresence>
+          </ErrorBoundary>
         </main>
 
         {/* Branded Portal Footer */}
@@ -6156,7 +6169,34 @@ const renderSupplyTable = () => {
           </div>
         </header>
 
-        <AnimatePresence mode="wait">
+        <ErrorBoundary
+          sectionName={
+            activeTab === "home" ? "Página Inicial" :
+            activeTab === "gerencial" ? "Painéis Gerenciais" :
+            activeTab === "overview_panels" ? "Visão Geral dos Painéis Gerenciais" :
+            activeTab === "public_hub" ? "Painéis Públicos" :
+            activeTab === "planning" ? "Planejamento Estratégico (Atividades)" :
+            activeTab === "reg_cadastro" ? "Gerenciar Resoluções" :
+            activeTab === "reg_painel" ? "Painel Estratégico de Resoluções" :
+            activeTab === "reg_agenda" ? "Agenda Regulatória" :
+            activeTab === "reg_agenda_painel" ? "Painel da Agenda Regulatória" :
+            activeTab === "reg_subsidios" ? "Gerenciar Participação Social" :
+            activeTab === "reg_subsidios_painel" ? "Painel de Participação Social" :
+            activeTab === "pub_cadastro" ? "Gerenciar Publicações" :
+            activeTab === "pub_painel" ? "Painel de Publicações" :
+            activeTab === "fisc_operational" ? "Painel de Fiscalização" :
+            activeTab === "recurso_painel" ? "Painel de Qualidade do Atendimento" :
+            activeTab === "analyze" ? "Análise do Balanço Hídrico" :
+            activeTab === "compare" ? "Comparar Balanços" :
+            activeTab === "manage" ? "Gerenciar Balanço Hídrico" :
+            activeTab === "templates" ? "Arquivos Modelo" :
+            activeTab === "users" || activeTab === "departments" ? "Usuários e Departamentos" : "Painel Geral"
+          }
+          resetKeys={[activeTab, activePlanningSubTab]}
+          onGoHome={() => handleTabChange("home")}
+          showHomeButton={activeTab !== "home"}
+        >
+          <AnimatePresence mode="wait">
           {activeTab === "home" ? (
             <motion.div
               key="home"
@@ -10182,6 +10222,7 @@ const renderSupplyTable = () => {
             </motion.div>
           ) : null}
         </AnimatePresence>
+        </ErrorBoundary>
       </main>
       
       {presentationConfig.isActive && (

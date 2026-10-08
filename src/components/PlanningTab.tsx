@@ -88,7 +88,7 @@ import * as XLSX from "xlsx";
 import { FiscalizacaoEditor } from './FiscalizacaoEditor';
 import { RecursoEditor } from './RecursoEditor';
 import { RecursoRevisaoEditor } from './RecursoRevisaoEditor';
-import { Task, Plan, PlanSnapshot, Area, Category, Responsible, AppUser } from "../types";
+import { Task, Plan, PlanSnapshot, Area, Category, Responsible, AppUser, ChecklistItem, TaskLink } from "../types";
 import { cn } from "../lib/utils";
 import { useAuth } from "../lib/auth";
 import { createFiscalizacaoChecklist, ensureFiscalizacaoChecklist, FISCALIZACAO_ETAPAS, FISCALIZACAO_ETAPA_INICIAL } from "../lib/fiscalizacao";
@@ -1201,12 +1201,8 @@ export function PlanningTab({
 
   // Modal/Form State for adding/editing tasks
   const [timelineTaskId, setTimelineTaskId] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useState<"tree" | "table" | "status" | "category" | "area" | "responsible" | "board" | "gantt" | "calendar" | "recurso">("board");
+  const [viewMode, setViewMode] = useState<"tree" | "status" | "category" | "area" | "responsible" | "board" | "gantt" | "recurso">("board");
   const [agrupamentoTaskType, setAgrupamentoTaskType] = useState<"demanda_ouvidoria" | "fiscalizacao" | "recurso_revisao" | "recurso">("demanda_ouvidoria");
-  const [calendarScale, setCalendarScale] = useState<"mes" | "trimestre" | "ano">("mes");
-  const [calendarYear, setCalendarYear] = useState<number>(new Date().getFullYear());
-  const [calendarMonth, setCalendarMonth] = useState<number>(new Date().getMonth());
-  const [selectedCalendarDay, setSelectedCalendarDay] = useState<Date | null>(null);
   const [areaTableViewMode, setAreaTableViewMode] = useState<"table" | "calendar">("table");
   const [areaCalendarScale, setAreaCalendarScale] = useState<"mes" | "trimestre" | "semestre">("mes");
   const [areaCalendarYear, setAreaCalendarYear] = useState<number>(new Date().getFullYear());
@@ -1214,7 +1210,6 @@ export function PlanningTab({
   const [selectedAreaCalendarDay, setSelectedAreaCalendarDay] = useState<Date | null>(null);
   const [ganttScale, setGanttScale] = useState<"mes" | "trimestre" | "semestre">("mes");
   const [timelineModalTab, setTimelineModalTab] = useState<"timeline" | "gantt" | "calc">("timeline");
-  const [tableSort, setTableSort] = useState<{ field: string, dir: "asc" | "desc" } | null>({ field: "end", dir: "asc" });
   const [boardGroupBy, setBoardGroupBy] = useState<"status" | "category" | "situation">("category");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [recentModifiedTaskIds, setRecentModifiedTaskIds] = useState<number[]>([]);
@@ -1228,38 +1223,152 @@ export function PlanningTab({
   // Duplicate Task State & Handlers
   const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
   const [taskToDuplicate, setTaskToDuplicate] = useState<Task | null>(null);
+  const [duplicateTitle, setDuplicateTitle] = useState("");
   const [duplicateTargetPlanId, setDuplicateTargetPlanId] = useState<string | number>("");
+  const [duplicateStartDate, setDuplicateStartDate] = useState("");
+  const [duplicateEndDate, setDuplicateEndDate] = useState("");
+  const [duplicateSeiProcess, setDuplicateSeiProcess] = useState("");
+  const [duplicateAreaId, setDuplicateAreaId] = useState<string | number>("");
+  const [duplicateResponsibleIds, setDuplicateResponsibleIds] = useState<number[]>([]);
   const [duplicateIncludeSubtasks, setDuplicateIncludeSubtasks] = useState(true);
+  const [duplicateIncludeChecklist, setDuplicateIncludeChecklist] = useState(true);
+  const [duplicateIncludeLinks, setDuplicateIncludeLinks] = useState(true);
   const [isDuplicating, setIsDuplicating] = useState(false);
+
+  const parseLocalDate = (dateStr: string) => {
+    const parts = dateStr.split("T")[0].split("-").map(Number);
+    if (parts.length === 3) {
+      return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+    return new Date(dateStr);
+  };
+
+  const formatLocalDate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
   const handleOpenDuplicateModal = (task: Task) => {
     setTaskToDuplicate(task);
-    setDuplicateTargetPlanId(task.planId || (plans[0] ? plans[0].id : ""));
+    setDuplicateTitle(`${task.title} (Cópia)`);
+    const activePlan = plans.find(p => p.isActive);
+    setDuplicateTargetPlanId(task.planId || activePlan?.id || (plans[0] ? plans[0].id : ""));
+
+    // Define data de início sugerida (hoje no formato YYYY-MM-DD)
+    const today = new Date();
+    const todayStr = formatLocalDate(today);
+    setDuplicateStartDate(todayStr);
+
+    // Se a tarefa original possuía datas de início e término, projeta a nova data de término mantendo a mesma duração em dias
+    if (task.startDate && task.endDate) {
+      const origStart = parseLocalDate(task.startDate);
+      const origEnd = parseLocalDate(task.endDate);
+      const diffTime = origEnd.getTime() - origStart.getTime();
+      if (!isNaN(diffTime) && diffTime >= 0) {
+        const newEndDate = new Date(today.getTime() + diffTime);
+        setDuplicateEndDate(formatLocalDate(newEndDate));
+      } else {
+        setDuplicateEndDate("");
+      }
+    } else {
+      setDuplicateEndDate("");
+    }
+
+    setDuplicateSeiProcess(task.seiProcess || "");
+    setDuplicateAreaId(task.areaId !== undefined && task.areaId !== null ? task.areaId : (task.areaIds?.[0] ?? ""));
+    setDuplicateResponsibleIds(Array.isArray(task.responsibleIds) ? [...task.responsibleIds] : []);
+
     const hasSubs = tasks.some(t => Number(t.parentId) === Number(task.id));
     setDuplicateIncludeSubtasks(hasSubs);
+    setDuplicateIncludeChecklist(Array.isArray(task.checklist) && task.checklist.length > 0);
+    setDuplicateIncludeLinks(Array.isArray(task.links) && task.links.length > 0);
     setDuplicateModalOpen(true);
+  };
+
+  const handleDuplicateStartDateChange = (newStart: string) => {
+    setDuplicateStartDate(newStart);
+    if (taskToDuplicate?.startDate && taskToDuplicate?.endDate && newStart) {
+      const origStart = parseLocalDate(taskToDuplicate.startDate);
+      const origEnd = parseLocalDate(taskToDuplicate.endDate);
+      const diffTime = origEnd.getTime() - origStart.getTime();
+      if (!isNaN(diffTime) && diffTime >= 0) {
+        const targetStartDate = parseLocalDate(newStart);
+        const newEndDate = new Date(targetStartDate.getTime() + diffTime);
+        setDuplicateEndDate(formatLocalDate(newEndDate));
+      }
+    }
   };
 
   const executeDuplicateTask = async () => {
     if (!taskToDuplicate) return;
+    if (!duplicateTitle.trim()) {
+      showToast("Validação", "Por favor, informe o título da tarefa.", "warning");
+      return;
+    }
     if (!duplicateTargetPlanId) {
       showToast("Validação", "Selecione o Plano de Atividades de destino.", "warning");
+      return;
+    }
+    if (!duplicateStartDate) {
+      showToast("Validação", "Por favor, defina a nova data de início.", "warning");
       return;
     }
 
     setIsDuplicating(true);
     try {
+      // Diferença temporal em milissegundos entre a data original e a nova data de início para replicar nas subtarefas
+      let timeDiffMs: number | null = null;
+      if (taskToDuplicate.startDate && duplicateStartDate) {
+        const origS = parseLocalDate(taskToDuplicate.startDate).getTime();
+        const newS = parseLocalDate(duplicateStartDate).getTime();
+        if (!isNaN(origS) && !isNaN(newS)) {
+          timeDiffMs = newS - origS;
+        }
+      }
+
+      // Preparar itens de checklist se habilitado
+      let preparedChecklist: ChecklistItem[] = [];
+      if (duplicateIncludeChecklist && Array.isArray(taskToDuplicate.checklist)) {
+        preparedChecklist = taskToDuplicate.checklist.map((c, idx) => ({
+          ...c,
+          id: `chk-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+          completed: false
+        }));
+      }
+
+      // Preparar links se habilitado
+      let preparedLinks: TaskLink[] = [];
+      if (duplicateIncludeLinks && Array.isArray(taskToDuplicate.links)) {
+        preparedLinks = taskToDuplicate.links.map((l, idx) => ({
+          ...l,
+          id: `link-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+          createdAt: new Date().toISOString()
+        }));
+      }
+
       const parentPayload = {
         ...taskToDuplicate,
         id: undefined,
-        planId: duplicateTargetPlanId,
+        title: duplicateTitle.trim(),
+        planId: Number(duplicateTargetPlanId),
+        areaId: duplicateAreaId !== "" ? Number(duplicateAreaId) : null,
+        areaIds: duplicateAreaId !== "" ? [Number(duplicateAreaId)] : [],
+        responsibleIds: duplicateResponsibleIds,
+        seiProcess: duplicateSeiProcess.trim() || undefined,
         parentId: null,
-        startDate: null,
-        endDate: null,
+        startDate: duplicateStartDate,
+        endDate: duplicateEndDate || null,
         progress: 0,
         status: "Não iniciada",
+        checklist: preparedChecklist,
+        links: preparedLinks,
         comments: [],
+        completedAt: null,
+        completedBy: null,
         updatedBy: currentUser?.name || "Administrador",
+        createdBy: currentUser?.name || "Administrador",
         createdAt: new Date().toISOString()
       };
 
@@ -1276,33 +1385,101 @@ export function PlanningTab({
 
       const newParentId = resData.data.id;
 
+      // Duplicar subtarefas vinculadas se selecionado
       if (duplicateIncludeSubtasks) {
-        const subtasks = tasks.filter(t => Number(t.parentId) === Number(taskToDuplicate.id));
+        const getAllDescendants = (parentId: number): Task[] => {
+          const direct = tasks.filter(t => Number(t.parentId) === Number(parentId));
+          let allDesc: Task[] = [...direct];
+          for (const d of direct) {
+            allDesc = allDesc.concat(getAllDescendants(d.id));
+          }
+          return allDesc;
+        };
+
+        const subtasks = getAllDescendants(taskToDuplicate.id);
+        const oldIdToNewId = new Map<number, number>();
+        oldIdToNewId.set(Number(taskToDuplicate.id), Number(newParentId));
+
         for (const sub of subtasks) {
+          const mappedParentId = oldIdToNewId.get(Number(sub.parentId)) || newParentId;
+
+          let subStart: string | null = null;
+          let subEnd: string | null = null;
+
+          if (sub.startDate && timeDiffMs !== null) {
+            const origSubS = parseLocalDate(sub.startDate).getTime();
+            const shiftedS = new Date(origSubS + timeDiffMs);
+            subStart = formatLocalDate(shiftedS);
+          } else if (duplicateStartDate) {
+            subStart = duplicateStartDate;
+          }
+
+          if (sub.endDate && timeDiffMs !== null) {
+            const origSubE = parseLocalDate(sub.endDate).getTime();
+            const shiftedE = new Date(origSubE + timeDiffMs);
+            subEnd = formatLocalDate(shiftedE);
+          } else if (duplicateEndDate) {
+            subEnd = duplicateEndDate;
+          }
+
+          let subChecklist: ChecklistItem[] = [];
+          if (duplicateIncludeChecklist && Array.isArray(sub.checklist)) {
+            subChecklist = sub.checklist.map((c, idx) => ({
+              ...c,
+              id: `chk-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+              completed: false
+            }));
+          }
+
+          let subLinks: TaskLink[] = [];
+          if (duplicateIncludeLinks && Array.isArray(sub.links)) {
+            subLinks = sub.links.map((l, idx) => ({
+              ...l,
+              id: `link-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+              createdAt: new Date().toISOString()
+            }));
+          }
+
+          const subAreaId = sub.areaId !== undefined && sub.areaId !== null ? sub.areaId : (duplicateAreaId !== "" ? Number(duplicateAreaId) : null);
+          const subAreaIds = sub.areaIds && sub.areaIds.length > 0 ? sub.areaIds : (subAreaId ? [subAreaId] : []);
+
           const subPayload = {
             ...sub,
             id: undefined,
-            planId: duplicateTargetPlanId,
-            parentId: newParentId,
-            startDate: null,
-            endDate: null,
+            title: sub.title,
+            planId: Number(duplicateTargetPlanId),
+            areaId: subAreaId,
+            areaIds: subAreaIds,
+            responsibleIds: sub.responsibleIds || duplicateResponsibleIds,
+            parentId: mappedParentId,
+            startDate: subStart,
+            endDate: subEnd,
             progress: 0,
             status: "Não iniciada",
+            checklist: subChecklist,
+            links: subLinks,
             comments: [],
+            completedAt: null,
+            completedBy: null,
             updatedBy: currentUser?.name || "Administrador",
+            createdBy: currentUser?.name || "Administrador",
             createdAt: new Date().toISOString()
           };
 
-          await fetch("/api/tasks", {
+          const subRes = await fetch("/api/tasks", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(subPayload)
           });
+          const subResData = await subRes.json();
+          if (subResData.success && subResData.data) {
+            oldIdToNewId.set(Number(sub.id), Number(subResData.data.id));
+          }
         }
       }
 
       await reloadTasks();
-      showToast("Sucesso", "Atividade duplicada com sucesso! Datas e progresso redefinidos.", "success");
+      showToast("Sucesso", "Atividade duplicada com sucesso com nova data de início!", "success");
       setDuplicateModalOpen(false);
       setTaskToDuplicate(null);
     } catch (err: any) {
@@ -1311,6 +1488,296 @@ export function PlanningTab({
     } finally {
       setIsDuplicating(false);
     }
+  };
+
+  const renderDuplicateTaskModal = () => {
+    if (!duplicateModalOpen || !taskToDuplicate) return null;
+
+    const origDuration = (() => {
+      if (!taskToDuplicate.startDate || !taskToDuplicate.endDate) return null;
+      const s = parseLocalDate(taskToDuplicate.startDate);
+      const e = parseLocalDate(taskToDuplicate.endDate);
+      const diff = Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
+      return diff >= 0 ? diff : null;
+    })();
+
+    const childTasksCount = tasks.filter(t => Number(t.parentId) === Number(taskToDuplicate.id)).length;
+
+    return (
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[130] flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 text-left overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+                <Copy size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-850">Duplicar Atividade</h3>
+                <p className="text-xs text-slate-500 truncate max-w-sm sm:max-w-md">
+                  Cópia e reprogramação de: <strong className="text-slate-700">{taskToDuplicate.title}</strong>
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setDuplicateModalOpen(false)}
+              className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
+              title="Fechar"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="p-6 overflow-y-auto space-y-5 flex-1">
+            {/* 1. Título da Nova Tarefa */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Título da Nova Atividade <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={duplicateTitle}
+                onChange={(e) => setDuplicateTitle(e.target.value)}
+                placeholder="Nome da atividade duplicada..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+              />
+            </div>
+
+            {/* 2. Plano de Destino */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Plano de Atividades de Destino <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={duplicateTargetPlanId}
+                onChange={(e) => setDuplicateTargetPlanId(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+              >
+                <option value="">Selecione o plano...</option>
+                {plans.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p.isActive ? "(Ativo)" : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-400 mt-1">A nova atividade será cadastrada no plano de trabalho selecionado.</p>
+            </div>
+
+            {/* 3. Bloco em Destaque: Nova Data de Início e Término */}
+            <div className="p-4 bg-indigo-50/60 border border-indigo-200/80 rounded-2xl space-y-3 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CalendarDays size={16} className="text-indigo-600" />
+                  <span className="text-xs font-black text-indigo-950 uppercase tracking-wide">
+                    Programação Temporal e Prazos
+                  </span>
+                </div>
+                {origDuration !== null && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-indigo-100/70 text-indigo-800 border border-indigo-200">
+                    Duração original: {origDuration} {origDuration === 1 ? "dia" : "dias"}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-indigo-950 uppercase tracking-wider mb-1.5">
+                    Nova Data de Início <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={duplicateStartDate}
+                    onChange={(e) => handleDuplicateStartDateChange(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border-2 border-indigo-400 bg-white text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                  />
+                  <p className="text-[10px] text-indigo-700 font-medium mt-1">
+                    Defina a data para o início do novo ciclo da atividade.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Nova Data de Término
+                  </label>
+                  <input
+                    type="date"
+                    value={duplicateEndDate}
+                    onChange={(e) => setDuplicateEndDate(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Calculada automaticamente mantendo a duração original ou ajustável manualmente.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Macroárea e Processo SEI */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Macroárea / Área Temática
+                </label>
+                <select
+                  value={duplicateAreaId}
+                  onChange={(e) => setDuplicateAreaId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                >
+                  <option value="">Selecione a macroárea...</option>
+                  {areas.map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Processo SEI
+                </label>
+                <input
+                  type="text"
+                  value={duplicateSeiProcess}
+                  onChange={(e) => setDuplicateSeiProcess(e.target.value)}
+                  placeholder="Ex: 00197-00000000/2026-00"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                />
+              </div>
+            </div>
+
+            {/* 5. Responsáveis */}
+            {responsibles && responsibles.length > 0 && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Responsáveis Vinculados
+                </label>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex flex-wrap gap-2 max-h-36 overflow-y-auto">
+                  {responsibles.map(r => {
+                    const isSelected = duplicateResponsibleIds.includes(r.id);
+                    return (
+                      <button
+                        type="button"
+                        key={r.id}
+                        onClick={() => {
+                          if (isSelected) {
+                            setDuplicateResponsibleIds(duplicateResponsibleIds.filter(id => id !== r.id));
+                          } else {
+                            setDuplicateResponsibleIds([...duplicateResponsibleIds, r.id]);
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                          isSelected
+                            ? "bg-indigo-600 text-white border-indigo-700 shadow-2xs"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                        }`}
+                      >
+                        <span>{r.name}</span>
+                        {isSelected && <Check size={12} className="stroke-[3]" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 6. Opções de Cópia / Checkboxes */}
+            <div className="space-y-2 pt-1">
+              {childTasksCount > 0 && (
+                <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-2xl">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={duplicateIncludeSubtasks}
+                      onChange={(e) => setDuplicateIncludeSubtasks(e.target.checked)}
+                      className="mt-0.5 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-black text-slate-800 leading-snug">
+                        Duplicar subtarefas vinculadas ({childTasksCount} filhas diretas)
+                      </span>
+                      <p className="text-[11px] text-slate-600 mt-0.5">
+                        As subtarefas serão duplicadas mantendo a hierarquia completa e seus prazos serão reprogramados proporcionalmente à nova data de início.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
+
+              {taskToDuplicate.checklist && taskToDuplicate.checklist.length > 0 && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={duplicateIncludeChecklist}
+                      onChange={(e) => setDuplicateIncludeChecklist(e.target.checked)}
+                      className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-black text-slate-800 leading-snug">
+                        Duplicar itens do checklist ({taskToDuplicate.checklist.length} etapas)
+                      </span>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        As etapas serão reiniciadas com status pendente (desmarcadas) para o novo ciclo.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
+
+              {taskToDuplicate.links && taskToDuplicate.links.length > 0 && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={duplicateIncludeLinks}
+                      onChange={(e) => setDuplicateIncludeLinks(e.target.checked)}
+                      className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-black text-slate-800 leading-snug">
+                        Manter links e referências externas ({taskToDuplicate.links.length} links)
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Banner de Boas Práticas e Regras */}
+            <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-2xl text-[11px] text-amber-900 leading-relaxed flex items-start gap-2.5">
+              <Info size={16} className="text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong>Regras de Duplicação:</strong> O progresso da nova atividade iniciará em <strong>0%</strong>, com status <strong>"Não iniciada"</strong>. O histórico de comentários e logs antigos não é transferido para garantir um novo ciclo limpo.
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/70">
+            <button
+              type="button"
+              onClick={() => setDuplicateModalOpen(false)}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold transition-all cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={executeDuplicateTask}
+              disabled={isDuplicating || !duplicateTargetPlanId || !duplicateStartDate || !duplicateTitle.trim()}
+              className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold shadow-md transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer active:scale-95"
+            >
+              <Copy size={14} />
+              <span>{isDuplicating ? "Duplicando..." : "Confirmar Duplicação"}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   
@@ -1625,7 +2092,7 @@ export function PlanningTab({
   const [tableScrollWidth, setTableScrollWidth] = useState(0);
 
   useEffect(() => {
-    if ((viewMode === "table" || viewMode === "gantt") && contentScrollTableRef.current) {
+    if (viewMode === "gantt" && contentScrollTableRef.current) {
       const el = contentScrollTableRef.current;
       const updateWidth = () => {
         setTableScrollWidth(el.scrollWidth);
@@ -2444,7 +2911,7 @@ export function PlanningTab({
 
         // 3. Reset all other filters so user starts fresh
         if (isMyTasksSelected) {
-          setViewMode(prev => ["area", "responsible", "table", "gantt"].includes(prev) ? "board" : prev);
+          setViewMode(prev => (["area", "responsible", "gantt"].includes(prev as any) ? "board" : prev));
         }
         setStatusFilter(defaultStatusFilter);
         setSituationFilter("all");
@@ -2730,6 +3197,13 @@ export function PlanningTab({
 
   // Groups expand/collapse containers state (keyed by `${viewMode}-${groupId}`)
   const [expandedGroupContainers, setExpandedGroupContainers] = useState<Record<string, boolean>>({});
+
+  // Active segment button state for grouped views ("all" or specific segment id)
+  const [activeRecentSegment, setActiveRecentSegment] = useState<string>("all");
+  const [activeStatusSegment, setActiveStatusSegment] = useState<string>("all");
+  const [activeCategorySegment, setActiveCategorySegment] = useState<string | number>("all");
+  const [activeAreaSegment, setActiveAreaSegment] = useState<string | number>("all");
+  const [activeRecursoSegment, setActiveRecursoSegment] = useState<string>("all");
 
   const toggleGroupContainer = (viewType: string, groupId: string | number) => {
     const key = `${viewType}-${groupId}`;
@@ -11325,17 +11799,30 @@ export function PlanningTab({
                           >
                             <Activity size={14} className="text-indigo-600" />
                           </button>
-                          <button
-                            onClick={() => {
-                              setSelectedDashboardMonthDeliveries(null);
-                              handleEditTask(task);
-                            }}
-                            className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-800 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs group/btn"
-                            title="Abrir formulário para editar esta atividade"
-                          >
-                            <Edit3 size={13} className="text-slate-400 group-hover/btn:text-emerald-600 transition-colors" />
-                            <span>Detalhes</span>
-                          </button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => {
+                                setSelectedDashboardMonthDeliveries(null);
+                                handleOpenDuplicateModal(task);
+                              }}
+                              className="px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                              title="Duplicar atividade com nova data de início"
+                            >
+                              <Copy size={13} className="text-indigo-600" />
+                              <span>Duplicar</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedDashboardMonthDeliveries(null);
+                                handleEditTask(task);
+                              }}
+                              className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-800 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs group/btn"
+                              title="Abrir formulário para editar esta atividade"
+                            >
+                              <Edit3 size={13} className="text-slate-400 group-hover/btn:text-emerald-600 transition-colors" />
+                              <span>Detalhes</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -11724,15 +12211,28 @@ export function PlanningTab({
                             </div>
                           </div>
 
-                          {/* Botão de Ação Direta para Editar Atividade */}
-                          <button
-                            onClick={handleTaskOpen}
-                            className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-slate-700 hover:text-indigo-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 group/open shadow-2xs"
-                            title="Abrir formulário para editar esta atividade"
-                          >
-                            <Edit3 size={13} className="text-slate-400 group-hover/open:text-indigo-600 transition-colors" />
-                            <span>Editar Atividade</span>
-                          </button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                closeStatusModal();
+                                handleOpenDuplicateModal(task);
+                              }}
+                              className="px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                              title="Duplicar atividade com nova data de início"
+                            >
+                              <Copy size={13} className="text-indigo-600" />
+                              <span>Duplicar</span>
+                            </button>
+                            <button
+                              onClick={handleTaskOpen}
+                              className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-slate-700 hover:text-indigo-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer group/open shadow-2xs"
+                              title="Abrir formulário para editar esta atividade"
+                            >
+                              <Edit3 size={13} className="text-slate-400 group-hover/open:text-indigo-600 transition-colors" />
+                              <span>Editar Atividade</span>
+                            </button>
+                          </div>
                         </div>
                       );
                     })
@@ -11780,90 +12280,8 @@ export function PlanningTab({
           )}
         </AnimatePresence>
 
-        {/* Duplicate Task Modal */}
-        {duplicateModalOpen && taskToDuplicate && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[120] flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-6 text-left">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
-                    <Copy size={20} />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-black text-slate-800">Duplicar Atividade</h3>
-                    <p className="text-xs text-slate-500 truncate max-w-[240px]">{taskToDuplicate.title}</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setDuplicateModalOpen(false)}
-                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Plano de Atividades de Destino *
-                  </label>
-                  <select
-                    value={duplicateTargetPlanId}
-                    onChange={(e) => setDuplicateTargetPlanId(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">Selecione o plano...</option>
-                    {plans.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} {p.isActive ? "(Ativo)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-slate-500 mt-1">A nova atividade será vinculada ao plano selecionado.</p>
-                </div>
-
-                {tasks.some(t => Number(t.parentId) === Number(taskToDuplicate.id)) && (
-                  <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl space-y-2">
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={duplicateIncludeSubtasks}
-                        onChange={(e) => setDuplicateIncludeSubtasks(e.target.checked)}
-                        className="mt-0.5 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                      />
-                      <span className="text-xs font-bold text-slate-800 leading-snug">
-                        Duplicar subtarefas vinculadas ({tasks.filter(t => Number(t.parentId) === Number(taskToDuplicate.id)).length})
-                      </span>
-                    </label>
-                    <p className="text-[11px] text-slate-600 pl-7 leading-relaxed">
-                      As subtarefas filhas também serão duplicadas e vinculadas à nova atividade pai.
-                    </p>
-                  </div>
-                )}
-
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 leading-relaxed">
-                  <strong>Nota:</strong> As datas de início, término e o progresso da(s) tarefa(s) duplicada(s) virão vazios/nulos para posterior preenchimento. Demais atributos serão copiados integralmente.
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
-                <button
-                  onClick={() => setDuplicateModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={executeDuplicateTask}
-                  disabled={isDuplicating || !duplicateTargetPlanId}
-                  className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isDuplicating ? "Duplicando..." : "Confirmar Duplicação"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Complete Duplicate Task Modal */}
+        {renderDuplicateTaskModal()}
 
       </div>
     );
@@ -12058,7 +12476,7 @@ export function PlanningTab({
                     </button>
                     <button
                       onClick={openModelGenModal}
-                      className="flex items-center justify-center gap-2 px-5 py-2.5 whitespace-nowrap bg-indigo-600 text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+                      className="flex items-center justify-center gap-2 px-5 py-2.5 whitespace-nowrap bg-adasa-dark text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-adasa-hover transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer border border-white/20"
                       title="Criar fluxo estruturado de atividades a partir de um modelo de processo"
                     >
                       <Copy size={16} /> Criar Atividade Via Modelo
@@ -12464,7 +12882,7 @@ export function PlanningTab({
                  </button>
                   <button
                     onClick={openModelGenModal}
-                    className="flex items-center justify-center gap-2 px-5 py-2.5 whitespace-nowrap bg-indigo-600 text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+                    className="flex items-center justify-center gap-2 px-5 py-2.5 whitespace-nowrap bg-adasa-dark text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-adasa-hover transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer border border-white/20"
                     title="Criar fluxo estruturado de atividades a partir de um modelo de processo"
                   >
                     <Copy size={16} /> Criar Atividade Via Modelo
@@ -12616,25 +13034,25 @@ export function PlanningTab({
                   <div className="flex flex-wrap items-center justify-center gap-2 overflow-x-auto pb-1 xl:pb-0 w-full">
                     <button
                       onClick={() => { setViewMode("board"); setTimelineTaskId(null); }}
-                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "board" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "board" && timelineTaskId === null ? "bg-adasa-mid text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                     >
                       <LayoutGrid size={16} /> Quadro
                     </button>
                     <button
                       onClick={() => { setViewMode("tree"); setTimelineTaskId(null); }}
-                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "tree" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "tree" && timelineTaskId === null ? "bg-adasa-mid text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                     >
                       <FolderKanban size={16} /> Recentes
                     </button>
                     <button
                       onClick={() => { setViewMode("category"); setTimelineTaskId(null); }}
-                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "category" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "category" && timelineTaskId === null ? "bg-adasa-mid text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                     >
                       <Tag size={16} /> Categorias
                     </button>
                     <button
                       onClick={() => { setViewMode("status"); setTimelineTaskId(null); }}
-                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "status" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "status" && timelineTaskId === null ? "bg-adasa-mid text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                     >
                       <CheckCircle2 size={16} /> Status
                     </button>
@@ -12642,39 +13060,27 @@ export function PlanningTab({
                       <>
                         <button
                           onClick={() => { setViewMode("area"); setTimelineTaskId(null); }}
-                          className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "area" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                          className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "area" && timelineTaskId === null ? "bg-adasa-mid text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                         >
                           <Briefcase size={16} /> Áreas
                         </button>
                         <button
                           onClick={() => { setViewMode("responsible"); setTimelineTaskId(null); }}
-                          className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "responsible" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                          className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "responsible" && timelineTaskId === null ? "bg-adasa-mid text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                         >
                           <Users size={16} /> Responsáveis
                         </button>
                         <button
-                          onClick={() => { setViewMode("table"); setTimelineTaskId(null); }}
-                          className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "table" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
-                        >
-                          <Table size={16} /> Tabela
-                        </button>
-                        <button
                           onClick={() => { setViewMode("gantt"); setTimelineTaskId(null); }}
-                          className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "gantt" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                          className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "gantt" && timelineTaskId === null ? "bg-adasa-mid text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                         >
                           <CalendarRange size={16} /> Gantt
                         </button>
                       </>
                     )}
                     <button
-                      onClick={() => { setViewMode("calendar"); setTimelineTaskId(null); }}
-                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "calendar" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
-                    >
-                      <Calendar size={16} /> Calendário
-                    </button>
-                    <button
                       onClick={() => { setViewMode("recurso"); setTimelineTaskId(null); }}
-                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "recurso" && timelineTaskId === null ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "recurso" && timelineTaskId === null ? "bg-adasa-mid text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                     >
                       <Layers size={16} /> Tipo de Atividade
                     </button>
@@ -12690,11 +13096,11 @@ export function PlanningTab({
                   </div>
                 </div>
 
-              {["status", "category", "area", "responsible", "tree", "recurso"].includes(viewMode) && (
+              {viewMode === "responsible" && (
                 <div className="flex flex-col sm:flex-row items-center gap-3 justify-between bg-slate-50 border border-slate-200/80 rounded-2xl p-3 px-4 shadow-xs mt-2 select-none">
                   <div className="flex items-center gap-2">
                     <Layers size={15} className="text-indigo-500" />
-                    <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">{viewMode === "tree" ? "Painel de Atividades Mais Recentes (CRIADAS OU EDITADAS)" : `Painel de Agrupamento (${viewMode === "status" ? "Status" : viewMode === "category" ? "Categorias" : viewMode === "area" ? "Áreas" : viewMode === "recurso" ? "Tipo de Atividade" : "Responsáveis"})`}</span>
+                    <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Painel de Agrupamento (Responsáveis)</span>
                   </div>
                   <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                     <button
@@ -12763,508 +13169,341 @@ export function PlanningTab({
                   );
                 }
 
+                const activeGroup = groups.find(g => g.id === activeRecentSegment);
+                const displayTasks = activeRecentSegment === "all"
+                  ? groups.flatMap(g => g.tasks)
+                  : (activeGroup ? activeGroup.tasks : groups.flatMap(g => g.tasks));
+
                 return (
-                  <div className="space-y-4 mt-2">
-                    {groups.map(group => {
-                      if (group.tasks.length === 0) return null;
-                      return (
-                        <div key={group.id} className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm">
-                           <div 
-                             onClick={() => toggleGroupContainer("recent", group.id)}
-                             className="bg-adasa-mid hover:bg-adasa-dark border-b border-adasa-dark/20 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
-                           >
-                             <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
-                                {expandedGroupContainers[`recent-${group.id}`] !== false ? <ChevronDown size={14} className="text-white/80 stroke-[2.5]" /> : <ChevronRight size={14} className="text-white/80 stroke-[2.5]" />}
-                                <Clock size={14} className="text-white/80" />
-                                {group.name}
-                             </h3>
-                             <span className="bg-white/20 border border-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{group.tasks.length} tarefas</span>
-                           </div>
-                           {expandedGroupContainers[`recent-${group.id}`] !== false && (
-                             <div className="divide-y divide-slate-100 flex flex-col items-stretch justify-start min-h-0 w-full overflow-hidden">
-                               {group.tasks.map(t => renderTaskNode(t.root, 0, false))}
-                             </div>
-                           )}
+                  <div className="space-y-4">
+                    {/* Box de Segmentação (Recentes) */}
+                    <div className="bg-white border border-slate-200/80 rounded-[2rem] p-6 shadow-sm space-y-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="border-l-4 border-adasa-mid pl-2.5 py-0.5">
+                          <h3 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-widest">
+                            Segmentação
+                          </h3>
                         </div>
-                      )
-                    })}
+                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          {displayTasks.length} {displayTasks.length === 1 ? "atividade exibida" : "atividades exibidas"}
+                        </div>
+                      </div>
+
+                      {/* Segmentation Buttons */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 w-full flex items-center justify-center">
+                        <div className="flex flex-wrap items-center justify-center gap-2 overflow-x-auto pb-1 xl:pb-0 w-full">
+                          <button
+                            type="button"
+                            onClick={() => setActiveRecentSegment("all")}
+                            className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${
+                              activeRecentSegment === "all"
+                                ? "bg-adasa-mid text-white"
+                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                            }`}
+                          >
+                            <Layers size={16} />
+                            Todos
+                            <span className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${activeRecentSegment === "all" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600 border border-slate-200/60"}`}>
+                              {mappedRootTasks.length}
+                            </span>
+                          </button>
+
+                          {groups.map(group => {
+                            const isSelected = activeRecentSegment === group.id;
+                            return (
+                              <button
+                                key={group.id}
+                                type="button"
+                                onClick={() => setActiveRecentSegment(group.id)}
+                                className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${
+                                  isSelected
+                                    ? "bg-adasa-mid text-white"
+                                    : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                                }`}
+                              >
+                                <Clock size={16} />
+                                {group.name}
+                                <span className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600 border border-slate-200/60"}`}>
+                                  {group.tasks.length}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tasks Content List */}
+                    {displayTasks.length === 0 ? (
+                      <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white p-12 text-center text-slate-400 text-sm">
+                        Nenhuma tarefa neste período.
+                      </div>
+                    ) : (
+                      <div className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm divide-y divide-slate-100">
+                        {displayTasks.map(t => renderTaskNode(t.root, 0, false))}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
-              {viewMode === "table" && (() => {
-                  let flatTasks = [...enhancedTasks].filter(t => matchesFilters(t));
-                  
-                  if (tableSort) {
-                    flatTasks.sort((a, b) => {
-                       let valA: any = "";
-                       let valB: any = "";
-                       
-                       if (tableSort.field === "title") {
-                          valA = getTaskDisplayName(a);
-                          valB = getTaskDisplayName(b);
-                       } else if (tableSort.field === "area") {
-                          valA = (a.areaIds || []).map(id => areas.find(x => x.id === id)?.name || "").join(", ");
-                          valB = (b.areaIds || []).map(id => areas.find(x => x.id === id)?.name || "").join(", ");
-                       } else if (tableSort.field === "category") {
-                          valA = (a.categoryIds || []).map(id => categories.find(x => x.id === id)?.name || "").join(", ");
-                          valB = (b.categoryIds || []).map(id => categories.find(x => x.id === id)?.name || "").join(", ");
-                       } else if (tableSort.field === "responsibles") {
-                          valA = (a.responsibleIds || []).map(id => responsibles.find(x => x.id === id)?.name || "").join(", ");
-                          valB = (b.responsibleIds || []).map(id => responsibles.find(x => x.id === id)?.name || "").join(", ");
-                       } else if (tableSort.field === "progress") {
-                          valA = a.progress || 0;
-                          valB = b.progress || 0;
-                       } else if (tableSort.field === "status") {
-                          valA = normalizeStatus(a.status);
-                          valB = normalizeStatus(b.status);
-                       } else if (tableSort.field === "situation") {
-                          valA = getDeadlineStatus(a.endDate, a.status);
-                          valB = getDeadlineStatus(b.endDate, b.status);
-                       } else if (tableSort.field === "isProgrammed") {
-                          valA = a.isProgrammed !== false ? 1 : 0;
-                          valB = b.isProgrammed !== false ? 1 : 0;
-                       } else if (tableSort.field === "priority") {
-                          const getPrioValue = (tk: Task) => {
-                            if (tk.priority === "Alta") return 1;
-                            if (tk.priority === "Média") return 2;
-                            if (tk.priority === "Baixa") return 3;
-                            return 4;
-                          };
-                          valA = getPrioValue(a);
-                          valB = getPrioValue(b);
-                       } else if (tableSort.field === "start") {
-                          valA = a.startDate || "9999-99-99";
-                          valB = b.startDate || "9999-99-99";
-                       } else if (tableSort.field === "end") {
-                          const getEffectiveEnd = (tk: Task) => {
-                             let sourceTask = tk;
-                             if (tk.parentId) {
-                                 const parent = flatTasks.find(t => t.id === tk.parentId) || tasks.find(t => t.id === tk.parentId);
-                                 if (parent) sourceTask = parent;
-                             }
-                             return sourceTask.endDate || "9999-99-99";
-                          };
-                          valA = getEffectiveEnd(a);
-                          valB = getEffectiveEnd(b);
-                       } else if (tableSort.field === "duration") {
-                          const durA = calculateDurationInDays(a.startDate, a.endDate) ?? -1;
-                          const durB = calculateDurationInDays(b.startDate, b.endDate) ?? -1;
-                          valA = durA;
-                          valB = durB;
-                       }
-                       
-                       if (valA < valB) return tableSort.dir === "asc" ? -1 : 1;
-                       if (valA > valB) return tableSort.dir === "asc" ? 1 : -1;
-                       return 0;
-                    });
-                  }
-
-                  const handleSort = (field: string) => {
-                     setTableSort(prev => {
-                        if (prev?.field === field) {
-                           return prev.dir === "asc" ? { field, dir: "desc" } : null;
-                        }
-                        return { field, dir: "asc" };
-                     });
-                  };
-
-                  const SortIcon = ({ field }: { field: string }) => {
-                     if (tableSort?.field !== field) return <ChevronDown size={14} className="opacity-30" />;
-                     return tableSort.dir === "asc" ? <ChevronUp size={14} className="text-indigo-600" /> : <ChevronDown size={14} className="text-indigo-600" />;
-                  };
-
-                  return (
-                    <div className="space-y-3">
-                      {/* Top horizontal scrollbar bar, only displayed if we have a scrollable table */}
-                      {tableScrollWidth > 0 && (
-                        <div 
-                          ref={topScrollTableRef}
-                          onScroll={handleTopTableScroll}
-                          className="hidden lg:block overflow-x-auto w-full scrollbar-thin bg-slate-50 border border-slate-200/60 p-1.5 rounded-xl mb-1"
-                        >
-                          <div style={{ width: `${tableScrollWidth}px` }} className="h-1 bg-transparent" />
-                        </div>
-                      )}
-                      <div ref={contentScrollTableRef} onScroll={handleContentTableScroll} className="overflow-x-auto rounded-xl border border-slate-200 mt-2 bg-white shadow-sm scrollbar-thin scrollbar-thumb-slate-300">
-                       <table className="w-full text-left text-xs border-collapse min-w-[1250px]">
-                         <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-black">
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none min-w-[500px]" onClick={() => handleSort("title")}>
-                                <div className="flex items-center gap-1.5">Atividade <SortIcon field="title" /></div>
-                              </th>
-                              <th className="px-4 py-3 text-center w-24">Timeline</th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center whitespace-nowrap min-w-[110px]" onClick={() => handleSort("situation")}>
-                                <div className="flex items-center justify-center gap-1.5">Situação <SortIcon field="situation" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none min-w-[140px]" onClick={() => handleSort("progress")}>
-                                <div className="flex items-center gap-1.5">Progresso <SortIcon field="progress" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none" onClick={() => handleSort("area")}>
-                                <div className="flex items-center gap-1.5">Área <SortIcon field="area" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none" onClick={() => handleSort("category")}>
-                                <div className="flex items-center gap-1.5">Categoria <SortIcon field="category" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none" onClick={() => handleSort("responsibles")}>
-                                <div className="flex items-center gap-1.5">Responsáveis <SortIcon field="responsibles" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none" onClick={() => handleSort("start")}>
-                                <div className="flex items-center gap-1.5">Início <SortIcon field="start" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none" onClick={() => handleSort("end")}>
-                                <div className="flex items-center gap-1.5">Prazo <SortIcon field="end" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center whitespace-nowrap" onClick={() => handleSort("duration")}>
-                                <div className="flex items-center justify-center gap-1.5">Duração <SortIcon field="duration" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center whitespace-nowrap min-w-[110px]" onClick={() => handleSort("priority")}>
-                                <div className="flex items-center justify-center gap-1.5">Prioridade <SortIcon field="priority" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center whitespace-nowrap min-w-[125px]" onClick={() => handleSort("isProgrammed")}>
-                                <div className="flex items-center justify-center gap-1.5">Programação <SortIcon field="isProgrammed" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center whitespace-nowrap min-w-[125px]" onClick={() => handleSort("status")}>
-                                <div className="flex items-center justify-center gap-1.5">Status <SortIcon field="status" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center" onClick={() => handleSort("createdBy")}>
-                                <div className="flex items-center justify-center gap-1.5">Criado por <SortIcon field="createdBy" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center" onClick={() => handleSort("createdAt")}>
-                                <div className="flex items-center justify-center gap-1.5">Criado em <SortIcon field="createdAt" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center" onClick={() => handleSort("completedBy")}>
-                                <div className="flex items-center justify-center gap-1.5">Concluída por <SortIcon field="completedBy" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center" onClick={() => handleSort("completedAt")}>
-                                <div className="flex items-center justify-center gap-1.5">Concluído em <SortIcon field="completedAt" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center" onClick={() => handleSort("updatedBy")}>
-                                <div className="flex items-center justify-center gap-1.5">Atualizado por <SortIcon field="updatedBy" /></div>
-                              </th>
-                              <th className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none text-center" onClick={() => handleSort("updatedAt")}>
-                                <div className="flex items-center justify-center gap-1.5">Atualizado em <SortIcon field="updatedAt" /></div>
-                              </th>
-                            </tr>
-                          </thead>
-                         <tbody className="divide-y divide-slate-100">
-                           {flatTasks.length === 0 ? (
-                             <tr>
-                               <td colSpan={12} className="text-center py-12 text-slate-400 font-medium">Nenhuma tarefa encontrada.</td>
-                             </tr>
-                           ) : flatTasks.map(task => {
-                               const taskChildrenCount = childrenMap[task.id]?.length || 0;
-                               const normStatus = normalizeStatus(task.status);
-                               const dlStatus = getDeadlineStatus(task.endDate, task.status);
-                               const rowBorderColor = dlStatus === "Atrasada"
-                                 ? "!border-l-[5px] !border-l-rose-500"
-                                 : dlStatus === "Crítica"
-                                 ? "!border-l-[5px] !border-l-amber-400"
-                                 : "!border-l-[5px] !border-l-emerald-500";
-                               const rowBgClass = dlStatus === "Atrasada"
-                                 ? "bg-rose-50/10 hover:bg-rose-50/30"
-                                 : dlStatus === "Crítica"
-                                 ? "bg-amber-50/10 hover:bg-amber-50/30"
-                                 : "bg-white hover:bg-emerald-50/20";
-
-                               return (
-                                 <tr key={task.id} className={`transition-colors group ${rowBorderColor} ${rowBgClass}`}>
-                                   <td className={`px-4 py-3 border-r border-slate-50 min-w-[500px] w-[500px] whitespace-normal ${rowBorderColor}`}>
-                                     <span className="font-bold text-slate-800 hover:text-indigo-600 block cursor-pointer transition-colors" onClick={() => handleEditTask(task)}>
-                                       {getTaskDisplayName(task)} <span className="text-slate-400 font-normal">({taskChildrenCount})</span>
-                                       {(task.type === "demanda_ouvidoria" || task.type === "recurso") && (
-                                         <span 
-                                           className="inline-flex text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 items-center gap-1 shadow-xs cursor-pointer ml-2"
-                                           title={`Etapa do Processo: ${(task.ouvidoriaData || task.recursoData)?.situacao || "Recebido"}`}
-                                           onClick={() => handleEditTask(task)}
-                                         >
-                                           <Scale size={10} className="stroke-[2.5]" />
-                                           Etapa: {(task.ouvidoriaData || task.recursoData)?.situacao || "Recebido"}
-                                         </span>
-                                       )}
-                                       {task.type === "recurso_revisao" && (
-                                         <span 
-                                           className="inline-flex text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 items-center gap-1 shadow-xs cursor-pointer ml-2"
-                                           title={`Etapa Recurso: ${task.recursoRevData?.situacao || "Recebido"}`}
-                                           onClick={() => handleEditTask(task)}
-                                         >
-                                           <Scale size={10} className="stroke-[2.5]" />
-                                           Etapa: {task.recursoRevData?.situacao || "Recebido"}
-                                         </span>
-                                       )}
-                                     </span>
-                                     {task.links && task.links.length > 0 && (
-                                       <div className="mt-1 flex items-center gap-1.5">
-                                         <span 
-                                           className="inline-flex text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 items-center gap-1 shadow-xs cursor-pointer transition-colors"
-                                           title={`${task.links.length} link(s) vinculado(s): ${task.links.map(l => l.title || l.url).join(', ')}. Clique para abrir.`}
-                                           onClick={(e) => {
-                                             e.stopPropagation();
-                                             handleEditTask(task);
-                                             setTaskFormTab("links");
-                                           }}
-                                         >
-                                           <Link2 size={10} className="stroke-[2.5]" />
-                                           {task.links.length} {task.links.length === 1 ? 'Link Vinculado' : 'Links Vinculados'}
-                                         </span>
-                                       </div>
-                                     )}
-                                     {task.parentId && taskById[task.parentId] && (
-                                       <span className="text-[9px] text-indigo-500 font-bold uppercase mt-0.5 block truncate max-w-xs" title={`Subtarefa de: ${taskById[task.parentId].title}`}>
-                                          Subtarefa de: {taskById[task.parentId].title}
-                                       </span>
-                                     )}
-                                   </td>
-                                   <td className="px-4 py-3 border-r border-slate-50 text-center">
-                                     <button
-                                       onClick={() => setTimelineTaskId(task.id)}
-                                       className="p-1 px-2 bg-white border border-slate-200 text-slate-600 hover:text-adasa-mid hover:border-adasa-200 rounded-lg transition shadow-sm text-xs font-bold inline-flex items-center justify-center"
-                                       title="Ver Linha do Tempo"
-                                     >
-                                       <Activity size={12} className="text-indigo-600" />
-                                     </button>
-                                   </td>
-                                   <td className="px-4 py-3 border-r border-slate-50 text-center whitespace-nowrap">
-                                     {normStatus === "Concluída" ? (
-                                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title="Situação: No Prazo (Concluída)">
-                                         <CheckCircle2 size={12} className="text-slate-400 shrink-0" />
-                                         No Prazo
-                                       </span>
-                                     ) : dlStatus === "Atrasada" ? (
-                                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-300 shadow-2xs" title="Situação: Atrasada">
-                                         <AlertCircle size={12} className="text-rose-600 shrink-0" />
-                                         Atrasada
-                                       </span>
-                                     ) : dlStatus === "Crítica" ? (
-                                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs" title="Situação: Crítica">
-                                         <AlertTriangle size={12} className="text-amber-600 shrink-0" />
-                                         Crítica
-                                       </span>
-                                     ) : (
-                                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title="Situação: No Prazo">
-                                         <CheckCircle2 size={12} className="text-slate-400 shrink-0" />
-                                         No Prazo
-                                       </span>
-                                     )}
-                                   </td>
-                                   <td className="px-4 py-3 border-r border-slate-50 w-[140px] max-w-[140px] min-w-[140px]">
-                                     <div className="space-y-1 w-full">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block flex justify-between">Progresso <span className="text-adasa-mid">{task.progress || 0}%</span></span>
-                                        <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                          <div className={`h-full ${normalizeStatus(task.status) === "Concluída" ? "bg-emerald-500" : "bg-adasa-mid"} transition-all duration-500`} style={{ width: `${task.progress || 0}%` }} />
-                                        </div>
-                                     </div>
-                                   </td>
-                                   <td className="px-4 py-3 border-r border-slate-50">
-                                     <div className="flex flex-wrap gap-1">
-                                        {task.areaIds?.map(aid => {
-                                           const ar = areas.find(a => a.id === aid);
-                                           if (!ar) return null;
-                                           return <span key={aid} className="text-[9px] font-bold uppercase bg-sky-50 text-sky-700 border border-sky-100 px-1.5 py-0.5 rounded-sm line-clamp-1">{ar.name}</span>;
-                                        })}
-                                     </div>
-                                   </td>
-                                   <td className="px-4 py-3 border-r border-slate-50">
-                                     <div className="flex flex-wrap gap-1">
-                                        {task.categoryIds?.map(cid => {
-                                           const cat = categories.find(c => c.id === cid);
-                                           if (!cat) return null;
-                                           return <span key={cid} className="text-[9px] font-bold uppercase bg-indigo-50 text-indigo-600 border border-indigo-100 px-1.5 py-0.5 rounded-sm line-clamp-1">{cat.name}</span>;
-                                        })}
-                                     </div>
-                                   </td>
-                                   <td className="px-4 py-3 border-r border-slate-50">
-                                     <div className="flex flex-wrap gap-1">
-                                        {task.responsibleIds?.map(rid => {
-                                           const r = responsibles.find(x => x.id === rid);
-                                           if (!r) return null;
-                                           return <span key={rid} className="text-[9px] font-bold uppercase bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded-sm line-clamp-1">{r.name}</span>;
-                                        })}
-                                     </div>
-                                   </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 font-semibold text-slate-600 whitespace-nowrap">
-                                      {formatDate(task.startDate)}
-                                    </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 font-semibold text-slate-600 whitespace-nowrap">
-                                      {formatDate(task.endDate)}
-                                    </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 text-center font-semibold text-slate-600 whitespace-nowrap">
-                                      {(() => {
-                                        const dur = calculateDurationInDays(task.startDate, task.endDate);
-                                        if (dur === null) return <span className="text-slate-300">-</span>;
-                                        return (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200" title={`${dur} dias corridos`}>
-                                            {dur} {dur === 1 ? "dia" : "dias"}
-                                          </span>
-                                        );
-                                      })()}
-                                    </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 text-center whitespace-nowrap">
-                                      {task.priority ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title={`Prioridade: ${task.priority}`}>
-                                          <Flag size={11} className="text-slate-400 shrink-0" />
-                                          {task.priority}
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-400 border border-slate-200 shadow-2xs" title="Prioridade não definida">
-                                          <Flag size={11} className="text-slate-300 shrink-0" />
-                                          Não definida
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 text-center whitespace-nowrap">
-                                      {task.isProgrammed !== false ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title="Atividade Programada">
-                                          <CalendarCheck size={12} className="text-slate-400 shrink-0" />
-                                          Programada
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title="Atividade Não Programada">
-                                          <CalendarX size={12} className="text-slate-400 shrink-0" />
-                                          Não programada
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 text-center whitespace-nowrap">
-                                      {normStatus === "Concluída" ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs" title="Status: Concluída">
-                                          <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
-                                          Concluída
-                                        </span>
-                                      ) : normStatus === "Em andamento" ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs" title="Status: Em andamento">
-                                          <Clock size={12} className="text-blue-600 shrink-0 animate-pulse" />
-                                          Em andamento
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs" title="Status: Não iniciada">
-                                          <Circle size={12} className="text-slate-400 shrink-0" />
-                                          Não iniciada
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 text-center text-[10px] text-slate-500 font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
-                                      {task.createdBy || "-"}
-                                    </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 text-center text-[10px] text-slate-500 font-medium whitespace-nowrap">
-                                      {task.createdAt ? formatDateTime(task.createdAt) : "-"}
-                                    </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 text-center text-[10px] text-slate-500 font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
-                                      {task.completedBy || "-"}
-                                    </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 text-center text-[10px] text-slate-500 font-medium whitespace-nowrap">
-                                      {task.completedAt ? formatDateTime(task.completedAt) : "-"}
-                                    </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 text-center text-[10px] text-slate-500 font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
-                                      {task.updatedBy || "-"}
-                                    </td>
-                                    <td className="px-4 py-3 border-r border-slate-50 text-center text-[10px] text-slate-500 font-medium whitespace-nowrap">
-                                      {task.updatedAt ? formatDateTime(task.updatedAt) : "-"}
-                                    </td>
-                                 </tr>
-                               );
-                           })}
-                         </tbody>
-                       </table>
-                    </div>
-                    </div>
-                  );
-              })()}
               {viewMode === "status" && (() => {
-                 const groups = {
+                 const groups: Record<string, Task[]> = {
                    "Não iniciada": rootTasks.filter(t => normalizeStatus(t.status) === "Não iniciada" && childMatchesOrIsPath(t.id)),
                    "Em andamento": rootTasks.filter(t => normalizeStatus(t.status) === "Em andamento" && childMatchesOrIsPath(t.id)),
                    "Concluída": rootTasks.filter(t => normalizeStatus(t.status) === "Concluída" && childMatchesOrIsPath(t.id))
                  };
+
+                 const totalStatusTasks = Object.values(groups).reduce((acc, list) => acc + list.length, 0);
+                 const displayTasks = activeStatusSegment === "all"
+                   ? Object.values(groups).flat()
+                   : (groups[activeStatusSegment] || []);
+
+                 const statusKeys = ["Não iniciada", "Em andamento", "Concluída"];
+
                  return (
-                   <div className="space-y-4 mt-2">
-                     {Object.entries(groups).map(([status, groupRootTasks]) => {
-                       if (groupRootTasks.length === 0) return null;
-                       
-                       return (
-                         <div key={status} className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm">
-                            <div 
-                              onClick={() => toggleGroupContainer("status", status)}
-                              className="bg-adasa-mid hover:bg-adasa-dark border-b border-adasa-dark/20 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
-                            >
-                              <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
-                                 {expandedGroupContainers[`status-${status}`] !== false ? <ChevronDown size={14} className="text-white/80 stroke-[2.5]" /> : <ChevronRight size={14} className="text-white/80 stroke-[2.5]" />}
-                                 {status === "Concluída" ? <CheckCircle2 size={14} className="text-emerald-300" /> : status === "Em andamento" ? <Activity size={14} className="text-blue-200" /> : <Clock size={14} className="text-white/80" />}
-                                 {status}
-                              </h3>
-                              <span className="bg-white/20 border border-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{groupRootTasks.length} tarefas</span>
-                            </div>
-                            {expandedGroupContainers[`status-${status}`] !== false && (
-                              <div>
-                                {groupRootTasks.filter(t => childMatchesOrIsPath(t.id)).map(t => renderTaskNode(t, 0, false))}
-                              </div>
-                            )}
+                   <div className="space-y-4">
+                     {/* Box de Segmentação (Status) */}
+                     <div className="bg-white border border-slate-200/80 rounded-[2rem] p-6 shadow-sm space-y-6">
+                       <div className="flex items-center justify-between mb-2">
+                         <div className="border-l-4 border-adasa-mid pl-2.5 py-0.5">
+                           <h3 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-widest">
+                             Segmentação
+                           </h3>
                          </div>
-                       )
-                     })}
+                         <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                           {displayTasks.length} {displayTasks.length === 1 ? "atividade exibida" : "atividades exibidas"}
+                         </div>
+                       </div>
+
+                       {/* Segmentation Buttons */}
+                       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 w-full flex items-center justify-center">
+                         <div className="flex flex-wrap items-center justify-center gap-2 overflow-x-auto pb-1 xl:pb-0 w-full">
+                           <button
+                             type="button"
+                             onClick={() => setActiveStatusSegment("all")}
+                             className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${
+                               activeStatusSegment === "all"
+                                 ? "bg-adasa-mid text-white"
+                                 : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                             }`}
+                           >
+                             <Layers size={16} />
+                             Todos
+                             <span className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${activeStatusSegment === "all" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600 border border-slate-200/60"}`}>
+                               {totalStatusTasks}
+                             </span>
+                           </button>
+
+                           {statusKeys.map(st => {
+                             const isSelected = activeStatusSegment === st;
+                             const count = groups[st]?.length || 0;
+                             const StatusIcon = st === "Concluída" ? CheckCircle2 : st === "Em andamento" ? Activity : Clock;
+
+                             return (
+                               <button
+                                 key={st}
+                                 type="button"
+                                 onClick={() => setActiveStatusSegment(st)}
+                                 className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${
+                                   isSelected
+                                     ? "bg-adasa-mid text-white"
+                                     : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                                 }`}
+                               >
+                                 <StatusIcon size={16} />
+                                 {st}
+                                 <span className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600 border border-slate-200/60"}`}>
+                                   {count}
+                                 </span>
+                               </button>
+                             );
+                           })}
+                         </div>
+                       </div>
+                     </div>
+
+                     {/* Tasks Content List */}
+                     {displayTasks.length === 0 ? (
+                       <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white p-12 text-center text-slate-400 text-sm">
+                         Nenhuma tarefa neste status.
+                       </div>
+                     ) : (
+                       <div className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm divide-y divide-slate-100">
+                         {displayTasks.map(t => renderTaskNode(t, 0, false))}
+                       </div>
+                     )}
                    </div>
                  );
               })()}
               {viewMode === "category" && (() => {
                  const cats = [...orderedCategoriesForDisplay, { id: -1, name: "Sem categoria", color: "", description: "" }];
+                 const catsWithTasks = cats.map(cat => ({
+                   cat,
+                   tasks: rootTasks.filter(t => (cat.id === -1 ? (!t.categoryIds || t.categoryIds.length === 0) : (t.categoryIds && t.categoryIds.includes(cat.id))) && childMatchesOrIsPath(t.id))
+                 })).filter(item => item.tasks.length > 0);
+
+                 const totalCatTasks = catsWithTasks.reduce((acc, c) => acc + c.tasks.length, 0);
+
+                 const activeCatGroup = catsWithTasks.find(c => String(c.cat.id) === String(activeCategorySegment));
+                 const displayTasks = activeCategorySegment === "all"
+                   ? catsWithTasks.flatMap(c => c.tasks)
+                   : (activeCatGroup ? activeCatGroup.tasks : catsWithTasks.flatMap(c => c.tasks));
+
                  return (
-                   <div className="space-y-4 mt-2">
-                     {cats.map(cat => {
-                       const groupRootTasks = rootTasks.filter(t => (cat.id === -1 ? (!t.categoryIds || t.categoryIds.length === 0) : (t.categoryIds && t.categoryIds.includes(cat.id))) && childMatchesOrIsPath(t.id));
-                       if (groupRootTasks.length === 0) return null;
-                       
-                       return (
-                         <div key={cat.id} className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm">
-                            <div 
-                              onClick={() => toggleGroupContainer("category", cat.id)}
-                              className="bg-adasa-mid hover:bg-adasa-dark border-b border-adasa-dark/20 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
-                            >
-                              <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
-                                 {expandedGroupContainers[`category-${cat.id}`] !== false ? <ChevronDown size={14} className="text-white/80 stroke-[2.5]" /> : <ChevronRight size={14} className="text-white/80 stroke-[2.5]" />}
-                                 <Tag size={14} className="text-white/80" />
-                                 {cat.name}
-                              </h3>
-                              <span className="bg-white/20 border border-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{groupRootTasks.length} tarefas</span>
-                            </div>
-                            {expandedGroupContainers[`category-${cat.id}`] !== false && (
-                              <div>
-                                {groupRootTasks.filter(t => childMatchesOrIsPath(t.id)).map(t => renderTaskNode(t, 0, false))}
-                              </div>
-                            )}
+                   <div className="space-y-4">
+                     {/* Box de Segmentação (Categorias) */}
+                     <div className="bg-white border border-slate-200/80 rounded-[2rem] p-6 shadow-sm space-y-6">
+                       <div className="flex items-center justify-between mb-2">
+                         <div className="border-l-4 border-adasa-mid pl-2.5 py-0.5">
+                           <h3 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-widest">
+                             Segmentação
+                           </h3>
                          </div>
-                       )
-                     })}
+                         <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                           {displayTasks.length} {displayTasks.length === 1 ? "atividade exibida" : "atividades exibidas"}
+                         </div>
+                       </div>
+
+                       {/* Segmentation Buttons */}
+                       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 w-full flex items-center justify-center">
+                         <div className="flex flex-wrap items-center justify-center gap-2 overflow-x-auto pb-1 xl:pb-0 w-full">
+                           <button
+                             type="button"
+                             onClick={() => setActiveCategorySegment("all")}
+                             className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${
+                               activeCategorySegment === "all"
+                                 ? "bg-adasa-mid text-white"
+                                 : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                             }`}
+                           >
+                             <Layers size={16} />
+                             Todas
+                             <span className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${activeCategorySegment === "all" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600 border border-slate-200/60"}`}>
+                               {totalCatTasks}
+                             </span>
+                           </button>
+
+                           {catsWithTasks.map(({ cat, tasks }) => {
+                             const isSelected = String(activeCategorySegment) === String(cat.id);
+                             return (
+                               <button
+                                 key={cat.id}
+                                 type="button"
+                                 onClick={() => setActiveCategorySegment(cat.id)}
+                                 className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${
+                                   isSelected
+                                     ? "bg-adasa-mid text-white"
+                                     : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                                 }`}
+                               >
+                                 <Tag size={16} />
+                                 {cat.name}
+                                 <span className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600 border border-slate-200/60"}`}>
+                                   {tasks.length}
+                                 </span>
+                               </button>
+                             );
+                           })}
+                         </div>
+                       </div>
+                     </div>
+
+                     {/* Tasks Content List */}
+                     {displayTasks.length === 0 ? (
+                       <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white p-12 text-center text-slate-400 text-sm">
+                         Nenhuma tarefa nesta categoria.
+                       </div>
+                     ) : (
+                       <div className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm divide-y divide-slate-100">
+                         {displayTasks.map(t => renderTaskNode(t, 0, false))}
+                       </div>
+                     )}
                    </div>
                  );
               })()}
               {viewMode === "area" && (() => {
                  const ars = [...areas, { id: -1, name: "Sem área definida" }];
+                 const areasWithTasks = ars.map(ar => ({
+                   ar,
+                   tasks: rootTasks.filter(t => (ar.id === -1 ? (!t.areaIds || t.areaIds.length === 0) : (t.areaIds && t.areaIds.includes(ar.id))) && childMatchesOrIsPath(t.id))
+                 })).filter(item => item.tasks.length > 0);
+
+                 const totalAreaTasks = areasWithTasks.reduce((acc, a) => acc + a.tasks.length, 0);
+
+                 const activeAreaGroup = areasWithTasks.find(a => String(a.ar.id) === String(activeAreaSegment));
+                 const displayTasks = activeAreaSegment === "all"
+                   ? areasWithTasks.flatMap(a => a.tasks)
+                   : (activeAreaGroup ? activeAreaGroup.tasks : areasWithTasks.flatMap(a => a.tasks));
+
                  return (
-                   <div className="space-y-4 mt-2">
-                     {ars.map(ar => {
-                       const groupRootTasks = rootTasks.filter(t => (ar.id === -1 ? (!t.areaIds || t.areaIds.length === 0) : (t.areaIds && t.areaIds.includes(ar.id))) && childMatchesOrIsPath(t.id));
-                       if (groupRootTasks.length === 0) return null;
-                       
-                       return (
-                         <div key={ar.id} className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm">
-                            <div 
-                              onClick={() => toggleGroupContainer("area", ar.id)}
-                              className="bg-adasa-mid hover:bg-adasa-dark border-b border-adasa-dark/20 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
-                            >
-                              <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
-                                 {expandedGroupContainers[`area-${ar.id}`] !== false ? <ChevronDown size={14} className="text-white/80 stroke-[2.5]" /> : <ChevronRight size={14} className="text-white/80 stroke-[2.5]" />}
-                                 <Briefcase size={14} className="text-white/80" />
-                                 {ar.name}
-                              </h3>
-                              <span className="bg-white/20 border border-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{groupRootTasks.length} tarefas</span>
-                            </div>
-                            {expandedGroupContainers[`area-${ar.id}`] !== false && (
-                              <div>
-                                {groupRootTasks.filter(t => childMatchesOrIsPath(t.id)).map(t => renderTaskNode(t, 0, false))}
-                              </div>
-                            )}
+                   <div className="space-y-4">
+                     {/* Box de Segmentação (Áreas) */}
+                     <div className="bg-white border border-slate-200/80 rounded-[2rem] p-6 shadow-sm space-y-6">
+                       <div className="flex items-center justify-between mb-2">
+                         <div className="border-l-4 border-adasa-mid pl-2.5 py-0.5">
+                           <h3 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-widest">
+                             Segmentação
+                           </h3>
                          </div>
-                       )
-                     })}
+                         <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                           {displayTasks.length} {displayTasks.length === 1 ? "atividade exibida" : "atividades exibidas"}
+                         </div>
+                       </div>
+
+                       {/* Segmentation Buttons */}
+                       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 w-full flex items-center justify-center">
+                         <div className="flex flex-wrap items-center justify-center gap-2 overflow-x-auto pb-1 xl:pb-0 w-full">
+                           <button
+                             type="button"
+                             onClick={() => setActiveAreaSegment("all")}
+                             className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${
+                               activeAreaSegment === "all"
+                                 ? "bg-adasa-mid text-white"
+                                 : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                             }`}
+                           >
+                             <Layers size={16} />
+                             Todas
+                             <span className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${activeAreaSegment === "all" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600 border border-slate-200/60"}`}>
+                               {totalAreaTasks}
+                             </span>
+                           </button>
+
+                           {areasWithTasks.map(({ ar, tasks }) => {
+                             const isSelected = String(activeAreaSegment) === String(ar.id);
+                             return (
+                               <button
+                                 key={ar.id}
+                                 type="button"
+                                 onClick={() => setActiveAreaSegment(ar.id)}
+                                 className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${
+                                   isSelected
+                                     ? "bg-adasa-mid text-white"
+                                     : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                                 }`}
+                               >
+                                 <Briefcase size={16} />
+                                 {ar.name}
+                                 <span className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600 border border-slate-200/60"}`}>
+                                   {tasks.length}
+                                 </span>
+                               </button>
+                             );
+                           })}
+                         </div>
+                       </div>
+                     </div>
+
+                     {/* Tasks Content List */}
+                     {displayTasks.length === 0 ? (
+                       <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white p-12 text-center text-slate-400 text-sm">
+                         Nenhuma tarefa nesta área.
+                       </div>
+                     ) : (
+                       <div className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm divide-y divide-slate-100">
+                         {displayTasks.map(t => renderTaskNode(t, 0, false))}
+                       </div>
+                     )}
                    </div>
                  );
               })()}
@@ -13316,27 +13555,35 @@ export function PlanningTab({
                     : "Recurso de Revisão";
 
                    return (
-                     <div className="space-y-4 mt-2">
-                       {/* Selector of Task Type for Stage View */}
-                       <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-2 sm:p-2.5 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
-                         <div className="flex items-center gap-2 flex-wrap">
-                           <span className="text-xs font-black text-slate-500 uppercase tracking-wider px-2 flex items-center gap-1.5">
-                             <Filter size={14} className="text-indigo-600" />
-                             Etapas por Tipo de Atividade:
-                           </span>
-                           <div className="flex flex-wrap items-center gap-1.5 bg-slate-200/60 p-1 rounded-xl">
+                     <div className="space-y-4">
+                       {/* Box de Segmentação (Tipo de Atividade) */}
+                       <div className="bg-white border border-slate-200/80 rounded-[2rem] p-6 shadow-sm space-y-6">
+                         <div className="flex items-center justify-between mb-2">
+                           <div className="border-l-4 border-adasa-mid pl-2.5 py-0.5">
+                             <h3 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-widest">
+                               Segmentação - Tipo de Atividade
+                             </h3>
+                           </div>
+                           <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                             {visibleTargetTasks.length} {visibleTargetTasks.length === 1 ? "atividade total" : "atividades totais"}
+                           </div>
+                         </div>
+
+                         {/* Segmentation Buttons */}
+                         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 w-full flex items-center justify-center">
+                           <div className="flex flex-wrap items-center justify-center gap-2 overflow-x-auto pb-1 xl:pb-0 w-full">
                              <button
                                type="button"
                                onClick={() => setAgrupamentoTaskType("demanda_ouvidoria")}
-                               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-150 ${
+                               className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${
                                  currentType === "demanda_ouvidoria" || currentType === "recurso"
-                                   ? "bg-white text-[#1A3E8A] shadow-sm font-black ring-1 ring-slate-200"
-                                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                                   ? "bg-adasa-mid text-white"
+                                   : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
                                }`}
                              >
-                               <Scale size={14} className={currentType === "demanda_ouvidoria" || currentType === "recurso" ? "text-[#1A3E8A]" : "text-slate-400"} />
+                               <Scale size={16} />
                                Demanda Ouvidoria
-                               <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${currentType === "demanda_ouvidoria" || currentType === "recurso" ? "bg-blue-100 text-[#1A3E8A]" : "bg-slate-300/60 text-slate-600"}`}>
+                               <span className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${currentType === "demanda_ouvidoria" || currentType === "recurso" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600 border border-slate-200/60"}`}>
                                  {countRecurso}
                                </span>
                              </button>
@@ -13344,15 +13591,15 @@ export function PlanningTab({
                              <button
                                type="button"
                                onClick={() => setAgrupamentoTaskType("fiscalizacao")}
-                               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-150 ${
+                               className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${
                                  currentType === "fiscalizacao"
-                                   ? "bg-white text-[#1A3E8A] shadow-sm font-black ring-1 ring-slate-200"
-                                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                                   ? "bg-adasa-mid text-white"
+                                   : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
                                }`}
                              >
-                               <ClipboardList size={14} className={currentType === "fiscalizacao" ? "text-[#1A3E8A]" : "text-slate-400"} />
+                               <ClipboardList size={16} />
                                Fiscalização
-                               <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${currentType === "fiscalizacao" ? "bg-blue-100 text-[#1A3E8A]" : "bg-slate-300/60 text-slate-600"}`}>
+                               <span className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${currentType === "fiscalizacao" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600 border border-slate-200/60"}`}>
                                  {countFiscalizacao}
                                </span>
                              </button>
@@ -13360,22 +13607,20 @@ export function PlanningTab({
                              <button
                                type="button"
                                onClick={() => setAgrupamentoTaskType("recurso_revisao")}
-                               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-150 ${
+                               className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${
                                  currentType === "recurso_revisao"
-                                   ? "bg-white text-[#1A3E8A] shadow-sm font-black ring-1 ring-slate-200"
-                                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                                   ? "bg-adasa-mid text-white"
+                                   : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
                                }`}
                              >
-                               <FileText size={14} className={currentType === "recurso_revisao" ? "text-[#1A3E8A]" : "text-slate-400"} />
+                               <FileText size={16} />
                                Recurso de Revisão
-                               <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${currentType === "recurso_revisao" ? "bg-blue-100 text-[#1A3E8A]" : "bg-slate-300/60 text-slate-600"}`}>
+                               <span className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${currentType === "recurso_revisao" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600 border border-slate-200/60"}`}>
                                  {countRecursoRevisao}
                                </span>
                              </button>
                            </div>
                          </div>
-
-
                        </div>
 
                        {totalTasksCount === 0 ? (
@@ -13392,55 +13637,110 @@ export function PlanningTab({
                              </p>
                            </div>
                          </div>
-                       ) : (
-                         <div className="space-y-4">
-                            {stages.map(stage => {
-                              const groupRootTasks = rootTasks.filter(t => {
-                                if (currentType === "demanda_ouvidoria" || currentType === "recurso") {
-                                  if (t.type !== "demanda_ouvidoria" && t.type !== "recurso") return false;
-                                  return ((t.ouvidoriaData || t.recursoData)?.situacao || "Recebido") === stage && childMatchesOrIsPath(t.id);
-                                } else if (currentType === "recurso_revisao") {
-                                  if (t.type !== "recurso_revisao") return false;
-                                  let s = t.recursoRevData?.situacao || "Recebido";
-                                  if (s === "Encaminhado a Diretoria") s = "Encaminhado à Diretoria";
-                                  if (s === "Retornado da Diretoria") s = "Notificação do Usuário";
-                                  if (s === "Em Análise Jurídica") s = "Em Análise Técnica";
-                                  return s === stage && childMatchesOrIsPath(t.id);
-                                } else {
-                                  if (t.type !== "fiscalizacao") return false;
-                                  return (t.fiscalizacaoData?.etapa || FISCALIZACAO_ETAPA_INICIAL) === stage && childMatchesOrIsPath(t.id);
-                                }
-                              });
+                       ) : (() => {
+                          const stagesWithTasks = stages.map(stage => {
+                            const tasks = rootTasks.filter(t => {
+                              if (currentType === "demanda_ouvidoria" || currentType === "recurso") {
+                                if (t.type !== "demanda_ouvidoria" && t.type !== "recurso") return false;
+                                return ((t.ouvidoriaData || t.recursoData)?.situacao || "Recebido") === stage && childMatchesOrIsPath(t.id);
+                              } else if (currentType === "recurso_revisao") {
+                                if (t.type !== "recurso_revisao") return false;
+                                let s = t.recursoRevData?.situacao || "Recebido";
+                                if (s === "Encaminhado a Diretoria") s = "Encaminhado à Diretoria";
+                                if (s === "Retornado da Diretoria") s = "Notificação do Usuário";
+                                if (s === "Em Análise Jurídica") s = "Em Análise Técnica";
+                                return s === stage && childMatchesOrIsPath(t.id);
+                              } else {
+                                if (t.type !== "fiscalizacao") return false;
+                                return (t.fiscalizacaoData?.etapa || FISCALIZACAO_ETAPA_INICIAL) === stage && childMatchesOrIsPath(t.id);
+                              }
+                            });
+                            return { stage, tasks };
+                          });
 
-                             if (groupRootTasks.length === 0) return null;
+                          const activeStageGroup = stagesWithTasks.find(s => s.stage === activeRecursoSegment);
+                          const displayTasks = activeRecursoSegment === "all"
+                            ? stagesWithTasks.flatMap(s => s.tasks)
+                            : (activeStageGroup ? activeStageGroup.tasks : stagesWithTasks.flatMap(s => s.tasks));
 
-                             const key = `recurso-${currentType}-${stage}`;
+                          const StageIcon = (currentType === "demanda_ouvidoria" || currentType === "recurso")
+                            ? Scale
+                            : currentType === "fiscalizacao"
+                            ? ClipboardList
+                            : FileText;
 
-                             return (
-                               <div key={stage} className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm">
-                                 <div 
-                                   onClick={() => toggleGroupContainer(`recurso-${currentType}`, stage)}
-                                   className="bg-adasa-mid hover:bg-adasa-dark border-b border-adasa-dark/20 px-4 py-3 flex items-center justify-between cursor-pointer select-none transition-colors"
-                                 >
-                                   <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
-                                      {expandedGroupContainers[key] !== false && expandedGroupContainers[`recurso-${stage}`] !== false ? <ChevronDown size={14} className="text-white/80 stroke-[2.5]" /> : <ChevronRight size={14} className="text-white/80 stroke-[2.5]" />}
-                                      {(currentType === "demanda_ouvidoria" || currentType === "recurso") ? <Scale size={14} className="text-white" /> : currentType === "fiscalizacao" ? <ClipboardList size={14} className="text-white" /> : <FileText size={14} className="text-white" />}
-                                      {stage}
-                                   </h3>
-                                   <span className="bg-white/20 border border-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                                     {groupRootTasks.length} {groupRootTasks.length === 1 ? "tarefa" : "tarefas"}
-                                   </span>
-                                 </div>
-                                 {expandedGroupContainers[key] !== false && expandedGroupContainers[`recurso-${stage}`] !== false && (
-                                   <div>
-                                     {groupRootTasks.filter(t => childMatchesOrIsPath(t.id)).map(t => renderTaskNode(t, 0, false))}
-                                   </div>
-                                 )}
-                               </div>
-                             );
-                           })}
-                         </div>
-                       )}
+                          return (
+                            <div className="space-y-4">
+                              {/* Box de Segmentação (Etapas) */}
+                              <div className="bg-white border border-slate-200/80 rounded-[2rem] p-6 shadow-sm space-y-6">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="border-l-4 border-adasa-mid pl-2.5 py-0.5">
+                                    <h3 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-widest">
+                                      Segmentação - Etapas
+                                    </h3>
+                                  </div>
+                                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                    {displayTasks.length} {displayTasks.length === 1 ? "atividade exibida" : "atividades exibidas"}
+                                  </div>
+                                </div>
+
+                                {/* Segmentation Buttons */}
+                                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 w-full flex items-center justify-center">
+                                  <div className="flex flex-wrap items-center justify-center gap-2 overflow-x-auto pb-1 xl:pb-0 w-full">
+                                    <button
+                                      type="button"
+                                      onClick={() => setActiveRecursoSegment("all")}
+                                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${
+                                        activeRecursoSegment === "all"
+                                          ? "bg-adasa-mid text-white"
+                                          : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                                      }`}
+                                    >
+                                      <Layers size={16} />
+                                      Todas
+                                      <span className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${activeRecursoSegment === "all" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600 border border-slate-200/60"}`}>
+                                        {totalTasksCount}
+                                      </span>
+                                    </button>
+
+                                    {stagesWithTasks.map(({ stage, tasks }) => {
+                                      const isSelected = activeRecursoSegment === stage;
+                                      return (
+                                        <button
+                                          key={stage}
+                                          type="button"
+                                          onClick={() => setActiveRecursoSegment(stage)}
+                                          className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${
+                                            isSelected
+                                              ? "bg-adasa-mid text-white"
+                                              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                                          }`}
+                                        >
+                                          <StageIcon size={16} />
+                                          {stage}
+                                          <span className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600 border border-slate-200/60"}`}>
+                                            {tasks.length}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Tasks Content List */}
+                              {displayTasks.length === 0 ? (
+                                <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white p-12 text-center text-slate-400 text-sm">
+                                  Nenhuma tarefa nesta etapa.
+                                </div>
+                              ) : (
+                                <div className="overflow-hidden rounded-xl border border-slate-200/60 flex flex-col bg-white transition-all duration-200 shadow-sm divide-y divide-slate-100">
+                                  {displayTasks.map(t => renderTaskNode(t, 0, false))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                       })()}
                      </div>
                    );
                 })()}
@@ -13893,6 +14193,18 @@ export function PlanningTab({
                                               title="Ver Timeline"
                                             >
                                               <Activity size={12} />
+                                            </button>
+
+                                            {/* Duplicate */}
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenDuplicateModal(task);
+                                              }}
+                                              className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                                              title="Duplicar Atividade"
+                                            >
+                                              <Copy size={12} />
                                             </button>
 
                                             {/* Edit */}
@@ -14389,535 +14701,6 @@ export function PlanningTab({
                   );
                })()}
 
-              {viewMode === "calendar" && (() => {
-                const parseSafeDate = (dateStr: string | null | undefined): Date | null => {
-                  if (!dateStr) return null;
-                  try {
-                    let d: Date;
-                    if (dateStr.includes("-")) {
-                      const parts = dateStr.split("T")[0].split("-");
-                      d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-                    } else {
-                      d = new Date(dateStr);
-                    }
-                    return isNaN(d.getTime()) ? null : d;
-                  } catch (e) {
-                    return null;
-                  }
-                };
-
-                const isTaskActiveOnDay = (task: any, day: Date) => {
-                  if (!task.startDate || !task.endDate) return false;
-                  const start = parseSafeDate(task.startDate);
-                  const end = parseSafeDate(task.endDate);
-                  if (!start || !end) return false;
-                  const s = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                  const e = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-                  const d = new Date(day.getFullYear(), day.getMonth(), day.getDate());
-                  return d >= s && d <= e;
-                };
-
-                const getMonthDays = (year: number, month: number) => {
-                  const firstDayIndex = new Date(year, month, 1).getDay();
-                  const totalDays = new Date(year, month + 1, 0).getDate();
-                  const prevMonthTotalDays = new Date(year, month, 0).getDate();
-                  
-                  const cells: { date: Date; isCurrentMonth: boolean; dayNum: number }[] = [];
-                  
-                  for (let i = firstDayIndex - 1; i >= 0; i--) {
-                    const d = prevMonthTotalDays - i;
-                    cells.push({
-                      date: new Date(month === 0 ? year - 1 : year, month === 0 ? 11 : month - 1, d),
-                      isCurrentMonth: false,
-                      dayNum: d
-                    });
-                  }
-                  
-                  for (let d = 1; d <= totalDays; d++) {
-                    cells.push({
-                      date: new Date(year, month, d),
-                      isCurrentMonth: true,
-                      dayNum: d
-                    });
-                  }
-                  
-                  let nextMonthDay = 1;
-                  while (cells.length < 42) {
-                    cells.push({
-                      date: new Date(month === 11 ? year + 1 : year, month === 11 ? 0 : month + 1, nextMonthDay),
-                      isCurrentMonth: false,
-                      dayNum: nextMonthDay
-                    });
-                    nextMonthDay++;
-                  }
-                  
-                  return cells;
-                };
-
-                const monthNames = [
-                  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-                  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-                ];
-
-                const weekdayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
-                const navigateCalendar = (direction: "prev" | "next") => {
-                  const step = direction === "prev" ? -1 : 1;
-                  if (calendarScale === "mes") {
-                    let newMonth = calendarMonth + step;
-                    let newYear = calendarYear;
-                    if (newMonth < 0) {
-                      newMonth = 11;
-                      newYear -= 1;
-                    } else if (newMonth > 11) {
-                      newMonth = 0;
-                      newYear += 1;
-                    }
-                    setCalendarMonth(newMonth);
-                    setCalendarYear(newYear);
-                  } else if (calendarScale === "trimestre") {
-                    let newMonth = calendarMonth + (step * 3);
-                    let newYear = calendarYear;
-                    if (newMonth < 0) {
-                      newMonth = 9;
-                      newYear -= 1;
-                    } else if (newMonth > 11) {
-                      newMonth = 0;
-                      newYear += 1;
-                    }
-                    const q = Math.floor(newMonth / 3);
-                    setCalendarMonth(q * 3);
-                    setCalendarYear(newYear);
-                  } else {
-                    setCalendarYear(calendarYear + step);
-                  }
-                };
-
-                const tasksWithDates = filteredTasks.filter(t => t.startDate && t.endDate);
-                const activeDay = selectedCalendarDay || new Date();
-                const activeDayTasks = tasksWithDates.filter(t => isTaskActiveOnDay(t, activeDay));
-
-                // Quarter computation
-                const currentQuarterIndex = Math.floor(calendarMonth / 3);
-                const quarterMonths = [currentQuarterIndex * 3, currentQuarterIndex * 3 + 1, currentQuarterIndex * 3 + 2];
-
-                return (
-                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-4 text-left">
-                    {/* Main Calendar Area */}
-                    <div className="lg:col-span-3 bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm flex flex-col space-y-6">
-                      
-                      {/* Toolbar */}
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-5">
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => navigateCalendar("prev")}
-                            className="p-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl transition cursor-pointer"
-                          >
-                            <ChevronLeft size={18} />
-                          </button>
-                          <button
-                            onClick={() => {
-                              const today = new Date();
-                              setCalendarMonth(today.getMonth());
-                              setCalendarYear(today.getFullYear());
-                              setSelectedCalendarDay(today);
-                            }}
-                            className="px-3 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition uppercase tracking-wider cursor-pointer"
-                          >
-                            Hoje
-                          </button>
-                          <button
-                            onClick={() => navigateCalendar("next")}
-                            className="p-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl transition cursor-pointer"
-                          >
-                            <ChevronRight size={18} />
-                          </button>
-                          
-                          <h4 className="text-base font-black text-slate-800 uppercase tracking-wider ml-1">
-                            {calendarScale === "mes" && `${monthNames[calendarMonth]} de ${calendarYear}`}
-                            {calendarScale === "trimestre" && `${currentQuarterIndex + 1}º Trimestre de ${calendarYear}`}
-                            {calendarScale === "ano" && `Ano de ${calendarYear}`}
-                          </h4>
-                        </div>
-                        
-                        {/* Scale selector & Legend */}
-                        <div className="flex flex-wrap items-center gap-4 w-full md:w-auto justify-between md:justify-end">
-                          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-sm shrink-0">
-                            <button
-                              onClick={() => { setCalendarScale("mes"); setSelectedCalendarDay(null); }}
-                              className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-extrabold transition-all duration-200 cursor-pointer ${calendarScale === "mes" ? "bg-white text-slate-850 shadow-sm border border-slate-200/40" : "text-slate-500 hover:text-slate-800"}`}
-                            >
-                              Mês
-                            </button>
-                            <button
-                              onClick={() => { setCalendarScale("trimestre"); setSelectedCalendarDay(null); }}
-                              className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-extrabold transition-all duration-200 cursor-pointer ${calendarScale === "trimestre" ? "bg-white text-slate-850 shadow-sm border border-slate-200/40" : "text-slate-500 hover:text-slate-800"}`}
-                            >
-                              Trimestre
-                            </button>
-                            <button
-                              onClick={() => { setCalendarScale("ano"); setSelectedCalendarDay(null); }}
-                              className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-extrabold transition-all duration-200 cursor-pointer ${calendarScale === "ano" ? "bg-white text-slate-850 shadow-sm border border-slate-200/40" : "text-slate-500 hover:text-slate-800"}`}
-                            >
-                              Ano
-                            </button>
-                          </div>
-                          
-                          <div className="flex flex-wrap items-center gap-3 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                            <div className="flex items-center gap-1">
-                              <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full" /> Concluída
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span className="w-2.5 h-2.5 bg-blue-500 rounded-full" /> Em andamento
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span className="w-2.5 h-2.5 bg-slate-400 rounded-full" /> Não iniciada
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Render Scale Specific Grid */}
-                      
-                      {/* MONTH SCALE */}
-                      {calendarScale === "mes" && (
-                        <div className="flex flex-col flex-1">
-                          {/* Weekdays row */}
-                          <div className="grid grid-cols-7 gap-1 text-center font-bold text-xs uppercase text-slate-400 tracking-wider mb-2">
-                            {weekdayNames.map(dayName => (
-                              <div key={dayName} className="py-1">{dayName}</div>
-                            ))}
-                          </div>
-                          
-                          {/* Calendar Grid */}
-                          <div className="grid grid-cols-7 gap-1.5 bg-slate-100/50 p-1.5 rounded-2xl border border-slate-100 flex-1 min-h-[480px]">
-                            {getMonthDays(calendarYear, calendarMonth).map(({ date, isCurrentMonth, dayNum }, idx) => {
-                              const activeTasks = tasksWithDates.filter(t => isTaskActiveOnDay(t, date));
-                              const isToday = new Date().toDateString() === date.toDateString();
-                              const isSelected = activeDay.toDateString() === date.toDateString();
-                              
-                              return (
-                                <div
-                                  key={idx}
-                                  onClick={() => setSelectedCalendarDay(date)}
-                                  className={cn(
-                                    "bg-white rounded-xl p-2 border flex flex-col justify-between transition-all cursor-pointer min-h-[85px] group",
-                                    isCurrentMonth ? "border-slate-100" : "border-slate-100/40 opacity-40 hover:opacity-75",
-                                    isSelected ? "ring-2 ring-indigo-500 bg-indigo-50/20 border-indigo-200" : "hover:border-indigo-400 hover:shadow-xs"
-                                  )}
-                                >
-                                  {/* Day Number Header */}
-                                  <div className="flex justify-between items-center mb-1">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                      {activeTasks.length > 0 && `${activeTasks.length} ${activeTasks.length === 1 ? 'atv' : 'atvs'}`}
-                                    </span>
-                                    <span className={cn(
-                                      "w-6 h-6 flex items-center justify-center text-xs font-black rounded-full",
-                                      isToday ? "bg-indigo-600 text-white shadow-sm" : isSelected ? "bg-indigo-100 text-indigo-700" : "text-slate-700"
-                                    )}>
-                                      {dayNum}
-                                    </span>
-                                  </div>
-                                  
-                                  {/* Tasks in the cell */}
-                                  <div className="space-y-1 overflow-hidden flex-1 flex flex-col justify-end">
-                                    {activeTasks.slice(0, 2).map(t => {
-                                      const statusName = normalizeStatus(t.status);
-                                      const colorClass = statusName === "Concluída" 
-                                        ? "bg-emerald-500" 
-                                        : statusName === "Em andamento" 
-                                        ? "bg-blue-500" 
-                                        : "bg-slate-400";
-                                        
-                                      return (
-                                        <div
-                                          key={t.id}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleEditTask(t);
-                                          }}
-                                          className={cn(
-                                            "px-1.5 py-0.5 rounded text-[9px] font-black uppercase text-white truncate transition-all flex items-center gap-1 border border-black/5 hover:brightness-95",
-                                            colorClass
-                                          )}
-                                          title={(t.type === "demanda_ouvidoria" || t.type === "recurso") ? `${getTaskDisplayName(t)} (Demanda Ouvidoria - Etapa: ${(t.ouvidoriaData || t.recursoData)?.situacao || "Recebido"})` : getTaskDisplayName(t)}
-                                        >
-                                          <span className="truncate">
-                                            {(t.type === "demanda_ouvidoria" || t.type === "recurso") ? `⚖️ [${(t.ouvidoriaData || t.recursoData)?.situacao || "Recebido"}] ${getTaskDisplayName(t).replace(/^\[.*?\]\s*/, '')}` : getTaskDisplayName(t)}
-                                          </span>
-                                        </div>
-                                      );
-                                    })}
-                                    {activeTasks.length > 2 && (
-                                      <div className="text-[9px] font-extrabold text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded text-center uppercase tracking-wider">
-                                        + {activeTasks.length - 2} mais
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* QUARTER SCALE */}
-                      {calendarScale === "trimestre" && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1">
-                          {quarterMonths.map(m => {
-                            const monthDays = getMonthDays(calendarYear, m);
-                            
-                            return (
-                              <div key={m} className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 flex flex-col">
-                                <h5 
-                                  onClick={() => {
-                                    setCalendarMonth(m);
-                                    setCalendarScale("mes");
-                                  }}
-                                  className="text-sm font-black text-slate-800 uppercase tracking-widest mb-3 border-b border-slate-200/50 pb-2 flex justify-between items-center cursor-pointer hover:text-indigo-600 transition-colors"
-                                >
-                                  <span>{monthNames[m]}</span>
-                                  <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-black">Visualizar</span>
-                                </h5>
-                                
-                                <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400 uppercase mb-1">
-                                  {weekdayNames.map(dayName => (
-                                    <div key={dayName}>{dayName[0]}</div>
-                                  ))}
-                                </div>
-                                
-                                <div className="grid grid-cols-7 gap-1 bg-white p-1.5 rounded-xl border border-slate-200/60 flex-1">
-                                  {monthDays.map(({ date, isCurrentMonth, dayNum }, idx) => {
-                                    const activeTasks = tasksWithDates.filter(t => isTaskActiveOnDay(t, date));
-                                    const isToday = new Date().toDateString() === date.toDateString();
-                                    const isSelected = activeDay.toDateString() === date.toDateString();
-                                    
-                                    const completed = activeTasks.filter(t => normalizeStatus(t.status) === "Concluída").length;
-                                    const inProgress = activeTasks.filter(t => normalizeStatus(t.status) === "Em andamento").length;
-                                    const pending = activeTasks.length - completed - inProgress;
-                                    
-                                    return (
-                                      <div
-                                        key={idx}
-                                        onClick={() => setSelectedCalendarDay(date)}
-                                        className={cn(
-                                          "aspect-square rounded-lg flex flex-col items-center justify-center relative cursor-pointer group transition-all text-[10px] font-bold",
-                                          isCurrentMonth ? "text-slate-700" : "text-slate-300 opacity-30",
-                                          isSelected ? "bg-indigo-100 text-indigo-700 font-extrabold ring-1 ring-indigo-300" : "hover:bg-slate-100",
-                                          isToday && !isSelected ? "border border-indigo-500 font-black text-indigo-600" : ""
-                                        )}
-                                      >
-                                        <span>{dayNum}</span>
-                                        {activeTasks.length > 0 && (
-                                          <div className="absolute bottom-0.5 flex gap-0.5 justify-center">
-                                            {completed > 0 && <span className="w-1 h-1 bg-emerald-500 rounded-full" />}
-                                            {inProgress > 0 && <span className="w-1 h-1 bg-blue-500 rounded-full" />}
-                                            {pending > 0 && <span className="w-1 h-1 bg-slate-400 rounded-full" />}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                      
-                      {/* YEAR SCALE */}
-                      {calendarScale === "ano" && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 flex-1">
-                          {monthNames.map((mName, mIdx) => {
-                            const monthDays = getMonthDays(calendarYear, mIdx);
-                            
-                            return (
-                              <div key={mIdx} className="bg-slate-50/40 border border-slate-200 rounded-xl p-3 flex flex-col">
-                                <h5 
-                                  onClick={() => {
-                                    setCalendarMonth(mIdx);
-                                    setCalendarScale("mes");
-                                  }}
-                                  className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 border-b border-slate-200/50 pb-1.5 flex justify-between items-center cursor-pointer hover:text-indigo-600 transition-colors"
-                                >
-                                  <span>{mName}</span>
-                                  <span className="text-[9px] text-slate-400 font-extrabold hover:underline">Abrir</span>
-                                </h5>
-                                
-                                <div className="grid grid-cols-7 gap-0.5 text-center text-[9px] font-bold text-slate-400 mb-1">
-                                  {weekdayNames.map(dayName => (
-                                    <div key={dayName}>{dayName[0]}</div>
-                                  ))}
-                                </div>
-                                
-                                <div className="grid grid-cols-7 gap-0.5 bg-white p-1 rounded-lg border border-slate-200 flex-1">
-                                  {monthDays.map(({ date, isCurrentMonth, dayNum }, idx) => {
-                                    const activeTasks = tasksWithDates.filter(t => isTaskActiveOnDay(t, date));
-                                    const isToday = new Date().toDateString() === date.toDateString();
-                                    const isSelected = activeDay.toDateString() === date.toDateString();
-                                    
-                                    return (
-                                      <div
-                                        key={idx}
-                                        onClick={() => setSelectedCalendarDay(date)}
-                                        className={cn(
-                                          "aspect-square rounded flex items-center justify-center relative cursor-pointer transition-all text-[8px] font-bold",
-                                          isCurrentMonth ? "text-slate-700" : "text-slate-300 opacity-20",
-                                          isSelected ? "bg-indigo-100 text-indigo-700 font-extrabold" : "hover:bg-slate-55",
-                                          activeTasks.length > 0 && isCurrentMonth && !isSelected ? "bg-indigo-50 text-indigo-600 font-extrabold" : "",
-                                          isToday ? "border border-indigo-400 font-black text-indigo-600" : ""
-                                        )}
-                                      >
-                                        <span>{dayNum}</span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                      
-                    </div>
-                    
-                    {/* Side Agenda Panel */}
-                    <div className="lg:col-span-1 flex flex-col space-y-4">
-                      <div className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm flex flex-col h-full min-h-[400px]">
-                        <div className="border-b border-slate-100 pb-4 mb-4 text-left">
-                          <div className="flex items-center gap-2 text-indigo-600 mb-1">
-                            <CalendarDays size={18} />
-                            <h3 className="text-xs font-black uppercase tracking-wider">Atividades do Dia</h3>
-                          </div>
-                          <p className="text-sm font-black text-slate-800 leading-snug">
-                            {activeDay.toLocaleDateString("pt-BR", { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                          </p>
-                        </div>
-                        
-                        <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[500px] custom-scrollbar text-left">
-                          {activeDayTasks.length === 0 ? (
-                            <div className="py-12 text-center text-slate-400 font-semibold italic text-xs flex flex-col items-center justify-center space-y-2">
-                              <CalendarCheck size={32} className="text-slate-300" />
-                              <span>Nenhuma atividade programada para este dia.</span>
-                            </div>
-                          ) : (
-                            activeDayTasks.map(t => {
-                              const normStatus = normalizeStatus(t.status);
-                              const dlStatus = getDeadlineStatus(t.endDate, t.status);
-                              const calDayCardBorder = dlStatus === "Atrasada"
-                                ? "border-2 border-rose-500 hover:border-rose-600 shadow-rose-500/10"
-                                : dlStatus === "Crítica"
-                                ? "border-2 border-amber-400 hover:border-amber-500 shadow-amber-400/10"
-                                : "border-2 border-emerald-500 hover:border-emerald-600 shadow-emerald-500/10";
-                              
-                              let statusClasses = "bg-slate-100 text-slate-600 border-slate-200";
-                              if (normStatus === "Concluída") {
-                                statusClasses = "bg-emerald-50 text-emerald-700 border-emerald-200";
-                              } else if (normStatus === "Em andamento") {
-                                statusClasses = "bg-blue-50 text-blue-700 border-blue-200";
-                              }
-                              
-                              return (
-                                <div
-                                  key={t.id}
-                                  onClick={() => handleEditTask(t)}
-                                  className={`p-4 rounded-2xl hover:shadow-xs transition-all cursor-pointer bg-white group space-y-2.5 ${calDayCardBorder}`}
-                                >
-                                  <div className="flex items-start justify-between gap-2">
-                                    <span className="text-[8px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                                      ID: {t.id}
-                                    </span>
-                                    {(t.type === "demanda_ouvidoria" || t.type === "recurso") && (
-                                      <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border bg-amber-50 text-amber-800 border-amber-200 flex items-center gap-1 shadow-xs cursor-pointer" onClick={(e) => { e.stopPropagation(); handleEditTask(t); }}>
-                                        <Scale size={8} className="stroke-[2.5]" />
-                                        Etapa: {(t.ouvidoriaData || t.recursoData)?.situacao || "Recebido"}
-                                      </span>
-                                    )}
-                                    <span className="hidden">
-                                    </span>
-                                    <span className={cn(
-                                      "text-[8px] font-black uppercase py-0.5 px-1.5 rounded border tracking-wider",
-                                      statusClasses
-                                    )}>
-                                      {normStatus}
-                                    </span>
-                                  </div>
-                                  
-                                  <h5 className="text-xs font-black text-slate-800 leading-snug group-hover:text-indigo-600 transition-colors">
-                                    {getTaskDisplayName(t)}
-                                  </h5>
-                                  
-                                  {t.description && (
-                                    <p className="text-[10px] text-slate-500 font-medium line-clamp-2 leading-relaxed">
-                                      {t.description}
-                                    </p>
-                                  )}
-                                  
-                                  {/* Progress bar */}
-                                  <div className="space-y-1">
-                                    <div className="flex justify-between items-center text-[9px] font-black text-slate-400 uppercase tracking-wider">
-                                      <span>Progresso</span>
-                                      <span className="text-indigo-600 font-extrabold">{t.progress || 0}%</span>
-                                    </div>
-                                    <div className="h-1 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
-                                      <div 
-                                        className={cn(
-                                          "h-full transition-all duration-300",
-                                          normStatus === "Concluída" ? "bg-emerald-500" : "bg-indigo-600"
-                                        )}
-                                        style={{ width: `${t.progress || 0}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                  
-                                  {/* Date ranges and initials */}
-                                  <div className="flex justify-between items-center pt-2 border-t border-slate-100 text-[9px] font-bold text-slate-400 flex-wrap gap-1">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      {t.startDate && <span>Início: {t.startDate.split("T")[0].split("-").reverse().join("/")}</span>}
-                                      {t.startDate && t.endDate && <span className="text-slate-300">|</span>}
-                                      <span>Prazo: {t.endDate ? t.endDate.split("T")[0].split("-").reverse().join("/") : "-"}</span>
-                                      {(() => {
-                                        const dur = calculateDurationInDays(t.startDate, t.endDate);
-                                        if (!dur) return null;
-                                        return (
-                                          <>
-                                            <span className="text-slate-300">|</span>
-                                            <span>Duração: {dur} {dur === 1 ? "dia" : "dias"}</span>
-                                          </>
-                                        );
-                                      })()}
-                                    </div>
-                                    
-                                    {/* Avatars */}
-                                    {t.responsibleIds && t.responsibleIds.length > 0 && (
-                                      <div className="flex -space-x-1.5 overflow-hidden">
-                                        {t.responsibleIds.slice(0, 3).map(rid => {
-                                          const r = responsibles.find(resp => resp.id === rid);
-                                          if (!r) return null;
-                                          const init = r.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-                                          return (
-                                            <div 
-                                              key={rid} 
-                                              className="w-4 h-4 rounded-full bg-slate-100 border border-white text-[8px] font-black text-slate-700 flex items-center justify-center shadow-xs" 
-                                              title={r.name}
-                                            >
-                                              {init}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
           </div>
         </div>
 
@@ -16324,19 +16107,34 @@ export function PlanningTab({
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100 md:col-span-2">
                   <div>
                     {formMode === "edit" && editingTask?.id && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleDeleteTask(editingTask.id, () => {
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const fullTask = tasks.find(t => t.id === editingTask.id) || (editingTask as Task);
                             setIsFormOpen(false);
-                          });
-                        }}
-                        className="px-4 py-2.5 font-bold text-sm text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors flex items-center gap-2 cursor-pointer shadow-2xs"
-                        title="Excluir esta atividade permanentemente"
-                      >
-                        <Trash2 size={16} />
-                        <span>Excluir Atividade</span>
-                      </button>
+                            handleOpenDuplicateModal(fullTask);
+                          }}
+                          className="px-4 py-2.5 font-bold text-sm text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors flex items-center gap-2 cursor-pointer shadow-2xs"
+                          title="Duplicar e reprogramar esta atividade com nova data de início"
+                        >
+                          <Copy size={16} />
+                          <span>Duplicar Atividade</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleDeleteTask(editingTask.id, () => {
+                              setIsFormOpen(false);
+                            });
+                          }}
+                          className="px-4 py-2.5 font-bold text-sm text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors flex items-center gap-2 cursor-pointer shadow-2xs"
+                          title="Excluir esta atividade permanentemente"
+                        >
+                          <Trash2 size={16} />
+                          <span>Excluir Atividade</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div className="flex items-center gap-3">
@@ -17341,7 +17139,10 @@ export function PlanningTab({
         </div>
       )}
 
-      </div>
+      {/* Complete Duplicate Task Modal */}
+      {renderDuplicateTaskModal()}
+
+    </div>
   );
 
   // Recursive Tree Node Renderer
@@ -17475,11 +17276,11 @@ export function PlanningTab({
 
               <div className="min-w-0 flex-1">
                 {/* Title & Top Action Badges */}
-                <div className="flex items-start justify-between gap-2 flex-wrap mb-2">
+                <div className="flex items-start justify-between gap-2 flex-wrap mb-2.5 pb-[2px]">
                   <div className="flex items-center gap-2 flex-wrap min-w-0">
                     <span 
                       onClick={() => handleEditTask(task)}
-                      className="text-[13.5px] sm:text-[14px] font-bold uppercase tracking-tight cursor-pointer hover:text-adasa-dark transition-colors text-slate-800 leading-snug"
+                      className="text-[13.5px] sm:text-[14px] font-bold uppercase tracking-tight cursor-pointer hover:text-adasa-dark transition-colors text-slate-800 leading-snug py-[2px] pb-[4px] inline-block"
                     >
                       {getTaskDisplayName(task)}
                     </span>
@@ -17592,10 +17393,10 @@ export function PlanningTab({
                       if (normStatus === "Concluída") {
                         return (
                           <span 
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-2xs"
                             title="Situação: No Prazo (Concluída)"
                           >
-                            <CheckCircle2 size={11} className="text-slate-400" />
+                            <CheckCircle2 size={11} className="text-emerald-600" />
                             No Prazo
                           </span>
                         );
@@ -17624,10 +17425,10 @@ export function PlanningTab({
                       }
                       return (
                         <span 
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-2xs"
                           title="Situação: No Prazo"
                         >
-                          <CheckCircle2 size={11} className="text-slate-400" />
+                          <CheckCircle2 size={11} className="text-emerald-600" />
                           No Prazo
                         </span>
                       );
@@ -17875,6 +17676,16 @@ export function PlanningTab({
                 title="Editar"
               >
                 <Edit3 size={14} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenDuplicateModal(task);
+                }}
+                className="p-2 text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-all border border-indigo-100"
+                title="Duplicar Atividade"
+              >
+                <Copy size={14} />
               </button>
               <button
                 onClick={(e) => {
