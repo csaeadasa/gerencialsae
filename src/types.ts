@@ -442,7 +442,7 @@ export interface RecursoData {
   nomeUsuario?: string;
   enderecoUsuario?: string;
   regiaoAdministrativa?: string;
-  classificacaoImovel?: 'Comercial' | 'Residencial' | 'Não se aplica' | string;
+  classificacaoImovel?: 'Comercial' | 'Residencial' | 'Industrial' | 'Pública' | 'Não se aplica' | string;
   apuracao?: string;
   tipoManifestacao?: 'Denúncia' | 'Reclamação' | 'Solicitação' | string;
   servico?: 'Água' | 'Esgoto' | 'Comercial' | string;
@@ -474,7 +474,7 @@ export interface RecursoRevisaoData {
   longitude?: string;
   servico?: 'Água' | 'Esgoto' | 'Comercial' | 'Drenagem' | string;
   tipoRecurso?: string;
-  classificacaoImovel?: 'Público' | 'Residencial' | 'Comercial' | 'Industrial' | string;
+  classificacaoImovel?: 'Pública' | 'Residencial' | 'Comercial' | 'Industrial' | string;
   tipoInfracao?: string;
   irregularidade?: string;
   irregularidadeEncontrada?: string;

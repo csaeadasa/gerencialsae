@@ -3190,7 +3190,7 @@ export function PlanningTab({
   // Handle expand / collapse toggles
   const toggleExpand = (id: number) => {
     setExpandedTasks(prev => {
-      const current = prev[id] !== undefined ? prev[id] : (isAnyFilterActive ? true : false);
+      const current = prev[id] !== undefined ? prev[id] : (searchTerm.trim() !== "" ? true : false);
       return { ...prev, [id]: !current };
     });
   };
@@ -10728,6 +10728,11 @@ export function PlanningTab({
                           onClick={() => {
                             setCollapsedAreas({});
                             setCollapsedTableCategories({});
+                            const allExpanded: Record<number, boolean> = {};
+                            tasks.forEach(t => {
+                              if ((childrenMap[t.id] || []).length > 0) allExpanded[t.id] = true;
+                            });
+                            setExpandedTasks(allExpanded);
                           }}
                           className="px-3 py-1.5 text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-100/80 transition-colors uppercase tracking-wider cursor-pointer"
                         >
@@ -10753,6 +10758,7 @@ export function PlanningTab({
                             });
                             setCollapsedAreas(newCollapsedAreas);
                             setCollapsedTableCategories(newCollapsedCategories);
+                            setExpandedTasks({});
                           }}
                           className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition-colors uppercase tracking-wider cursor-pointer"
                         >
@@ -11333,7 +11339,7 @@ export function PlanningTab({
 
                         const renderRowHierarchical = (t: Task, depth: number, areaName: string, categoryName: string) => {
                           const subTasksCount = childrenMap[t.id]?.length || 0;
-                          const isExpanded = expandedTasks[t.id] !== undefined ? expandedTasks[t.id] : (isAnyFilterActive ? true : false);
+                          const isExpanded = expandedTasks[t.id] !== undefined ? expandedTasks[t.id] : (searchTerm.trim() !== "" ? true : false);
                           
                           let q = '-';
                           let mLabel = '-';
@@ -13171,8 +13177,8 @@ export function PlanningTab({
 
                 const activeGroup = groups.find(g => g.id === activeRecentSegment);
                 const displayTasks = activeRecentSegment === "all"
-                  ? groups.flatMap(g => g.tasks)
-                  : (activeGroup ? activeGroup.tasks : groups.flatMap(g => g.tasks));
+                  ? Array.from(new Map(groups.flatMap(g => g.tasks).map(t => [t.root.id, t])).values())
+                  : (activeGroup ? activeGroup.tasks : Array.from(new Map(groups.flatMap(g => g.tasks).map(t => [t.root.id, t])).values()));
 
                 return (
                   <div className="space-y-4">
@@ -13342,12 +13348,11 @@ export function PlanningTab({
                    tasks: rootTasks.filter(t => (cat.id === -1 ? (!t.categoryIds || t.categoryIds.length === 0) : (t.categoryIds && t.categoryIds.includes(cat.id))) && childMatchesOrIsPath(t.id))
                  })).filter(item => item.tasks.length > 0);
 
-                 const totalCatTasks = catsWithTasks.reduce((acc, c) => acc + c.tasks.length, 0);
-
                  const activeCatGroup = catsWithTasks.find(c => String(c.cat.id) === String(activeCategorySegment));
                  const displayTasks = activeCategorySegment === "all"
-                   ? catsWithTasks.flatMap(c => c.tasks)
-                   : (activeCatGroup ? activeCatGroup.tasks : catsWithTasks.flatMap(c => c.tasks));
+                   ? Array.from(new Map(catsWithTasks.flatMap(c => c.tasks).map(t => [t.id, t])).values())
+                   : (activeCatGroup ? activeCatGroup.tasks : Array.from(new Map(catsWithTasks.flatMap(c => c.tasks).map(t => [t.id, t])).values()));
+                 const totalCatTasks = Array.from(new Map(catsWithTasks.flatMap(c => c.tasks).map(t => [t.id, t])).values()).length;
 
                  return (
                    <div className="space-y-4">
@@ -13428,12 +13433,11 @@ export function PlanningTab({
                    tasks: rootTasks.filter(t => (ar.id === -1 ? (!t.areaIds || t.areaIds.length === 0) : (t.areaIds && t.areaIds.includes(ar.id))) && childMatchesOrIsPath(t.id))
                  })).filter(item => item.tasks.length > 0);
 
-                 const totalAreaTasks = areasWithTasks.reduce((acc, a) => acc + a.tasks.length, 0);
-
                  const activeAreaGroup = areasWithTasks.find(a => String(a.ar.id) === String(activeAreaSegment));
                  const displayTasks = activeAreaSegment === "all"
-                   ? areasWithTasks.flatMap(a => a.tasks)
-                   : (activeAreaGroup ? activeAreaGroup.tasks : areasWithTasks.flatMap(a => a.tasks));
+                   ? Array.from(new Map(areasWithTasks.flatMap(a => a.tasks).map(t => [t.id, t])).values())
+                   : (activeAreaGroup ? activeAreaGroup.tasks : Array.from(new Map(areasWithTasks.flatMap(a => a.tasks).map(t => [t.id, t])).values()));
+                 const totalAreaTasks = Array.from(new Map(areasWithTasks.flatMap(a => a.tasks).map(t => [t.id, t])).values()).length;
 
                  return (
                    <div className="space-y-4">
@@ -13660,8 +13664,8 @@ export function PlanningTab({
 
                           const activeStageGroup = stagesWithTasks.find(s => s.stage === activeRecursoSegment);
                           const displayTasks = activeRecursoSegment === "all"
-                            ? stagesWithTasks.flatMap(s => s.tasks)
-                            : (activeStageGroup ? activeStageGroup.tasks : stagesWithTasks.flatMap(s => s.tasks));
+                            ? Array.from(new Map(stagesWithTasks.flatMap(s => s.tasks).map(t => [t.id, t])).values())
+                            : (activeStageGroup ? activeStageGroup.tasks : Array.from(new Map(stagesWithTasks.flatMap(s => s.tasks).map(t => [t.id, t])).values()));
 
                           const StageIcon = (currentType === "demanda_ouvidoria" || currentType === "recurso")
                             ? Scale
@@ -14288,7 +14292,7 @@ export function PlanningTab({
                             </div>
                             {expandedGroupContainers[`responsible-${resp.id}`] !== false && (
                               <div>
-                                {groupRootTasks.filter(t => childMatchesOrIsPath(t.id)).map(t => renderTaskNode(t, 0, false))}
+                                {groupRootTasks.filter(t => childMatchesOrIsPath(t.id)).map(t => renderTaskNode(t, 0, false, `resp-${resp.id}`))}
                               </div>
                             )}
                          </div>
@@ -14554,7 +14558,7 @@ export function PlanningTab({
                               const buildList = (nodes: Task[], depth: number) => {
                                 nodes.forEach(n => {
                                   ganttList.push({ task: n, depth });
-                                  const isExpanded = isAnyFilterActive ? (expandedTasks[n.id] !== false) : !!expandedTasks[n.id];
+                                  const isExpanded = expandedTasks[n.id] !== undefined ? expandedTasks[n.id] : (searchTerm.trim() !== "" ? true : false);
                                   if (isExpanded) {
                                     const taskChildren = childrenMap[n.id] || [];
                                     const visibleChildren = isAnyFilterActive
@@ -14609,7 +14613,7 @@ export function PlanningTab({
                                              onClick={() => toggleExpand(t.id)}
                                              className="cursor-pointer w-4 h-4 flex items-center justify-center rounded-sm hover:bg-slate-200 text-slate-500 shrink-0"
                                            >
-                                             {(isAnyFilterActive ? (expandedTasks[t.id] !== false) : !!expandedTasks[t.id]) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                                             {(expandedTasks[t.id] !== undefined ? expandedTasks[t.id] : (searchTerm.trim() !== "" ? true : false)) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                                            </div>
                                         )}
                                         {!hasSubs && depth > 0 && <span className="w-4 h-4 shrink-0 border-l border-b border-slate-300 rounded-bl-sm opacity-50 relative -top-1" />}
@@ -17181,8 +17185,8 @@ export function PlanningTab({
     return false;
   }
 
-  function renderTaskNode(task: Task, depth: number, forceFlat: boolean = false) {
-    const isExpanded = isAnyFilterActive ? (expandedTasks[task.id] !== false) : !!expandedTasks[task.id];
+  function renderTaskNode(task: Task, depth: number, forceFlat: boolean = false, keyPrefix: string = "") {
+    const isExpanded = expandedTasks[task.id] !== undefined ? expandedTasks[task.id] : (searchTerm.trim() !== "" ? true : false);
     const taskChildren = forceFlat ? [] : (childrenMap[task.id] || []);
     const hasSubs = taskChildren.length > 0;
     
@@ -17202,9 +17206,11 @@ export function PlanningTab({
       : "border border-slate-200 text-slate-400 bg-slate-50/70 hover:bg-slate-100 hover:text-slate-600 shadow-2xs";
     const nodeBgTint = depth > 0 ? "bg-slate-50/50" : "bg-white";
 
+    const nodeKey = keyPrefix ? `${keyPrefix}-${task.id}` : task.id;
+
     return (
       <div 
-        key={task.id} 
+        key={nodeKey} 
         id={`task-node-${task.id}`}
         className={`w-full border-b border-b-slate-100 last:border-b-0 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.03)_inset] ${nodeBgTint} ${
           depth === 0
@@ -17717,7 +17723,7 @@ export function PlanningTab({
                 transition={{ duration: 0.18, ease: "easeInOut" }}
                 className="overflow-hidden border-b border-indigo-100 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)_inset]"
               >
-                {visibleChildren.map(child => renderTaskNode(child, depth + 1))}
+                {visibleChildren.map(child => renderTaskNode(child, depth + 1, false, keyPrefix))}
               </motion.div>
             </AnimatePresence>
           </div>

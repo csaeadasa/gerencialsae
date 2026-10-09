@@ -667,14 +667,14 @@ export const RecursoRevisaoEditor: React.FC<Props> = ({ data, onChange }) => {
         <div className="space-y-1">
           <label className="text-xs font-bold text-slate-600">Classificação do Imóvel</label>
           <select
-            value={localData.classificacaoImovel || 'Residencial'}
+            value={localData.classificacaoImovel === 'Público' ? 'Pública' : (localData.classificacaoImovel || 'Residencial')}
             onChange={e => updateField('classificacaoImovel', e.target.value)}
             className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-adasa-mid outline-none font-semibold text-slate-700 bg-white"
           >
-            <option value="Público">Público</option>
             <option value="Residencial">Residencial</option>
             <option value="Comercial">Comercial</option>
             <option value="Industrial">Industrial</option>
+            <option value="Pública">Pública</option>
           </select>
         </div>
       </div>

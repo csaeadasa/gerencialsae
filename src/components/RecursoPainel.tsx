@@ -333,7 +333,18 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
   // Constantes de opções
   const OPCOES_SITUACAO_RECURSO = ["Em Análise", "Deferido Parcial", "Deferido Total", "Indeferido"];
   const OPCOES_SITUACAO_OUVIDORIA = ["Em Análise", "Atendido Parcial", "Atendido", "Não Atendido"];
-  const OPCOES_CLASSIFICACAO_IMOVEL = ["Público", "Residencial", "Comercial", "Industrial"];
+  const OPCOES_CLASSIFICACAO_IMOVEL = ["Pública", "Residencial", "Comercial", "Industrial"];
+
+  const isSameImovelClass = (actual?: string, filter?: string) => {
+    const a = (actual || "").trim().toLowerCase();
+    const f = (filter || "").trim().toLowerCase();
+    if (a === f) return true;
+    if ((a === "público" || a === "publico" || a === "pública" || a === "publica") &&
+        (f === "público" || f === "publico" || f === "pública" || f === "publica")) {
+      return true;
+    }
+    return false;
+  };
 
   // Helper estrito para verificar se a tarefa é do tipo Recurso de Revisão
   const isRecursoRevisaoTask = (t: Task): boolean => {
@@ -368,7 +379,11 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
     allRecursoTasks.forEach(t => {
       const data = getTaskNormalizedData(t, 'recurso_revisao');
       if (data.categoria) infracoes.add(data.categoria);
-      if (data.classificacaoImovel) imoveis.add(data.classificacaoImovel);
+      if (data.classificacaoImovel) {
+        let cat = data.classificacaoImovel.trim();
+        if (cat === "Público" || cat === "Publico") cat = "Pública";
+        imoveis.add(cat);
+      }
       if (data.regiaoAdministrativa) regioes.add(data.regiaoAdministrativa);
       if (data.situacao) situacoes.add(data.situacao);
     });
@@ -391,7 +406,11 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
     allOuvidoriaTasks.forEach(t => {
       const data = getTaskNormalizedData(t, 'ouvidoria');
       if (data.categoria) infracoes.add(data.categoria);
-      if (data.classificacaoImovel) imoveis.add(data.classificacaoImovel);
+      if (data.classificacaoImovel) {
+        let cat = data.classificacaoImovel.trim();
+        if (cat === "Público" || cat === "Publico") cat = "Pública";
+        imoveis.add(cat);
+      }
       if (data.regiaoAdministrativa) regioes.add(data.regiaoAdministrativa);
       if (data.situacao) situacoes.add(data.situacao);
     });
@@ -423,7 +442,7 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
       if (f.anoFilter !== "all" && getTaskYear(t).toString() !== f.anoFilter) {
         return false;
       }
-      if (f.classificacaoImovelFilter !== "all" && (data.classificacaoImovel || "").trim().toLowerCase() !== f.classificacaoImovelFilter.trim().toLowerCase()) {
+      if (f.classificacaoImovelFilter !== "all" && !isSameImovelClass(data.classificacaoImovel, f.classificacaoImovelFilter)) {
         return false;
       }
       if (f.tipoInfracaoFilter !== "all" && (data.categoria || "").trim().toLowerCase() !== f.tipoInfracaoFilter.trim().toLowerCase()) {
@@ -463,7 +482,7 @@ export function RecursoPainel({ tasks, plans = [], onEditTaskClick }: RecursoPai
       if (f.anoFilter !== "all" && getTaskYear(t).toString() !== f.anoFilter) {
         return false;
       }
-      if (f.classificacaoImovelFilter !== "all" && (data.classificacaoImovel || "").trim().toLowerCase() !== f.classificacaoImovelFilter.trim().toLowerCase()) {
+      if (f.classificacaoImovelFilter !== "all" && !isSameImovelClass(data.classificacaoImovel, f.classificacaoImovelFilter)) {
         return false;
       }
       if (f.tipoInfracaoFilter !== "all" && (data.categoria || "").trim().toLowerCase() !== f.tipoInfracaoFilter.trim().toLowerCase()) {

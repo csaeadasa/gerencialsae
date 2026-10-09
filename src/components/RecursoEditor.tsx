@@ -31,8 +31,10 @@ export const CATEGORIA_OPTIONS = [
 ];
 
 export const CLASSIFICACAO_IMOVEL_OUVIDORIA = [
-  "Comercial",
   "Residencial",
+  "Comercial",
+  "Industrial",
+  "Pública",
   "Não se aplica"
 ];
 
@@ -119,6 +121,7 @@ export const RecursoEditor: React.FC<Props> = ({ data, onChange }) => {
     
     // Default values
     if (!newData.classificacaoImovel) { newData.classificacaoImovel = 'Residencial'; needsUpdate = true; }
+    if (newData.classificacaoImovel === 'Público' || newData.classificacaoImovel === 'Publico') { newData.classificacaoImovel = 'Pública'; needsUpdate = true; }
     if (!newData.tipoManifestacao) { newData.tipoManifestacao = 'Reclamação'; needsUpdate = true; }
     if (!newData.servico) { newData.servico = 'Água'; needsUpdate = true; }
     if (!newData.categoria) { newData.categoria = 'Consumo Medido'; needsUpdate = true; }
@@ -349,13 +352,13 @@ export const RecursoEditor: React.FC<Props> = ({ data, onChange }) => {
         <div className="space-y-1">
           <label className="text-xs font-bold text-slate-600">Classificação do Imóvel</label>
           <select
-            value={localData.classificacaoImovel || 'Residencial'}
+            value={localData.classificacaoImovel === 'Público' ? 'Pública' : (localData.classificacaoImovel || 'Residencial')}
             onChange={e => updateField('classificacaoImovel', e.target.value)}
             className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-adasa-mid outline-none font-semibold text-slate-700 bg-white"
           >
-            <option value="Comercial">Comercial</option>
-            <option value="Residencial">Residencial</option>
-            <option value="Não se aplica">Não se aplica</option>
+            {CLASSIFICACAO_IMOVEL_OUVIDORIA.map(opt => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
           </select>
         </div>
       </div>
