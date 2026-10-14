@@ -983,6 +983,39 @@ async function runStartupMigration() {
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS fiscalizacao_data JSONB;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS ouvidoria_data JSONB;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS recurso_rev_data JSONB;`);
+      await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS agenda_regulatoria_data JSONB;`);
+      await client.query(`ALTER TABLE re_agenda_tasks ADD COLUMN IF NOT EXISTS tema VARCHAR(255);`);
+
+      // Initial migration: sync existing re_agenda_tasks into pl_tasks agenda_regulatoria_data and type
+      try {
+        const agendaLinkRows = await client.query(`
+          SELECT rat.task_id, rat.status, rat.entrega, rat.entrega_link, ra.id as agenda_id, ra.nome as agenda_nome, ra.tema as agenda_tema
+          FROM re_agenda_tasks rat
+          INNER JOIN re_agendas ra ON ra.id = rat.agenda_id
+          WHERE rat.task_id IS NOT NULL
+        `);
+        for (const row of agendaLinkRows.rows) {
+          const tId = Number(row.task_id);
+          const taskRes = await client.query('SELECT type, agenda_regulatoria_data FROM pl_tasks WHERE id = $1', [tId]);
+          if (taskRes.rows.length > 0) {
+            const currentTask = taskRes.rows[0];
+            const currentData = currentTask.agenda_regulatoria_data || {};
+            const updatedData = {
+              agendaId: currentData.agendaId || Number(row.agenda_id),
+              agendaVinculada: currentData.agendaVinculada || row.agenda_nome,
+              temaRegulatorio: currentData.temaRegulatorio || (row.agenda_tema === 'QUALIDADE DA PRESTAÇÃO DOS SERVIÇOS' ? 'Qualidade da Prestação de Serviços' : (row.agenda_tema || 'Qualidade da Prestação de Serviços')),
+              entregaMeta: currentData.entregaMeta || row.entrega || '',
+              linkArquivoEntrega: currentData.linkArquivoEntrega || row.entrega_link || ''
+            };
+            await client.query(
+              'UPDATE pl_tasks SET type = $1, agenda_regulatoria_data = $2 WHERE id = $3',
+              [currentTask.type === 'default' ? 'agenda_regulatoria' : currentTask.type, JSON.stringify(updatedData), tId]
+            );
+          }
+        }
+      } catch (migErr) {
+        console.warn('Migração inicial agenda regulatória aviso:', migErr);
+      }
       await client.query(`ALTER TABLE pl_tasks DROP COLUMN IF EXISTS recurso_data;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS checklist JSONB;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS links JSONB DEFAULT '[]'::jsonb;`);
@@ -2304,7 +2337,7 @@ export async function startServer(isVercel = false) {
             weight: t.weight !== undefined && t.weight !== null ? Number(t.weight) : 1,
             isProgrammed: t.is_programmed !== false,
             type: t.type === 'recurso' ? 'demanda_ouvidoria' : t.type,
-            fiscalizacaoData: t.fiscalizacao_data, ouvidoriaData: t.ouvidoria_data, recursoData: t.ouvidoria_data, recursoRevData: t.recurso_rev_data,
+            fiscalizacaoData: t.fiscalizacao_data, ouvidoriaData: t.ouvidoria_data, recursoData: t.ouvidoria_data, recursoRevData: t.recurso_rev_data, agendaRegulatoriaData: t.agenda_regulatoria_data,
             areaIds: taskAreasMap[Number(t.id)] || [],
             responsibleIds: taskResponsiblesMap[Number(t.id)] || [],
             categoryIds: taskCategoriesMap[Number(t.id)] || []
@@ -4714,7 +4747,8 @@ export async function startServer(isVercel = false) {
                     'task_id', at.task_id,
                     'status', COALESCE(pt.status, at.status, 'Não iniciada'),
                     'entrega', at.entrega,
-                    'entrega_link', at.entrega_link
+                    'entrega_link', at.entrega_link,
+                    'tema', COALESCE(at.tema, pt.agenda_regulatoria_data->>'temaRegulatorio', a.tema, 'Qualidade da Prestação de Serviços')
                   )) 
                   FROM re_agenda_tasks at 
                   LEFT JOIN pl_tasks pt ON pt.id = at.task_id
@@ -4765,23 +4799,44 @@ export async function startServer(isVercel = false) {
           const tStatus = item.status || "Não Concluída";
           const tEntrega = item.entrega || "";
           const tEntregaLink = item.entrega_link || "";
+          const tTema = item.tema || "Qualidade da Prestação de Serviços";
+
           await client.query(
-            "INSERT INTO re_agenda_tasks (agenda_id, task_id, status, entrega, entrega_link) VALUES ($1, $2, $3, $4, $5)",
-            [newAgenda.id, tId, tStatus, tEntrega, tEntregaLink]
+            "INSERT INTO re_agenda_tasks (agenda_id, task_id, status, entrega, entrega_link, tema) VALUES ($1, $2, $3, $4, $5, $6)",
+            [newAgenda.id, tId, tStatus, tEntrega, tEntregaLink, tTema]
           );
           associatedIds.push(tId);
-          savedTasks.push({ task_id: tId, status: tStatus, entrega: tEntrega, entrega_link: tEntregaLink });
+          savedTasks.push({ task_id: tId, status: tStatus, entrega: tEntrega, entrega_link: tEntregaLink, tema: tTema });
+
+          // Update pl_tasks agenda_regulatoria_data
+          const currentTaskRes = await client.query("SELECT agenda_regulatoria_data, type FROM pl_tasks WHERE id = $1", [tId]);
+          if (currentTaskRes.rows.length > 0) {
+            const currentTask = currentTaskRes.rows[0];
+            const oldData = currentTask.agenda_regulatoria_data || {};
+            const newData = {
+              ...oldData,
+              agendaId: newAgenda.id,
+              agendaVinculada: nome || newAgenda.nome,
+              temaRegulatorio: tTema,
+              entregaMeta: tEntrega || oldData.entregaMeta || "",
+              linkArquivoEntrega: tEntregaLink || oldData.linkArquivoEntrega || ""
+            };
+            await client.query(
+              "UPDATE pl_tasks SET type = $1, agenda_regulatoria_data = $2 WHERE id = $3",
+              [currentTask.type === "default" ? "agenda_regulatoria" : currentTask.type, JSON.stringify(newData), tId]
+            );
+          }
         }
       } else if (Array.isArray(task_ids) && task_ids.length > 0) {
         for (const taskId of task_ids) {
           const tId = parseInt(taskId);
           if (isNaN(tId)) continue;
           await client.query(
-            "INSERT INTO re_agenda_tasks (agenda_id, task_id, status, entrega, entrega_link) VALUES ($1, $2, 'Não Concluída', '', '')",
+            "INSERT INTO re_agenda_tasks (agenda_id, task_id, status, entrega, entrega_link, tema) VALUES ($1, $2, 'Não Concluída', '', '', 'Qualidade da Prestação de Serviços')",
             [newAgenda.id, tId]
           );
           associatedIds.push(tId);
-          savedTasks.push({ task_id: tId, status: "Não Concluída", entrega: "", entrega_link: "" });
+          savedTasks.push({ task_id: tId, status: "Não Concluída", entrega: "", entrega_link: "", tema: "Qualidade da Prestação de Serviços" });
         }
       }
       
@@ -4830,23 +4885,44 @@ export async function startServer(isVercel = false) {
           const tStatus = item.status || "Não Concluída";
           const tEntrega = item.entrega || "";
           const tEntregaLink = item.entrega_link || "";
+          const tTema = item.tema || "Qualidade da Prestação de Serviços";
+
           await client.query(
-            "INSERT INTO re_agenda_tasks (agenda_id, task_id, status, entrega, entrega_link) VALUES ($1, $2, $3, $4, $5)",
-            [id, tId, tStatus, tEntrega, tEntregaLink]
+            "INSERT INTO re_agenda_tasks (agenda_id, task_id, status, entrega, entrega_link, tema) VALUES ($1, $2, $3, $4, $5, $6)",
+            [id, tId, tStatus, tEntrega, tEntregaLink, tTema]
           );
           associatedIds.push(tId);
-          savedTasks.push({ task_id: tId, status: tStatus, entrega: tEntrega, entrega_link: tEntregaLink });
+          savedTasks.push({ task_id: tId, status: tStatus, entrega: tEntrega, entrega_link: tEntregaLink, tema: tTema });
+
+          // Update pl_tasks agenda_regulatoria_data
+          const currentTaskRes = await client.query("SELECT agenda_regulatoria_data, type FROM pl_tasks WHERE id = $1", [tId]);
+          if (currentTaskRes.rows.length > 0) {
+            const currentTask = currentTaskRes.rows[0];
+            const oldData = currentTask.agenda_regulatoria_data || {};
+            const newData = {
+              ...oldData,
+              agendaId: id,
+              agendaVinculada: nome || updatedAgenda.nome,
+              temaRegulatorio: tTema,
+              entregaMeta: tEntrega || oldData.entregaMeta || "",
+              linkArquivoEntrega: tEntregaLink || oldData.linkArquivoEntrega || ""
+            };
+            await client.query(
+              "UPDATE pl_tasks SET type = $1, agenda_regulatoria_data = $2 WHERE id = $3",
+              [currentTask.type === "default" ? "agenda_regulatoria" : currentTask.type, JSON.stringify(newData), tId]
+            );
+          }
         }
       } else if (Array.isArray(task_ids) && task_ids.length > 0) {
         for (const taskId of task_ids) {
           const tId = parseInt(taskId);
           if (isNaN(tId)) continue;
           await client.query(
-            "INSERT INTO re_agenda_tasks (agenda_id, task_id, status, entrega, entrega_link) VALUES ($1, $2, 'Não Concluída', '', '')",
+            "INSERT INTO re_agenda_tasks (agenda_id, task_id, status, entrega, entrega_link, tema) VALUES ($1, $2, 'Não Concluída', '', '', 'Qualidade da Prestação de Serviços')",
             [id, tId]
           );
           associatedIds.push(tId);
-          savedTasks.push({ task_id: tId, status: "Não Concluída", entrega: "", entrega_link: "" });
+          savedTasks.push({ task_id: tId, status: "Não Concluída", entrega: "", entrega_link: "", tema: "Qualidade da Prestação de Serviços" });
         }
       }
       
@@ -5201,11 +5277,11 @@ export async function startServer(isVercel = false) {
       try {
         const result = await client.query(`
           WITH RECURSIVE task_tree AS (
-            SELECT id, title, description, start_date, end_date, status, parent_id, progress, priority, category, assigned_to, created_by, created_at, completed_at, completed_by, notes, plan_id, depends_on_task_id, updated_at, updated_by, sei_process, weight, type, fiscalizacao_data, ouvidoria_data, recurso_rev_data, checklist, links, comments, is_programmed, 1 AS depth
+            SELECT id, title, description, start_date, end_date, status, parent_id, progress, priority, category, assigned_to, created_by, created_at, completed_at, completed_by, notes, plan_id, depends_on_task_id, updated_at, updated_by, sei_process, weight, type, fiscalizacao_data, ouvidoria_data, recurso_rev_data, agenda_regulatoria_data, checklist, links, comments, is_programmed, 1 AS depth
             FROM pl_tasks
             WHERE parent_id IS NULL
             UNION ALL
-            SELECT t.id, t.title, t.description, t.start_date, t.end_date, t.status, t.parent_id, t.progress, t.priority, t.category, t.assigned_to, t.created_by, t.created_at, t.completed_at, t.completed_by, t.notes, t.plan_id, t.depends_on_task_id, t.updated_at, t.updated_by, t.sei_process, t.weight, t.type, t.fiscalizacao_data, t.ouvidoria_data, t.recurso_rev_data, t.checklist, t.links, t.comments, t.is_programmed, tt.depth + 1
+            SELECT t.id, t.title, t.description, t.start_date, t.end_date, t.status, t.parent_id, t.progress, t.priority, t.category, t.assigned_to, t.created_by, t.created_at, t.completed_at, t.completed_by, t.notes, t.plan_id, t.depends_on_task_id, t.updated_at, t.updated_by, t.sei_process, t.weight, t.type, t.fiscalizacao_data, t.ouvidoria_data, t.recurso_rev_data, t.agenda_regulatoria_data, t.checklist, t.links, t.comments, t.is_programmed, tt.depth + 1
             FROM pl_tasks t
             INNER JOIN task_tree tt ON t.parent_id = tt.id
           )
@@ -5309,7 +5385,7 @@ export async function startServer(isVercel = false) {
           weight: t.weight !== undefined && t.weight !== null ? Number(t.weight) : 1,
           isProgrammed: t.is_programmed !== false,
           type: t.type === 'recurso' ? 'demanda_ouvidoria' : t.type,
-          fiscalizacaoData: t.fiscalizacao_data, ouvidoriaData: t.ouvidoria_data, recursoData: t.ouvidoria_data, recursoRevData: t.recurso_rev_data,
+          fiscalizacaoData: t.fiscalizacao_data, ouvidoriaData: t.ouvidoria_data, recursoData: t.ouvidoria_data, recursoRevData: t.recurso_rev_data, agendaRegulatoriaData: t.agenda_regulatoria_data,
           areaIds: taskAreasMap[Number(t.id)] || [],
           responsibleIds: taskResponsiblesMap[Number(t.id)] || [],
           categoryIds: taskCategoriesMap[Number(t.id)] || []
@@ -6142,9 +6218,40 @@ export async function startServer(isVercel = false) {
     }
   });
 
+  async function syncTaskAgendaRelation(client: any, taskId: number, agendaData: any, taskStatus?: string) {
+    if (!taskId || !agendaData || typeof agendaData !== 'object') return;
+    try {
+      let agendaId = agendaData.agendaId ? parseInt(agendaData.agendaId) : null;
+      if (!agendaId && agendaData.agendaVinculada) {
+        const aRes = await client.query('SELECT id FROM re_agendas WHERE nome = $1', [agendaData.agendaVinculada]);
+        if (aRes.rows.length > 0) agendaId = aRes.rows[0].id;
+      }
+      if (!agendaId) return;
+
+      const entrega = agendaData.entregaMeta || '';
+      const entregaLink = agendaData.linkArquivoEntrega || '';
+      const statusVal = taskStatus || 'Não iniciada';
+
+      const existing = await client.query('SELECT id FROM re_agenda_tasks WHERE agenda_id = $1 AND task_id = $2', [agendaId, taskId]);
+      if (existing.rows.length > 0) {
+        await client.query(
+          'UPDATE re_agenda_tasks SET status = $1, entrega = $2, entrega_link = $3 WHERE agenda_id = $4 AND task_id = $5',
+          [statusVal, entrega, entregaLink, agendaId, taskId]
+        );
+      } else {
+        await client.query(
+          'INSERT INTO re_agenda_tasks (agenda_id, task_id, status, entrega, entrega_link) VALUES ($1, $2, $3, $4, $5)',
+          [agendaId, taskId, statusVal, entrega, entregaLink]
+        );
+      }
+    } catch (syncErr) {
+      console.warn('Erro ao sincronizar re_agenda_tasks:', syncErr);
+    }
+  }
+
   app.post("/api/tasks", async (req, res) => {
     try {
-      const { title, description, startDate, endDate, status, parentId, progress, priority, category, assignedTo, notes, checklist, links, comments, planId, areaIds, responsibleIds, categoryIds, dependsOnTaskId, type, fiscalizacaoData, recursoData, ouvidoriaData, recursoRevData, isProgrammed, is_programmed } = req.body;
+      const { title, description, startDate, endDate, status, parentId, progress, priority, category, assignedTo, notes, checklist, links, comments, planId, areaIds, responsibleIds, categoryIds, dependsOnTaskId, type, fiscalizacaoData, recursoData, ouvidoriaData, recursoRevData, agendaRegulatoriaData, isProgrammed, is_programmed } = req.body;
       const pool = getDbPool();
       const client = await pool.connect();
       try {
@@ -6200,8 +6307,8 @@ export async function startServer(isVercel = false) {
         const taskCompletedBy = (finalProgress === 100 || finalStatus === "Concluída") ? (req.body.completedBy || req.body.updatedBy || req.body.createdBy || "SGI Pro") : null;
 
         const result = await client.query(
-          `INSERT INTO pl_tasks (title, description, start_date, end_date, status, parent_id, progress, priority, category, assigned_to, notes, plan_id, depends_on_task_id, updated_at, updated_by, created_at, created_by, completed_at, completed_by, sei_process, weight, type, fiscalizacao_data, ouvidoria_data, recurso_rev_data, checklist, links, comments, is_programmed, related_sei_processes)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+          `INSERT INTO pl_tasks (title, description, start_date, end_date, status, parent_id, progress, priority, category, assigned_to, notes, plan_id, depends_on_task_id, updated_at, updated_by, created_at, created_by, completed_at, completed_by, sei_process, weight, type, fiscalizacao_data, ouvidoria_data, recurso_rev_data, agenda_regulatoria_data, checklist, links, comments, is_programmed, related_sei_processes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
            RETURNING *`,
           [
             title || "Sem título",
@@ -6228,6 +6335,7 @@ export async function startServer(isVercel = false) {
             finalFiscalizacaoData ? JSON.stringify(finalFiscalizacaoData) : null,
             (ouvidoriaData || recursoData) ? JSON.stringify(ouvidoriaData || recursoData) : null,
             recursoRevData ? JSON.stringify(recursoRevData) : null,
+            agendaRegulatoriaData ? JSON.stringify(agendaRegulatoriaData) : null,
             checklist ? JSON.stringify(checklist) : null,
             links ? JSON.stringify(links) : JSON.stringify([]),
             comments ? JSON.stringify(comments) : JSON.stringify([]),
@@ -6340,11 +6448,22 @@ export async function startServer(isVercel = false) {
             ouvidoriaData: finalSaved.ouvidoria_data,
             recursoData: finalSaved.ouvidoria_data,
             recursoRevData: finalSaved.recurso_rev_data,
+            agendaRegulatoriaData: finalSaved.agenda_regulatoria_data,
             areaIds: areaIds || [],
             responsibleIds: cleanRespIds,
             categoryIds: categoryIds || []
           }
         });
+
+        // Sincronizar com a tabela relacional re_agenda_tasks caso seja do tipo agenda_regulatoria
+        if (finalSaved.type === 'agenda_regulatoria' && finalSaved.agenda_regulatoria_data) {
+          const syncClient = await pool.connect();
+          try {
+            await syncTaskAgendaRelation(syncClient, Number(finalSaved.id), finalSaved.agenda_regulatoria_data, finalSaved.status);
+          } finally {
+            syncClient.release();
+          }
+        }
       } catch (err) {
         await client.query("ROLLBACK");
         throw err;
@@ -6360,7 +6479,7 @@ export async function startServer(isVercel = false) {
   app.put("/api/tasks/:id", async (req, res) => {
     try {
       const taskId = parseInt(req.params.id);
-      const { title, description, startDate, endDate, status, progress, priority, category, assignedTo, notes, checklist, links, comments, parentId, planId, areaIds, responsibleIds, categoryIds, dependsOnTaskId, seiProcess, type, fiscalizacaoData, recursoData, ouvidoriaData, recursoRevData, isProgrammed, is_programmed } = req.body;
+      const { title, description, startDate, endDate, status, progress, priority, category, assignedTo, notes, checklist, links, comments, parentId, planId, areaIds, responsibleIds, categoryIds, dependsOnTaskId, seiProcess, type, fiscalizacaoData, recursoData, ouvidoriaData, recursoRevData, agendaRegulatoriaData, isProgrammed, is_programmed } = req.body;
       const pool = getDbPool();
       const client = await pool.connect();
       try {
@@ -6445,7 +6564,7 @@ export async function startServer(isVercel = false) {
 
         const result = await client.query(
           `UPDATE pl_tasks 
-           SET title = $1, description = $2, start_date = $3, end_date = $4, status = $5, progress = $6, priority = $7, category = $8, assigned_to = $9, notes = $10, parent_id = $11, plan_id = $12, depends_on_task_id = $13, updated_at = NOW(), updated_by = $14, sei_process = $16, weight = $17, type = $18, fiscalizacao_data = $19, ouvidoria_data = $20, recurso_rev_data = $21, checklist = $22, links = $23, comments = $24, is_programmed = $25, related_sei_processes = $26, completed_at = $27, completed_by = $28
+           SET title = $1, description = $2, start_date = $3, end_date = $4, status = $5, progress = $6, priority = $7, category = $8, assigned_to = $9, notes = $10, parent_id = $11, plan_id = $12, depends_on_task_id = $13, updated_at = NOW(), updated_by = $14, sei_process = $16, weight = $17, type = $18, fiscalizacao_data = $19, ouvidoria_data = $20, recurso_rev_data = $21, checklist = $22, links = $23, comments = $24, is_programmed = $25, related_sei_processes = $26, completed_at = $27, completed_by = $28, agenda_regulatoria_data = $29
            WHERE id = $15
            RETURNING *`,
           [
@@ -6476,7 +6595,8 @@ export async function startServer(isVercel = false) {
             finalIsProgrammed,
             JSON.stringify(req.body.relatedSeiProcesses !== undefined ? (Array.isArray(req.body.relatedSeiProcesses) ? req.body.relatedSeiProcesses : []) : (currentTaskRes.rows[0].related_sei_processes || [])),
             finalCompletedAt,
-            finalCompletedBy
+            finalCompletedBy,
+            agendaRegulatoriaData ? JSON.stringify(agendaRegulatoriaData) : null
           ]
         );
 
@@ -6607,11 +6727,22 @@ export async function startServer(isVercel = false) {
             ouvidoriaData: finalSaved.ouvidoria_data,
             recursoData: finalSaved.ouvidoria_data,
             recursoRevData: finalSaved.recurso_rev_data,
+            agendaRegulatoriaData: finalSaved.agenda_regulatoria_data,
             areaIds: finalAreaIds,
             responsibleIds: cleanRespIds,
             categoryIds: finalCategoryIds
           }
         });
+
+        // Sincronizar com a tabela relacional re_agenda_tasks caso seja do tipo agenda_regulatoria
+        if (finalSaved.type === 'agenda_regulatoria' && finalSaved.agenda_regulatoria_data) {
+          const syncClient = await pool.connect();
+          try {
+            await syncTaskAgendaRelation(syncClient, Number(finalSaved.id), finalSaved.agenda_regulatoria_data, finalSaved.status);
+          } finally {
+            syncClient.release();
+          }
+        }
       } catch (err) {
         await client.query("ROLLBACK");
         throw err;

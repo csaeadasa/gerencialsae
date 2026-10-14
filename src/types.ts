@@ -318,11 +318,41 @@ export interface Task {
   updatedBy?: string | null;
   comments?: TaskComment[];
   links?: TaskLink[];
-  type?: 'default' | 'fiscalizacao' | 'demanda_ouvidoria' | 'recurso_revisao' | 'recurso';
+  type?: 'default' | 'fiscalizacao' | 'demanda_ouvidoria' | 'recurso_revisao' | 'recurso' | 'agenda_regulatoria';
   fiscalizacaoData?: FiscalizacaoData;
   ouvidoriaData?: RecursoData;
   recursoData?: RecursoData;
   recursoRevData?: RecursoRevisaoData;
+  agendaRegulatoriaData?: AgendaRegulatoriaData;
+}
+
+export const TEMAS_AGENDA_REGULATORIA = [
+  "Gestão dos Recursos Hídricos no DF",
+  "Estruturação da Prestação de Serviços",
+  "Produção de Referencial Técnico do Serviço",
+  "Qualidade da Prestação de Serviços",
+  "Reajuste Tarifário"
+] as const;
+
+export type TemaAgendaRegulatoria = typeof TEMAS_AGENDA_REGULATORIA[number];
+
+export const AGENDA_REGULATORIA_ETAPAS = [
+  "Minuta do Normativo",
+  "Consulta e Audiência Pública",
+  "Aprovação Final",
+  "Finalizada"
+] as const;
+
+export type AgendaRegulatoriaEtapa = typeof AGENDA_REGULATORIA_ETAPAS[number];
+
+export interface AgendaRegulatoriaData {
+  agendaId?: number | null;
+  agendaVinculada?: string;
+  temaRegulatorio?: TemaAgendaRegulatoria | string;
+  entregaMeta?: string;
+  linkArquivoEntrega?: string;
+  etapa?: AgendaRegulatoriaEtapa | string;
+  datasEtapas?: Record<string, string>;
 }
 
 export interface PlanQuarterStats {

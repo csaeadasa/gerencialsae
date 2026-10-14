@@ -1,24 +1,31 @@
 import * as React from "react";
 import { useState, useEffect } from "react";
-import { Plus, Edit2, Trash2, Search, X, ChevronDown, ChevronUp, BookOpen, Layers, ExternalLink } from "lucide-react";
+import { Plus, Edit2, Trash2, Search, X, ChevronDown, ChevronUp, BookOpen, Layers, ExternalLink, Check, Sparkles, Filter, Link2, Target } from "lucide-react";
+import { TEMAS_AGENDA_REGULATORIA } from "../types";
 
 interface Task {
   id: number;
   title: string;
   description?: string;
   status?: string;
+  agendaRegulatoriaData?: {
+    temaRegulatorio?: string;
+    entregaMeta?: string;
+    linkArquivoEntrega?: string;
+  };
 }
 
 interface RegulatoryAgenda {
   id: number;
   nome: string;
-  tema: string;
+  tema?: string;
   task_ids: number[];
   agenda_tasks?: {
     task_id: number;
     status: string;
     entrega: string;
     entrega_link?: string;
+    tema?: string;
   }[];
 }
 
@@ -44,10 +51,18 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
   const [editingId, setEditingId] = useState<number | null>(null);
 
   const [formNome, setFormNome] = useState("");
-  const [formTema, setFormTema] = useState("QUALIDADE DA PRESTAÇÃO DOS SERVIÇOS");
   const [selectedTaskIds, setSelectedTaskIds] = useState<number[]>([]);
-  const [formAgendaTasks, setFormAgendaTasks] = useState<{ task_id: number; status: string; entrega: string; entrega_link: string }[]>([]);
+  const [formAgendaTasks, setFormAgendaTasks] = useState<{
+    task_id: number;
+    status: string;
+    entrega: string;
+    entrega_link: string;
+    tema: string;
+  }[]>([]);
+
+  // Picker search & filter state inside modal
   const [taskSearchQuery, setTaskSearchQuery] = useState("");
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
 
   // Load data
   const fetchData = async () => {
@@ -92,8 +107,7 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
 
   const temas = [
     "TODOS",
-    "QUALIDADE DA PRESTAÇÃO DOS SERVIÇOS",
-    "FORTALECIMENTO DA CAPACIDADE REGULATÓRIA"
+    ...TEMAS_AGENDA_REGULATORIA
   ];
 
   const normalizeStatus = (status: string | undefined): "Não iniciada" | "Em andamento" | "Concluída" => {
@@ -103,8 +117,6 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
     if (s === "em andamento" || s === "in_progress" || s === "in progress") return "Em andamento";
     return "Não iniciada";
   };
-
-  const statuses = ["TODOS", "Não iniciada", "Em andamento", "Concluída"];
 
   const toggleAgendaExpand = (id: number) => {
     if (collapsedAgendas.includes(id)) {
@@ -117,20 +129,20 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
   const handleOpenNew = () => {
     setEditingId(null);
     setFormNome("");
-    setFormTema("QUALIDADE DA PRESTAÇÃO DOS SERVIÇOS");
     setSelectedTaskIds([]);
     setFormAgendaTasks([]);
     setTaskSearchQuery("");
+    setIsPickerOpen(true);
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (agenda: RegulatoryAgenda) => {
     setEditingId(agenda.id);
     setFormNome(agenda.nome);
-    setFormTema(agenda.tema);
-    setSelectedTaskIds(agenda.task_ids || []);
+    const ids = agenda.task_ids || [];
+    setSelectedTaskIds(ids);
     
-    // Set customized task entries with status inherited from task
+    // Set customized task entries with per-activity tema
     const paired = (agenda.agenda_tasks || []).map(t => {
       const tId = Number(t.task_id);
       const matchingTask = tasks.find(x => x.id === tId);
@@ -138,11 +150,13 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
         task_id: tId,
         status: normalizeStatus(matchingTask?.status || t.status),
         entrega: t.entrega || "",
-        entrega_link: t.entrega_link || ""
+        entrega_link: t.entrega_link || "",
+        tema: t.tema || matchingTask?.agendaRegulatoriaData?.temaRegulatorio || "Qualidade da Prestação de Serviços"
       };
     });
     setFormAgendaTasks(paired);
     setTaskSearchQuery("");
+    setIsPickerOpen(false);
     setIsModalOpen(true);
   };
 
@@ -152,17 +166,26 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
       setFormAgendaTasks(formAgendaTasks.filter(item => item.task_id !== taskId));
     } else {
       const matchingTask = tasks.find(x => x.id === taskId);
+      const defaultTema = matchingTask?.agendaRegulatoriaData?.temaRegulatorio || "Qualidade da Prestação de Serviços";
+      const defaultEntrega = matchingTask?.agendaRegulatoriaData?.entregaMeta || "";
+      const defaultLink = matchingTask?.agendaRegulatoriaData?.linkArquivoEntrega || "";
+
       setSelectedTaskIds([...selectedTaskIds, taskId]);
       setFormAgendaTasks([...formAgendaTasks, {
         task_id: taskId,
         status: normalizeStatus(matchingTask?.status),
-        entrega: "",
-        entrega_link: ""
+        entrega: defaultEntrega,
+        entrega_link: defaultLink,
+        tema: defaultTema
       }]);
     }
   };
 
-  const handleUpdateTaskConfig = (taskId: number, field: "entrega" | "entrega_link", value: string) => {
+  const handleUpdateTaskConfig = (
+    taskId: number, 
+    field: "entrega" | "entrega_link" | "tema", 
+    value: string
+  ) => {
     setFormAgendaTasks(prev => prev.map(item => {
       if (item.task_id === taskId) {
         return { ...item, [field]: value };
@@ -192,14 +215,20 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formNome) {
+    if (!formNome.trim()) {
       showToast("Por favor, preencha o Nome da Agenda.", "error");
       return;
     }
 
+    if (selectedTaskIds.length === 0) {
+      if (!window.confirm("Esta agenda não possui atividades vinculadas. Deseja salvar mesmo assim?")) {
+        return;
+      }
+    }
+
     const payload = {
-      nome: formNome,
-      tema: formTema,
+      nome: formNome.trim(),
+      tema: formAgendaTasks.length > 0 ? formAgendaTasks[0].tema : "Qualidade da Prestação de Serviços",
       task_ids: selectedTaskIds,
       agenda_tasks: formAgendaTasks.map(item => {
         const matchingTask = tasks.find(t => t.id === item.task_id);
@@ -223,36 +252,44 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
 
       if (json.success) {
         showToast(
-          editingId ? "Agenda Regulatória atualizada!" : "Agenda Regulatória cadastrada com sucesso!",
+          editingId ? "Agenda Regulatória atualizada com sucesso!" : "Agenda Regulatória cadastrada com sucesso!",
           "success"
         );
         setIsModalOpen(false);
         fetchData();
       } else {
-        showToast(json.error || "Erro ao salvar.", "error");
+        showToast(json.error || "Erro ao salvar agenda.", "error");
       }
     } catch {
-      showToast("Erro ao conectar com o servidor.", "error");
+      showToast("Erro de comunicação com o servidor.", "error");
     }
   };
 
-  // Filter agendas
+  // Filter agendas for main list
   const filteredAgendas = agendas.filter(agenda => {
-    const matchesSearch =
-      agenda.nome.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesTema = filterTema === "TODOS" || agenda.tema === filterTema;
+    const matchesSearch = agenda.nome.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    if (filterTema === "TODOS") return matchesSearch;
 
-    return matchesSearch && matchesTema;
+    // Check if any task in agenda has the matching theme
+    const hasMatchingTaskTema = (agenda.agenda_tasks || []).some(
+      t => t.tema === filterTema || (tasks.find(x => x.id === Number(t.task_id))?.agendaRegulatoriaData?.temaRegulatorio === filterTema)
+    );
+    const matchesAgendaTema = agenda.tema === filterTema;
+
+    return matchesSearch && (matchesAgendaTema || hasMatchingTaskTema);
   });
 
-  // Filter tasks shown as options in multi-select form
-  const filteredTaskOptions = tasks.filter(task =>
-    task.title.toLowerCase().includes(taskSearchQuery.toLowerCase())
-  );
+  // Filter task options in modal picker
+  const filteredTaskOptions = tasks.filter(task => {
+    const query = taskSearchQuery.toLowerCase().trim();
+    if (!query) return true;
+    return task.title.toLowerCase().includes(query) || (task.description && task.description.toLowerCase().includes(query));
+  });
 
   return (
     <div className="w-full bg-white rounded-3xl p-8 shadow-sm border border-slate-200 text-left flex flex-col relative min-h-[80vh]">
-      {/* Header section copying ResolutionsTab layout */}
+      {/* Header section */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-100">
         <div>
           <h3 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
@@ -260,24 +297,24 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
             Agenda Regulatória
           </h3>
           <p className="text-sm text-slate-500 font-medium mt-1">
-            Planejamento de ações regulatórias, metas de qualidade de serviços e fortalecimento da capacidade regulatória da agência.
+            Gestão de agendas regulatórias, vínculo de ações estratégicas e controle por tema regulatório individual.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={handleOpenNew}
-            className="flex items-center gap-2 bg-adasa-mid hover:bg-adasa-hover text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-adasa-dark/20"
+            className="flex items-center gap-2 bg-adasa-mid hover:bg-adasa-hover text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-adasa-dark/20 cursor-pointer"
           >
             <Plus size={16} /> Nova Agenda
           </button>
         </div>
       </div>
 
-      {/* Filters bar copying exactly the styling of ResolutionsTab */}
+      {/* Filters bar */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 bg-slate-50 border border-slate-200/80 rounded-2xl p-4">
         {/* Search */}
         <div className="relative">
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Pesquisar</label>
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Pesquisar Agenda</label>
           <div className="relative">
             <input
               type="text"
@@ -290,16 +327,16 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
           </div>
         </div>
 
-        {/* Tema */}
+        {/* Tema Filter */}
         <div>
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Tema</label>
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Filtrar por Tema Regulatório</label>
           <select
             value={filterTema}
             onChange={(e) => setFilterTema(e.target.value)}
             className="w-full bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 transition-all cursor-pointer"
           >
             {temas.map(t => (
-              <option key={t} value={t}>{t === "TODOS" ? "Tudo (Temas)" : t}</option>
+              <option key={t} value={t}>{t === "TODOS" ? "Todos os Temas Regulatórios" : t}</option>
             ))}
           </select>
         </div>
@@ -318,9 +355,9 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase tracking-widest font-black">
-                  <th className="px-5 py-4 w-1/2">Agenda / Nome</th>
-                  <th className="px-5 py-4 w-1/3">Tema</th>
-                  <th className="px-5 py-4 w-28 text-right">Ações</th>
+                  <th className="px-5 py-4 w-1/2">Agenda Regulatória / Nome</th>
+                  <th className="px-5 py-4 text-center">Atividades Vinculadas</th>
+                  <th className="px-5 py-4 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
@@ -333,7 +370,6 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
                 ) : (
                   filteredAgendas.map(agenda => {
                     const isExpanded = !collapsedAgendas.includes(agenda.id);
-                    // Match tasks corresponding to associated task_ids
                     const associatedTasks = tasks.filter(t => (agenda.task_ids || []).includes(t.id));
 
                     return (
@@ -342,20 +378,26 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
                           <td className="px-5 py-4">
                             <div className="flex flex-col">
                               <span className="text-sm font-bold text-slate-800">{agenda.nome}</span>
-                              {associatedTasks.length > 0 && (
-                                <button
-                                  onClick={() => toggleAgendaExpand(agenda.id)}
-                                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-1.5 focus:outline-none"
-                                >
-                                  {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                                  {associatedTasks.length} {associatedTasks.length === 1 ? "atividade associada" : "atividades associadas"}
-                                </button>
-                              )}
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs font-semibold text-slate-400">
+                                  {associatedTasks.length} {associatedTasks.length === 1 ? "atividade regulatória vinculada" : "atividades regulatórias vinculadas"}
+                                </span>
+                                {associatedTasks.length > 0 && (
+                                  <button
+                                    onClick={() => toggleAgendaExpand(agenda.id)}
+                                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1 focus:outline-none cursor-pointer"
+                                  >
+                                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                    {isExpanded ? "Ocultar Detalhes" : "Ver Atividades"}
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </td>
-                          <td className="px-5 py-4 text-xs font-semibold text-slate-600">
-                            <span className="inline-block bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1 text-[10px] uppercase font-black text-indigo-700 tracking-wider">
-                              {agenda.tema}
+                          <td className="px-5 py-4 text-center">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-full text-indigo-700 font-black text-xs">
+                              <Layers size={13} className="text-indigo-600" />
+                              {associatedTasks.length} {associatedTasks.length === 1 ? "Atividade" : "Atividades"}
                             </span>
                           </td>
                           <td className="px-5 py-4 text-right">
@@ -363,14 +405,14 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
                               <button
                                 onClick={() => handleOpenEdit(agenda)}
                                 className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                                title="Editar"
+                                title="Editar Agenda Regulatória"
                               >
                                 <Edit2 size={15} />
                               </button>
                               <button
                                 onClick={() => handleDelete(agenda.id)}
                                 className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                                title="Deletar"
+                                title="Excluir Agenda Regulatória"
                               >
                                 <Trash2 size={15} />
                               </button>
@@ -385,7 +427,7 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
                               <div className="space-y-2 text-left">
                                 <h5 className="text-[10px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5 mb-2.5">
                                   <Layers size={13} className="text-indigo-600" />
-                                  Ações Regulatórias Vinculadas (Métricas Específicas)
+                                  Ações Regulatórias Vinculadas (Com Temas Individuais)
                                 </h5>
 
                                 <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
@@ -393,20 +435,20 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
                                     <table className="w-full text-left border-collapse">
                                       <thead>
                                         <tr className="bg-slate-100/70 border-b border-slate-200 text-[10px] text-slate-500 uppercase tracking-wider font-extrabold">
-                                          <th className="px-4 py-3 w-5/12">Ação Regulatória / Atividade</th>
-                                          <th className="px-4 py-3 w-3/12">Entrega / Detalhes</th>
-                                          <th className="px-4 py-3 w-32 text-center">Progresso</th>
-                                          <th className="px-4 py-3 w-28 text-center">Status</th>
-                                          <th className="px-4 py-3 w-24 text-center">Link</th>
+                                          <th className="px-4 py-3 w-4/12">Atividade Regulatória</th>
+                                          <th className="px-4 py-3 w-3/12">Tema Regulatório Estratégico</th>
+                                          <th className="px-4 py-3 w-3/12">Entrega / Meta</th>
+                                          <th className="px-4 py-3 w-24 text-center">Status</th>
+                                          <th className="px-4 py-3 w-20 text-center">Documento</th>
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-slate-100 text-xs">
                                         {associatedTasks.map(tk => {
                                           const customTaskConfig = (agenda.agenda_tasks || []).find(it => Number(it.task_id) === tk.id);
                                           const taskStatus = normalizeStatus(tk.status || customTaskConfig?.status);
-                                          const taskProgress = typeof tk.progress === "number" ? tk.progress : (taskStatus === "Concluída" ? 100 : 0);
-                                          const taskEntrega = customTaskConfig?.entrega || "";
-                                          const taskLink = customTaskConfig?.entrega_link || "";
+                                          const taskTema = customTaskConfig?.tema || tk.agendaRegulatoriaData?.temaRegulatorio || "Qualidade da Prestação de Serviços";
+                                          const taskEntrega = customTaskConfig?.entrega || tk.agendaRegulatoriaData?.entregaMeta || "";
+                                          const taskLink = customTaskConfig?.entrega_link || tk.agendaRegulatoriaData?.linkArquivoEntrega || "";
 
                                           return (
                                             <tr key={tk.id} className="hover:bg-slate-50/50 transition-colors">
@@ -418,35 +460,17 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
                                                   </span>
                                                 )}
                                               </td>
+                                              <td className="px-4 py-3 align-middle">
+                                                <span className="inline-block bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold text-[10px] px-2 py-0.5 rounded-md">
+                                                  {taskTema}
+                                                </span>
+                                              </td>
                                               <td className="px-4 py-3 align-middle font-medium text-slate-600">
                                                 {taskEntrega ? (
                                                   <span className="text-slate-700 font-semibold">{taskEntrega}</span>
                                                 ) : (
                                                   <span className="text-slate-400 italic text-[11px]">Não informada</span>
                                                 )}
-                                              </td>
-                                              <td className="px-4 py-3 text-center align-middle whitespace-nowrap">
-                                                <div className="flex flex-col items-center gap-1 min-w-[100px] max-w-[120px] mx-auto">
-                                                  <div className="flex items-center justify-between w-full text-[10px] font-extrabold">
-                                                    <span className={taskProgress === 100 ? "text-emerald-600" : taskProgress >= 50 ? "text-blue-600" : taskProgress > 0 ? "text-indigo-600" : "text-slate-400"}>
-                                                      {taskProgress}%
-                                                    </span>
-                                                  </div>
-                                                  <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden border border-slate-200/60">
-                                                    <div 
-                                                      className={`h-full rounded-full transition-all duration-500 ${
-                                                        taskProgress === 100 
-                                                          ? "bg-emerald-500" 
-                                                          : taskProgress >= 50 
-                                                          ? "bg-blue-500" 
-                                                          : taskProgress > 0 
-                                                          ? "bg-indigo-500" 
-                                                          : "bg-slate-300"
-                                                      }`}
-                                                      style={{ width: `${taskProgress}%` }}
-                                                    />
-                                                  </div>
-                                                </div>
                                               </td>
                                               <td className="px-4 py-3 text-center align-middle whitespace-nowrap">
                                                 <span
@@ -468,10 +492,10 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                                                    title="Acessar link externo"
+                                                    title="Acessar documento oficial"
                                                   >
                                                     <ExternalLink size={12} />
-                                                    <span>Acessar</span>
+                                                    <span>Link</span>
                                                   </a>
                                                 ) : (
                                                   <span className="text-slate-300 text-xs font-semibold">-</span>
@@ -498,197 +522,299 @@ export function RegulatoryAgendaTab({ showToast, currentUser }: RegulatoryAgenda
         </div>
       )}
 
-      {/* Main Registration Modal - mimicking style of ResolutionsTab modal exactly */}
+      {/* Main Registration / Edit Modal - Modernized & Intuitive */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="relative bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-2xl w-full p-8 max-h-[90vh] overflow-y-auto">
-            {/* Close */}
-            <button
-              onClick={() => setIsModalOpen(false)}
-              className="absolute right-6 top-6 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-            >
-              <X size={20} />
-            </button>
+          <div className="relative bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-3xl w-full p-6 sm:p-8 max-h-[92vh] flex flex-col my-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                  <BookOpen size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 tracking-tight">
+                    {editingId !== null ? "Editar Agenda Regulatória" : "Cadastrar Nova Agenda Regulatória"}
+                  </h3>
+                  <p className="text-xs text-slate-400 font-medium">
+                    {editingId !== null 
+                      ? "Atualize o nome da agenda e gerencie o tema e entregas de cada atividade vinculada." 
+                      : "Defina o nome da agenda e vincule as atividades do sistema configurando o tema de cada uma."}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-            <h3 className="text-lg font-black text-slate-800 tracking-tight gap-2 flex items-center mb-6">
-              <BookOpen className="text-adasa-mid" size={20} />
-              {editingId !== null ? "Editar Agenda Regulatória" : "Cadastrar Nova Agenda Regulatória"}
-            </h3>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Nome */}
-              <div className="space-y-1 text-left">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome da Agenda *</label>
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pr-1">
+              {/* Nome da Agenda */}
+              <div className="space-y-1.5 text-left">
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <BookOpen size={14} className="text-indigo-600" />
+                  Nome da Agenda Regulatória <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
                   value={formNome}
                   onChange={(e) => setFormNome(e.target.value)}
-                  placeholder="Ex: Agenda de Saneamento 2026"
-                  className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold text-slate-700 focus:border-indigo-500 outline-none transition-all"
+                  placeholder="Ex: Agenda Regulatória 2025-2026"
+                  className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all shadow-2xs bg-white"
                 />
               </div>
 
-              {/* Tema */}
-              <div className="space-y-1 text-left">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Tema Regulatório *</label>
-                <select
-                  value={formTema}
-                  onChange={(e) => setFormTema(e.target.value)}
-                  className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold text-slate-700 focus:border-indigo-500 outline-none bg-white transition-all cursor-pointer"
-                >
-                  <option value="QUALIDADE DA PRESTAÇÃO DOS SERVIÇOS">QUALIDADE DA PRESTAÇÃO DOS SERVIÇOS</option>
-                  <option value="FORTALECIMENTO DA CAPACIDADE REGULATÓRIA">FORTALECIMENTO DA CAPACIDADE REGULATÓRIA</option>
-                </select>
-              </div>
-
-              {/* Ações Regulatórias (Tasks Association) */}
-              <div className="space-y-2 text-left border-t border-slate-100 pt-4">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  Ações Regulatórias Vinculadas (Atividades)
-                </label>
-                <p className="text-[10px] text-slate-400 font-medium">
-                  Selecione as atividades do sistema que pertencem a este cronograma de trabalho da agenda.
-                </p>
-
-                {/* SubSearch inside checkboxes list */}
-                <div className="relative mb-2">
-                  <input
-                    type="text"
-                    value={taskSearchQuery}
-                    onChange={(e) => setTaskSearchQuery(e.target.value)}
-                    placeholder="Filtrar atividades..."
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 focus:border-indigo-500 outline-none transition-all"
-                  />
-                  <Search className="absolute right-3 top-2.5 text-slate-400" size={14} />
-                </div>
-
-                {/* Checklist container */}
-                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 max-h-48 overflow-y-auto space-y-2">
-                  {filteredTaskOptions.length === 0 ? (
-                    <p className="text-xs text-slate-400 text-center font-medium py-4">Nenhuma atividade cadastrada ou encontrada.</p>
-                  ) : (
-                    filteredTaskOptions.map(tk => {
-                      const isChecked = selectedTaskIds.includes(tk.id);
-                      return (
-                        <label
-                          key={tk.id}
-                          className="flex items-start gap-2.5 p-1.5 hover:bg-slate-100/70 rounded-lg cursor-pointer transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => handleToggleTaskSelection(tk.id)}
-                            className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                          />
-                          <div className="text-xs">
-                            <span className="font-bold text-slate-700">{tk.title}</span>
-                            {tk.status && (
-                              <span className="ml-1.5 text-[9px] font-semibold text-slate-400 uppercase">
-                                ({tk.status})
-                              </span>
-                            )}
-                          </div>
-                        </label>
-                      );
-                    })
-                  )}
-                </div>
-                {selectedTaskIds.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-[10px] text-indigo-600 font-bold">
-                      {selectedTaskIds.length} {selectedTaskIds.length === 1 ? "atividade selecionada" : "atividades selecionadas"}.
+              {/* Seção Vincular Atividades */}
+              <div className="space-y-3 text-left border-t border-slate-100 pt-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="block text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles size={14} className="text-indigo-600" />
+                      Vincular Atividades à Agenda
+                    </label>
+                    <p className="text-[11px] text-slate-400 font-medium">
+                      Pesquise e selecione as atividades que fazem parte desta Agenda. O tema regulatório é configurado individualmente para cada uma.
                     </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsPickerOpen(!isPickerOpen)}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer border ${
+                      isPickerOpen 
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' 
+                        : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                    }`}
+                  >
+                    <Plus size={14} />
+                    <span>{isPickerOpen ? "Fechar Busca" : "Buscar e Vincular Atividades"}</span>
+                  </button>
+                </div>
 
-                    <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest text-left">
-                        Configuração Individual de cada Atividade Selecionada
-                      </label>
-                      <div className="space-y-4 max-h-80 overflow-y-auto p-1 pr-2">
-                        {selectedTaskIds.map(taskId => {
-                          const matchingTask = tasks.find(t => t.id === taskId);
-                          if (!matchingTask) return null;
+                {/* Search & Picker Drawer / Combobox */}
+                {isPickerOpen && (
+                  <div className="bg-slate-50/90 border border-indigo-100 rounded-2xl p-4 space-y-3 shadow-inner">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={taskSearchQuery}
+                        onChange={(e) => setTaskSearchQuery(e.target.value)}
+                        placeholder="Digite para buscar atividades por título..."
+                        className="w-full bg-white border-2 border-slate-200 rounded-xl pl-9 pr-8 py-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:border-indigo-500 outline-none transition-all"
+                      />
+                      <Search className="absolute left-3 top-3 text-slate-400" size={15} />
+                      {taskSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setTaskSearchQuery("")}
+                          className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
 
-                          const inheritedStatus = normalizeStatus(matchingTask.status);
-                          const config = formAgendaTasks.find(it => Number(it.task_id) === taskId) || {
-                            task_id: taskId,
-                            status: inheritedStatus,
-                            entrega: "",
-                            entrega_link: ""
-                          };
+                    {/* Results list */}
+                    <div className="max-h-52 overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
+                      {filteredTaskOptions.length === 0 ? (
+                        <p className="text-xs text-slate-400 text-center font-medium py-6">
+                          Nenhuma atividade encontrada com o termo "{taskSearchQuery}".
+                        </p>
+                      ) : (
+                        filteredTaskOptions.map(tk => {
+                          const isSelected = selectedTaskIds.includes(tk.id);
+                          const statusNorm = normalizeStatus(tk.status);
 
                           return (
-                            <div key={taskId} className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3 text-left">
-                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-xs font-bold text-slate-800 line-clamp-1">{matchingTask.title}</span>
-                                  <span
-                                    className={`inline-block px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider whitespace-nowrap ${
-                                      inheritedStatus === "Concluída"
-                                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                        : inheritedStatus === "Em andamento"
-                                        ? "bg-blue-50 text-blue-700 border border-blue-200"
-                                        : "bg-slate-100 text-slate-700 border border-slate-200"
-                                    }`}
-                                  >
-                                    Status: {inheritedStatus} (Herdado da Atividade)
+                            <div
+                              key={tk.id}
+                              onClick={() => handleToggleTaskSelection(tk.id)}
+                              className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
+                                isSelected 
+                                  ? 'bg-indigo-50/80 border-indigo-200 text-indigo-900 shadow-2xs' 
+                                  : 'bg-white border-slate-200/80 hover:border-slate-300 hover:bg-slate-100/50 text-slate-800'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 pr-2 min-w-0">
+                                <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border transition-colors ${
+                                  isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'
+                                }`}>
+                                  {isSelected && <Check size={12} strokeWidth={3} />}
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="text-xs font-bold truncate block">{tk.title}</span>
+                                  <span className={`text-[9px] font-extrabold uppercase tracking-wider inline-block mt-0.5 ${
+                                    statusNorm === 'Concluída' ? 'text-emerald-600' : statusNorm === 'Em andamento' ? 'text-blue-600' : 'text-slate-400'
+                                  }`}>
+                                    Status: {statusNorm}
                                   </span>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleTaskSelection(taskId)}
-                                  className="text-[9px] uppercase font-black text-red-500 hover:text-red-700 transition-colors cursor-pointer"
-                                >
-                                  Remover
-                                </button>
                               </div>
 
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {/* Task Delivery details */}
-                                <div>
-                                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 text-left">Entrega / Meta do Item</label>
-                                  <input
-                                    type="text"
-                                    value={config.entrega}
-                                    onChange={(e) => handleUpdateTaskConfig(taskId, "entrega", e.target.value)}
-                                    placeholder="Ex: Ofício de conclusão, relatório técnico..."
-                                    className="w-full bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg px-3 py-2 outline-none focus:border-indigo-500 transition-all"
-                                  />
-                                </div>
-
-                                {/* Task External Link / Hiperlink */}
-                                <div>
-                                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 text-left">Hiperlink do Arquivo da Entrega (Opcional)</label>
-                                  <input
-                                    type="text"
-                                    value={config.entrega_link}
-                                    onChange={(e) => handleUpdateTaskConfig(taskId, "entrega_link", e.target.value)}
-                                    placeholder="Ex: https://drive.google.com/file/d/..."
-                                    className="w-full bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg px-3 py-2 outline-none focus:border-indigo-500 transition-all"
-                                  />
-                                </div>
-                              </div>
+                              <button
+                                type="button"
+                                className={`shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                                  isSelected 
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                    : 'bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-600'
+                                }`}
+                              >
+                                {isSelected ? "✓ Vinculada" : "+ Vincular"}
+                              </button>
                             </div>
                           );
-                        })}
-                      </div>
+                        })
+                      )}
                     </div>
                   </div>
                 )}
+
+                {/* List of Linked Activities with Individual Tema */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                      Atividades Vinculadas ({selectedTaskIds.length})
+                    </span>
+                    {selectedTaskIds.length === 0 && (
+                      <span className="text-xs text-amber-600 font-semibold bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                        Nenhuma atividade vinculada ainda
+                      </span>
+                    )}
+                  </div>
+
+                  {selectedTaskIds.length === 0 ? (
+                    <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center bg-slate-50/40">
+                      <Layers size={28} className="mx-auto text-slate-300 mb-2" />
+                      <p className="text-xs font-bold text-slate-600">Nenhuma atividade vinculada a esta agenda.</p>
+                      <p className="text-[11px] text-slate-400 mt-1 mb-3">Clique no botão abaixo para buscar e adicionar atividades do sistema.</p>
+                      <button
+                        type="button"
+                        onClick={() => setIsPickerOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm cursor-pointer"
+                      >
+                        <Plus size={14} /> Buscar e Vincular Atividades
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3.5 max-h-96 overflow-y-auto custom-scrollbar pr-1">
+                      {selectedTaskIds.map((taskId, index) => {
+                        const matchingTask = tasks.find(t => t.id === taskId);
+                        if (!matchingTask) return null;
+
+                        const inheritedStatus = normalizeStatus(matchingTask.status);
+                        const config = formAgendaTasks.find(it => Number(it.task_id) === taskId) || {
+                          task_id: taskId,
+                          status: inheritedStatus,
+                          entrega: "",
+                          entrega_link: "",
+                          tema: "Qualidade da Prestação de Serviços"
+                        };
+
+                        return (
+                          <div 
+                            key={taskId} 
+                            className="bg-white border-2 border-slate-200/90 rounded-2xl p-4 space-y-3.5 text-left shadow-2xs hover:border-slate-300 transition-all"
+                          >
+                            {/* Card Header */}
+                            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-2.5">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black flex items-center justify-center border border-indigo-100">
+                                  {index + 1}
+                                </span>
+                                <span className="text-xs font-bold text-slate-800">{matchingTask.title}</span>
+                                <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                                  inheritedStatus === "Concluída" 
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
+                                    : inheritedStatus === "Em andamento"
+                                    ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                    : "bg-slate-100 text-slate-700 border border-slate-200"
+                                }`}>
+                                  {inheritedStatus}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleTaskSelection(taskId)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                title="Desvincular atividade da agenda"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+
+                            {/* Config Fields Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                              {/* 1. Tema Regulatório Estratégico (Informed individually for each task!) */}
+                              <div className="space-y-1">
+                                <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-1">
+                                  <Layers size={12} className="text-indigo-600" />
+                                  Tema Regulatório *
+                                </label>
+                                <select
+                                  value={config.tema || "Qualidade da Prestação de Serviços"}
+                                  onChange={(e) => handleUpdateTaskConfig(taskId, "tema", e.target.value)}
+                                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:border-indigo-500 focus:bg-white transition-all cursor-pointer"
+                                >
+                                  {TEMAS_AGENDA_REGULATORIA.map(t => (
+                                    <option key={t} value={t}>{t}</option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {/* 2. Entrega / Meta do Item */}
+                              <div className="space-y-1">
+                                <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-1">
+                                  <Target size={12} className="text-indigo-600" />
+                                  Entrega / Meta do Item
+                                </label>
+                                <input
+                                  type="text"
+                                  value={config.entrega}
+                                  onChange={(e) => handleUpdateTaskConfig(taskId, "entrega", e.target.value)}
+                                  placeholder="Ex: Resolução, Relatório ARR..."
+                                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                                />
+                              </div>
+
+                              {/* 3. Hiperlink do Arquivo */}
+                              <div className="space-y-1">
+                                <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-1">
+                                  <Link2 size={12} className="text-indigo-600" />
+                                  Hiperlink do Arquivo
+                                </label>
+                                <input
+                                  type="url"
+                                  value={config.entrega_link}
+                                  onChange={(e) => handleUpdateTaskConfig(taskId, "entrega_link", e.target.value)}
+                                  placeholder="https://..."
+                                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Actions submit */}
-              <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-6 mt-6">
+              {/* Modal Footer Actions */}
+              <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-5">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-6 py-3 border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs font-black uppercase tracking-wider text-slate-600 transition-colors cursor-pointer"
+                  className="px-5 py-2.5 border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs font-black uppercase tracking-wider text-slate-600 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-3 bg-adasa-mid hover:bg-adasa-hover text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-adasa-dark/10 cursor-pointer"
+                  className="px-6 py-2.5 bg-adasa-mid hover:bg-adasa-hover text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-adasa-dark/10 cursor-pointer"
                 >
                   {editingId !== null ? "Salvar Alterações" : "Criar Agenda"}
                 </button>

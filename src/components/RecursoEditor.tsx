@@ -195,6 +195,19 @@ export const RecursoEditor: React.FC<Props> = ({ data, onChange }) => {
     updateData(updated);
   };
 
+  const updateStageDate = (stage: string, newDateStr: string) => {
+    const currentDates = { ...(localData.datasEtapas || {}) };
+    if (newDateStr) {
+      currentDates[stage] = newDateStr;
+    } else {
+      delete currentDates[stage];
+    }
+    updateData({
+      ...localData,
+      datasEtapas: currentDates
+    });
+  };
+
   const currentStage = localData.situacao || "Recebido";
   const activeIndex = STAGES.indexOf(currentStage) === -1 ? 0 : STAGES.indexOf(currentStage);
 
@@ -563,8 +576,14 @@ export const RecursoEditor: React.FC<Props> = ({ data, onChange }) => {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-center font-semibold text-slate-600">
-                      {formattedDate}
+                    <td className="px-4 py-2 text-center">
+                      <input
+                        type="date"
+                        value={entryDate || ''}
+                        onChange={(e) => updateStageDate(stage, e.target.value)}
+                        className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center shadow-2xs hover:border-slate-300 transition-colors"
+                        title="Clique para alterar a data de entrada nesta etapa"
+                      />
                     </td>
                     <td className="px-4 py-3 text-right font-extrabold text-slate-800">
                       {!entryDate || stage === "Finalizado" || stage === "Finalizada" ? (

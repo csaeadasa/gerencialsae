@@ -44,7 +44,7 @@ import {
   Info
 } from "lucide-react";
 import { calculateDurationInDays } from "../utils/durationUtils";
-import { Task, Area, Category, Responsible } from "../types";
+import { Task, Area, Category, Responsible, TEMAS_AGENDA_REGULATORIA } from "../types";
 import { TaskTimelineModal } from "./TaskTimelineModal";
 
 interface RegulatoryAgenda {
@@ -133,11 +133,12 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
     fetchData();
   }, []);
 
-  const themeList = [
-    "TODOS",
-    "QUALIDADE DA PRESTAÇÃO DOS SERVIÇOS",
-    "FORTALECIMENTO DA CAPACIDADE REGULATÓRIA"
-  ];
+  const themeList = useMemo(() => {
+    return [
+      "TODOS",
+      ...TEMAS_AGENDA_REGULATORIA
+    ];
+  }, []);
 
   const statusList = [
     "TODOS",
@@ -362,13 +363,26 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
     let pendingItems = 0;
     let totalProgressSum = 0;
 
+    const matchesTheme = (targetTheme: string, filterVal: string) => {
+      if (filterVal === "TODOS") return true;
+      if (!targetTheme) return false;
+      const tNorm = targetTheme.trim().toLowerCase();
+      const fNorm = filterVal.trim().toLowerCase();
+      if (tNorm === fNorm) return true;
+      if (tNorm.includes(fNorm) || fNorm.includes(tNorm)) return true;
+      if ((fNorm.includes("qualidade") && tNorm.includes("qualidade"))) return true;
+      return false;
+    };
+
     agendas.forEach(agenda => {
       if (filterAgenda !== "TODOS" && agenda.nome !== filterAgenda) return;
-      if (filterTema !== "TODOS" && agenda.tema !== filterTema) return;
 
       const items = agenda.agenda_tasks || [];
       items.forEach(it => {
         const taskObj = taskMap[it.task_id];
+        const itemTheme = taskObj?.agendaRegulatoriaData?.temaRegulatorio || agenda.tema || "Qualidade da Prestação de Serviços";
+        if (filterTema !== "TODOS" && !matchesTheme(itemTheme, filterTema) && !matchesTheme(agenda.tema, filterTema)) return;
+
         const effectiveStatus = normalizeStatus(taskObj?.status || it.status);
         const prog = typeof taskObj?.progress === "number" ? taskObj.progress : (effectiveStatus === "Concluída" ? 100 : 0);
         totalItems++;
@@ -388,7 +402,14 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
     return {
       totalAgendas: agendas.filter(agenda => {
         if (filterAgenda !== "TODOS" && agenda.nome !== filterAgenda) return false;
-        if (filterTema !== "TODOS" && agenda.tema !== filterTema) return false;
+        if (filterTema !== "TODOS") {
+          const hasMatchingItem = (agenda.agenda_tasks || []).some(it => {
+            const taskObj = taskMap[it.task_id];
+            const itemTheme = taskObj?.agendaRegulatoriaData?.temaRegulatorio || agenda.tema;
+            return matchesTheme(itemTheme, filterTema) || matchesTheme(agenda.tema, filterTema);
+          });
+          if (!hasMatchingItem && !matchesTheme(agenda.tema, filterTema)) return false;
+        }
         return true;
       }).length,
       totalItems,
@@ -415,54 +436,73 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
   const themeChartData = useMemo(() => {
     const dataMap: Record<string, { concluida: number; emAndamento: number; naoIniciada: number }> = {};
     
-    // Initialize
-    themeList.forEach(theme => {
-      if (theme !== "TODOS") {
-        dataMap[theme] = { concluida: 0, emAndamento: 0, naoIniciada: 0 };
-      }
+    // Initialize with official themes
+    TEMAS_AGENDA_REGULATORIA.forEach(theme => {
+      dataMap[theme] = { concluida: 0, emAndamento: 0, naoIniciada: 0 };
     });
+
+    const resolveCanonicalTheme = (raw: string | undefined): string => {
+      if (!raw) return "Qualidade da Prestação de Serviços";
+      const s = raw.trim().toLowerCase();
+      if (s.includes("hídrico") || s.includes("hidrico") || s.includes("recursos")) return "Gestão dos Recursos Hídricos no DF";
+      if (s.includes("estruturação") || s.includes("estruturacao")) return "Estruturação da Prestação de Serviços";
+      if (s.includes("referencial") || s.includes("técnico") || s.includes("tecnico")) return "Produção de Referencial Técnico do Serviço";
+      if (s.includes("qualidade")) return "Qualidade da Prestação de Serviços";
+      if (s.includes("tarif") || s.includes("reajuste")) return "Reajuste Tarifário";
+      if (s.includes("capacidade")) return "Qualidade da Prestação de Serviços";
+      const direct = TEMAS_AGENDA_REGULATORIA.find(t => t.toLowerCase() === s);
+      return direct || "Qualidade da Prestação de Serviços";
+    };
 
     agendas.forEach(agenda => {
       if (filterAgenda !== "TODOS" && agenda.nome !== filterAgenda) return;
 
-      const theme = agenda.tema;
-      if (!dataMap[theme]) {
-        dataMap[theme] = { concluida: 0, emAndamento: 0, naoIniciada: 0 };
-      }
       const items = agenda.agenda_tasks || [];
       items.forEach(it => {
         const taskObj = taskMap[it.task_id];
+        const rawTheme = taskObj?.agendaRegulatoriaData?.temaRegulatorio || agenda.tema;
+        const canonical = resolveCanonicalTheme(rawTheme);
+        
+        if (!dataMap[canonical]) {
+          dataMap[canonical] = { concluida: 0, emAndamento: 0, naoIniciada: 0 };
+        }
+        
         const effectiveStatus = normalizeStatus(taskObj?.status || it.status);
         if (effectiveStatus === "Concluída") {
-          dataMap[theme].concluida++;
+          dataMap[canonical].concluida++;
         } else if (effectiveStatus === "Em andamento") {
-          dataMap[theme].emAndamento++;
+          dataMap[canonical].emAndamento++;
         } else {
-          dataMap[theme].naoIniciada++;
+          dataMap[canonical].naoIniciada++;
         }
       });
     });
 
-    return Object.keys(dataMap).map(key => {
-      let displayName = key;
-      if (key === "QUALIDADE DA PRESTAÇÃO DOS SERVIÇOS") {
-        displayName = "Qualidade Mod. 1";
-      } else if (key === "FORTALECIMENTO DA CAPACIDADE REGULATÓRIA") {
-        displayName = "Capacid. Regulatória";
-      }
+    const shortLabels: Record<string, string> = {
+      "Gestão dos Recursos Hídricos no DF": "Rec. Hídricos",
+      "Estruturação da Prestação de Serviços": "Estruturação",
+      "Produção de Referencial Técnico do Serviço": "Ref. Técnico",
+      "Qualidade da Prestação de Serviços": "Qualidade Serviços",
+      "Reajuste Tarifário": "Reajuste Tarifário"
+    };
 
+    return Object.keys(dataMap).map(key => {
       return {
-        tema: displayName,
+        tema: shortLabels[key] || key.substring(0, 16),
         fullTemaName: key,
         "Concluída": dataMap[key].concluida,
         "Em andamento": dataMap[key].emAndamento,
         "Não iniciada": dataMap[key].naoIniciada
       };
     }).filter(item => {
-      if (filterTema !== "TODOS" && item.fullTemaName !== filterTema) return false;
+      if (filterTema !== "TODOS") {
+        const fNorm = filterTema.trim().toLowerCase();
+        const kNorm = item.fullTemaName.trim().toLowerCase();
+        if (fNorm !== kNorm && !fNorm.includes(kNorm) && !kNorm.includes(fNorm)) return false;
+      }
       return true;
     });
-  }, [agendas, themeList, taskMap, filterAgenda, filterTema]);
+  }, [agendas, taskMap, filterAgenda, filterTema]);
 
   // Distinct agenda names
   const agendaNames = useMemo(() => {
@@ -486,6 +526,7 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
       taskId: number;
       taskTitle: string;
       status: string;
+      etapa: string;
       progress: number;
       entrega: string;
       entregaLink?: string;
@@ -501,13 +542,23 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
         const effectiveStatus = normalizeStatus(taskObj?.status || it.status);
         const prog = typeof taskObj?.progress === "number" ? taskObj.progress : (effectiveStatus === "Concluída" ? 100 : 0);
         
+        const itemTema = taskObj?.agendaRegulatoriaData?.temaRegulatorio || agenda.tema || "Qualidade da Prestação de Serviços";
+        const itemEtapa = taskObj?.agendaRegulatoriaData?.etapa || (effectiveStatus === "Concluída" ? "Finalizada" : "Minuta do Normativo");
+        const itemEntrega = taskObj?.agendaRegulatoriaData?.entregaMeta || it.entrega || "";
+        const itemEntregaLink = taskObj?.agendaRegulatoriaData?.linkArquivoEntrega || it.entrega_link || "";
+
         // Apply filters
         const matchesSearch = searchText === "" || 
           taskTitle.toLowerCase().includes(searchText.toLowerCase()) ||
           agenda.nome.toLowerCase().includes(searchText.toLowerCase()) ||
-          (it.entrega || "").toLowerCase().includes(searchText.toLowerCase());
+          itemEntrega.toLowerCase().includes(searchText.toLowerCase()) ||
+          itemTema.toLowerCase().includes(searchText.toLowerCase());
 
-        const matchesTema = filterTema === "TODOS" || agenda.tema === filterTema;
+        const matchesTema = filterTema === "TODOS" || 
+          itemTema.toLowerCase().includes(filterTema.toLowerCase()) ||
+          filterTema.toLowerCase().includes(itemTema.toLowerCase()) ||
+          (agenda.tema && (agenda.tema.toLowerCase().includes(filterTema.toLowerCase()) || filterTema.toLowerCase().includes(agenda.tema.toLowerCase())));
+
         const matchesStatus = filterStatus === "TODOS" || effectiveStatus === filterStatus;
         const matchesAgenda = filterAgenda === "TODOS" || agenda.nome === filterAgenda;
 
@@ -515,13 +566,14 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
           items.push({
             agendaId: agenda.id,
             agendaNome: agenda.nome,
-            agendaTema: agenda.tema,
+            agendaTema: itemTema,
             taskId: it.task_id,
             taskTitle: taskTitle,
             status: effectiveStatus,
+            etapa: itemEtapa,
             progress: prog,
-            entrega: it.entrega,
-            entregaLink: it.entrega_link,
+            entrega: itemEntrega,
+            entregaLink: itemEntregaLink,
             startDate: taskObj?.startDate,
             endDate: taskObj?.endDate
           });
@@ -542,6 +594,82 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
     });
     return groups;
   }, [flattenedAndFilteredItems]);
+
+  // Stage monitoring statistics matching Recurso de Revisão model
+  const agendaStageStats = useMemo(() => {
+    const STAGES = [
+      "Minuta do Normativo",
+      "Consulta e Audiência Pública",
+      "Aprovação Final",
+      "Finalizada"
+    ];
+
+    const stageCounts: Record<string, number> = {
+      "Minuta do Normativo": 0,
+      "Consulta e Audiência Pública": 0,
+      "Aprovação Final": 0,
+      "Finalizada": 0
+    };
+
+    const stageTotalDays: Record<string, number> = {
+      "Minuta do Normativo": 0,
+      "Consulta e Audiência Pública": 0,
+      "Aprovação Final": 0,
+      "Finalizada": 0
+    };
+
+    const stageEnteredCounts: Record<string, number> = {
+      "Minuta do Normativo": 0,
+      "Consulta e Audiência Pública": 0,
+      "Aprovação Final": 0,
+      "Finalizada": 0
+    };
+
+    const totalActiveItems = flattenedAndFilteredItems.length;
+
+    flattenedAndFilteredItems.forEach(item => {
+      const taskObj = taskMap[item.taskId];
+      const agendaData = taskObj?.agendaRegulatoriaData;
+      const currentStage = agendaData?.etapa || (item.status === "Concluída" ? "Finalizada" : "Minuta do Normativo");
+      const dates = agendaData?.datasEtapas || {};
+
+      if (stageCounts[currentStage] !== undefined) {
+        stageCounts[currentStage]++;
+      } else {
+        stageCounts["Minuta do Normativo"]++;
+      }
+
+      STAGES.forEach((stg, sIdx) => {
+        const entry = dates[stg];
+        if (entry) {
+          stageEnteredCounts[stg]++;
+          const nextStg = STAGES[sIdx + 1];
+          const start = new Date(entry);
+          const end = nextStg && dates[nextStg] ? new Date(dates[nextStg]) : (currentStage === stg ? new Date() : new Date(entry));
+          const days = Math.max(0, Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+          stageTotalDays[stg] += days;
+        }
+      });
+    });
+
+    return STAGES.map(stg => {
+      const cnt = stageCounts[stg] || 0;
+      const pct = totalActiveItems > 0 ? (cnt / totalActiveItems) * 100 : 0;
+      const enteredCnt = stageEnteredCounts[stg] || 0;
+      
+      let avgDays: number | null = null;
+      if (stg !== "Finalizada" && enteredCnt > 0) {
+        avgDays = Number((stageTotalDays[stg] / enteredCnt).toFixed(1));
+      }
+
+      return {
+        stage: stg,
+        count: cnt,
+        percent: pct,
+        averageDays: avgDays
+      };
+    });
+  }, [flattenedAndFilteredItems, taskMap]);
 
   if (isLoading) {
     return (
@@ -975,6 +1103,90 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
         </div>
       </div>
 
+      {/* MONITORAMENTO DE ETAPAS DA AGENDA REGULATÓRIA (MODELO RECURSO DE REVISÃO) */}
+      <div className="bg-white border border-slate-200/80 rounded-[2rem] p-6 shadow-sm text-left">
+        <div className="mb-4">
+          <h3 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+            <Layers size={16} className="text-[#1A3E8A]" />
+            MONITORAMENTO DE ETAPAS DA AGENDA REGULATÓRIA
+          </h3>
+          <p className="text-[11px] font-semibold text-slate-400 mt-0.5">
+            Gargalos e prazos médios por fase da tramitação do processo regulatório
+          </p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-xs text-slate-700">
+            <thead className="bg-slate-50 font-bold text-[10px] text-slate-400 uppercase tracking-wider">
+              <tr>
+                <th scope="col" className="px-4 py-3 text-left">Etapa da Tramitação</th>
+                <th scope="col" className="px-4 py-3 text-center">Ações da Agenda</th>
+                <th scope="col" className="px-4 py-3 text-center">Proporção (%)</th>
+                <th scope="col" className="px-4 py-3 text-center">Prazo Médio Estimado</th>
+                <th scope="col" className="px-4 py-3 text-left">Nível de Atenção</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-slate-100 font-medium text-slate-600 font-sans">
+              {agendaStageStats.map((item) => {
+                const isFinalizado = item.stage === "Finalizada" || item.stage === "Finalizado" || item.averageDays === null;
+                let badgeClass = "bg-emerald-100 text-emerald-800 border border-emerald-200";
+                let statusLabel = "NORMAL";
+                if (item.averageDays !== null && item.averageDays > 25) {
+                  badgeClass = "bg-rose-100 text-rose-800 border border-rose-200";
+                  statusLabel = "CRÍTICO (GARGALO)";
+                } else if (item.averageDays !== null && item.averageDays > 15) {
+                  badgeClass = "bg-amber-100 text-amber-800 border border-amber-200";
+                  statusLabel = "ATENÇÃO";
+                }
+
+                return (
+                  <tr key={item.stage} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-4 py-3 font-bold text-slate-900">
+                      <div className="flex items-center gap-1.5">
+                        <span>{item.stage}</span>
+                        {!isFinalizado && (
+                          <span className="text-[10px] font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-md uppercase">
+                            (SAE)
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center font-extrabold text-slate-800">{item.count}</td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="w-20 bg-slate-100 h-2 rounded-full overflow-hidden">
+                          <div 
+                            className="bg-[#1A3E8A] h-full rounded-full transition-all duration-500" 
+                            style={{ width: `${item.percent}%` }} 
+                          />
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-500 min-w-[38px] text-right">{item.percent.toFixed(1)}%</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center font-bold text-slate-700">
+                      {isFinalizado ? (
+                        <span className="text-slate-300 font-normal">-</span>
+                      ) : (
+                        `${item.averageDays} dias`
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {isFinalizado ? (
+                        <span className="text-slate-300 font-normal pl-2">-</span>
+                      ) : (
+                        <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider ${badgeClass}`}>
+                          {statusLabel}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Item-by-item detailed listing table (Interactive) */}
       <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col gap-5">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-3">
@@ -996,7 +1208,7 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
               <tr className="bg-slate-50/50 border-b border-slate-200 text-slate-500 uppercase tracking-widest font-black text-[10px]">
                 <th className="px-5 py-3.5 pl-8">Item / Atividade Regulatória</th>
                 <th className="px-5 py-3.5 text-center">Prazo</th>
-                <th className="px-5 py-3.5 text-center">Status</th>
+                <th className="px-5 py-3.5 text-center">Etapa</th>
                 <th className="px-5 py-3.5 text-center w-36">Progresso</th>
                 <th className="px-5 py-3.5 text-center">Linha do Tempo</th>
                 <th className="px-5 py-3.5">Entrega</th>
@@ -1039,7 +1251,15 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
                         return (
                           <tr key={`${item.agendaId}-${item.taskId}-${idx}`} className="hover:bg-slate-50/30 transition-colors">
                             <td className="px-5 py-4 font-bold text-slate-800 text-[13px] max-w-xs whitespace-normal pl-8">
-                              {item.taskTitle}
+                              <div>{item.taskTitle}</div>
+                              {item.agendaTema && (
+                                <div className="mt-1">
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100/80 px-2 py-0.5 rounded-md">
+                                    <Layers size={10} className="text-indigo-500" />
+                                    {item.agendaTema}
+                                  </span>
+                                </div>
+                              )}
                             </td>
                             <td className="px-5 py-4 text-center whitespace-nowrap">
                               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-700 text-xs font-semibold">
@@ -1053,13 +1273,15 @@ export function RegulatoryAgendaDashboard({ showToast }: RegulatoryAgendaDashboa
                             </td>
                             <td className="px-5 py-4 text-center whitespace-nowrap">
                               <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-                                item.status === "Concluída" 
+                                item.etapa === "Finalizada" || item.etapa === "Finalizado"
                                   ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
-                                  : item.status === "Em andamento"
-                                  ? "bg-blue-50 text-blue-700 border border-blue-200"
-                                  : "bg-slate-100 text-slate-700 border border-slate-200"
+                                  : item.etapa === "Aprovação Final"
+                                  ? "bg-purple-50 text-purple-700 border border-purple-200"
+                                  : item.etapa === "Consulta e Audiência Pública"
+                                  ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                  : "bg-blue-50 text-blue-700 border border-blue-200"
                               }`}>
-                                {item.status}
+                                {item.etapa}
                               </span>
                             </td>
                             <td className="px-5 py-4 text-center whitespace-nowrap w-36">

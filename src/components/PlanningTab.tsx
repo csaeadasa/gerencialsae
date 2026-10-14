@@ -88,6 +88,7 @@ import * as XLSX from "xlsx";
 import { FiscalizacaoEditor } from './FiscalizacaoEditor';
 import { RecursoEditor } from './RecursoEditor';
 import { RecursoRevisaoEditor } from './RecursoRevisaoEditor';
+import { AgendaRegulatoriaEditor } from './AgendaRegulatoriaEditor';
 import { Task, Plan, PlanSnapshot, Area, Category, Responsible, AppUser, ChecklistItem, TaskLink } from "../types";
 import { cn } from "../lib/utils";
 import { useAuth } from "../lib/auth";
@@ -5196,7 +5197,7 @@ export function PlanningTab({
       }
     }
 
-    const selectedType = overrideType || (viewMode === "recurso" ? agrupamentoTaskType : (taskTypeFilter === "demanda_ouvidoria" || taskTypeFilter === "recurso") ? "demanda_ouvidoria" : taskTypeFilter === "fiscalizacao" ? "fiscalizacao" : taskTypeFilter === "recurso_revisao" ? "recurso_revisao" : "default");
+    const selectedType = overrideType || (viewMode === "recurso" ? agrupamentoTaskType : (taskTypeFilter === "demanda_ouvidoria" || taskTypeFilter === "recurso") ? "demanda_ouvidoria" : taskTypeFilter === "fiscalizacao" ? "fiscalizacao" : taskTypeFilter === "recurso_revisao" ? "recurso_revisao" : taskTypeFilter === "agenda_regulatoria" ? "agenda_regulatoria" : "default");
 
     setEditingTask({
       title: "",
@@ -5239,6 +5240,14 @@ export function PlanningTab({
         situacao: 'Recebido',
         servicoRegulado: 'Água',
         resultado: 'Em Análise'
+      } : undefined,
+      agendaRegulatoriaData: selectedType === "agenda_regulatoria" ? {
+        agendaVinculada: 'Agenda Regulatória 2025-2026',
+        temaRegulatorio: 'Qualidade da Prestação de Serviços',
+        entregaMeta: '',
+        linkArquivoEntrega: '',
+        etapa: 'Minuta do Normativo',
+        datasEtapas: { 'Minuta do Normativo': new Date().toISOString().split('T')[0] }
       } : undefined
     });
     setNewRelatedSeiInput("");
@@ -8844,6 +8853,7 @@ export function PlanningTab({
                 >
                   <option value="all">Todos os Tipos</option>
                   <option value="default">Padrão</option>
+                  <option value="agenda_regulatoria">Agenda Regulatória</option>
                   <option value="fiscalizacao">Fiscalização</option>
                   <option value="demanda_ouvidoria">Demanda Ouvidoria</option>
                   <option value="recurso_revisao">Recurso de Revisão</option>
@@ -12368,6 +12378,7 @@ export function PlanningTab({
                       >
                         <option value="all">Todos os Tipos</option>
                         <option value="default">PADRÃO</option>
+                        <option value="agenda_regulatoria">AGENDA REGULATÓRIA</option>
                         <option value="fiscalizacao">FISCALIZAÇÃO</option>
                         <option value="demanda_ouvidoria">DEMANDA OUVIDORIA</option>
                         <option value="recurso_revisao">RECURSO DE REVISÃO</option>
@@ -12638,6 +12649,7 @@ export function PlanningTab({
                   >
                     <option value="all">Todos os Tipos</option>
                     <option value="default">PADRÃO</option>
+                    <option value="agenda_regulatoria">AGENDA REGULATÓRIA</option>
                     <option value="fiscalizacao">FISCALIZAÇÃO</option>
                     <option value="demanda_ouvidoria">DEMANDA OUVIDORIA</option>
                     <option value="recurso_revisao">RECURSO DE REVISÃO</option>
@@ -13990,6 +14002,16 @@ export function PlanningTab({
                                                   Etapa: {task.recursoRevData?.situacao || "Recebido"}
                                                 </span>
                                               )}
+                                              {task.type === "agenda_regulatoria" && (
+                                                <span 
+                                                  className="text-[8.5px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-sm border shadow-xs flex items-center gap-1 bg-indigo-50 text-indigo-800 border-indigo-200 cursor-pointer"
+                                                  title={`Agenda Regulatória: ${task.agendaRegulatoriaData?.agendaVinculada || "Vinculada"}`}
+                                                  onClick={() => handleEditTask(task)}
+                                                >
+                                                  <BookOpen size={9} className="stroke-[2.5]" />
+                                                  Agenda: {task.agendaRegulatoriaData?.temaRegulatorio ? (task.agendaRegulatoriaData.temaRegulatorio.length > 25 ? task.agendaRegulatoriaData.temaRegulatorio.substring(0, 22) + "..." : task.agendaRegulatoriaData.temaRegulatorio) : (task.agendaRegulatoriaData?.agendaVinculada || "Regulatória")}
+                                                </span>
+                                              )}
                                               {task.priority && (
                                                 <span className="text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm border shadow-2xs flex items-center gap-1 bg-slate-100 text-slate-600 border-slate-200" title={`Prioridade: ${task.priority}`}>
                                                   <Flag size={9} className="text-slate-400 shrink-0" />
@@ -15119,6 +15141,15 @@ export function PlanningTab({
                     Recurso de Revisão
                   </button>
                 )}
+                {editingTask.type === 'agenda_regulatoria' && (
+                  <button
+                    type="button"
+                    onClick={() => setTaskFormTab("agenda_regulatoria")}
+                    className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors cursor-pointer ${taskFormTab === "agenda_regulatoria" ? "bg-adasa-mid text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  >
+                    Agenda Regulatória
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setTaskFormTab("notes")}
@@ -15194,7 +15225,7 @@ export function PlanningTab({
                   <select
                     value={editingTask.type === "recurso" ? "demanda_ouvidoria" : (editingTask.type || "default")}
                     onChange={(e) => {
-                      const newType = e.target.value as 'default' | 'fiscalizacao' | 'demanda_ouvidoria' | 'recurso_revisao' | 'recurso';
+                      const newType = e.target.value as 'default' | 'fiscalizacao' | 'demanda_ouvidoria' | 'recurso_revisao' | 'agenda_regulatoria' | 'recurso';
                       setEditingTask(prev => {
                         const next = { ...prev, type: newType };
                         if (newType === 'fiscalizacao' && !next.fiscalizacaoData) {
@@ -15237,6 +15268,16 @@ export function PlanningTab({
                             resultado: 'Em Análise'
                           };
                         }
+                        if (newType === 'agenda_regulatoria' && !next.agendaRegulatoriaData) {
+                          next.agendaRegulatoriaData = {
+                            agendaVinculada: "Agenda Regulatória 2025-2026",
+                            temaRegulatorio: "Qualidade da Prestação de Serviços",
+                            entregaMeta: "",
+                            linkArquivoEntrega: "",
+                            etapa: "Minuta do Normativo",
+                            datasEtapas: { "Minuta do Normativo": new Date().toISOString().split('T')[0] }
+                          };
+                        }
                         return next;
                       });
 
@@ -15245,12 +15286,14 @@ export function PlanningTab({
                         if (newType === 'fiscalizacao') setTaskFormTab('fiscalizacao');
                         else if (newType === 'demanda_ouvidoria' || newType === 'recurso') setTaskFormTab('recurso');
                         else if (newType === 'recurso_revisao') setTaskFormTab('recurso_revisao');
+                        else if (newType === 'agenda_regulatoria') setTaskFormTab('agenda_regulatoria');
                         else setTaskFormTab('form');
                       }
                     }}
                     className="w-full border-2 border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-700 focus:border-adasa-mid outline-none transition-all placeholder:text-slate-400 bg-slate-50/10 focus:bg-white"
                   >
                     <option value="default">Padrão</option>
+                    <option value="agenda_regulatoria">Agenda Regulatória</option>
                     <option value="fiscalizacao">Fiscalização</option>
                     <option value="demanda_ouvidoria">Demanda Ouvidoria</option>
                     <option value="recurso_revisao">Recurso de Revisão</option>
@@ -16802,6 +16845,30 @@ export function PlanningTab({
                   <RecursoRevisaoEditor 
                     data={editingTask.recursoRevData || {}} 
                     onChange={(data) => setEditingTask(prev => ({ ...prev, recursoRevData: data }))}
+                  />
+                  <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setIsFormOpen(false)}
+                      className="px-5 py-2 font-bold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                    >
+                      Fechar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleFormSubmit(e as any)}
+                      className="px-5 py-2 font-bold text-xs text-white bg-adasa-mid hover:bg-adasa-dark rounded-xl transition-colors shadow-sm"
+                    >
+                      {formMode === "create" ? "Inserir Atividade" : "Gravar Alterações"}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {taskFormTab === "agenda_regulatoria" && editingTask.type === "agenda_regulatoria" && (
+                <div className="space-y-4">
+                  <AgendaRegulatoriaEditor 
+                    data={editingTask.agendaRegulatoriaData || {}} 
+                    onChange={(data) => setEditingTask(prev => ({ ...prev, agendaRegulatoriaData: data }))}
                   />
                   <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
                     <button
