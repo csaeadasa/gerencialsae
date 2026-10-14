@@ -13189,7 +13189,11 @@ export function PlanningTab({
 
                 const activeGroup = groups.find(g => g.id === activeRecentSegment);
                 const displayTasks = activeRecentSegment === "all"
-                  ? Array.from(new Map(groups.flatMap(g => g.tasks).map(t => [t.root.id, t])).values())
+                  ? Array.from(new Map(groups.flatMap(g => g.tasks).map(t => [t.root.id, t])).values()).sort((a, b) => {
+                      const d1 = a.root.endDate ? new Date(a.root.endDate).getTime() : Infinity;
+                      const d2 = b.root.endDate ? new Date(b.root.endDate).getTime() : Infinity;
+                      return d1 - d2;
+                    })
                   : (activeGroup ? activeGroup.tasks : Array.from(new Map(groups.flatMap(g => g.tasks).map(t => [t.root.id, t])).values()));
 
                 return (
@@ -13273,7 +13277,11 @@ export function PlanningTab({
 
                  const totalStatusTasks = Object.values(groups).reduce((acc, list) => acc + list.length, 0);
                  const displayTasks = activeStatusSegment === "all"
-                   ? Object.values(groups).flat()
+                   ? Object.values(groups).flat().sort((a, b) => {
+                       const d1 = a.endDate ? new Date(a.endDate).getTime() : Infinity;
+                       const d2 = b.endDate ? new Date(b.endDate).getTime() : Infinity;
+                       return d1 - d2;
+                     })
                    : (groups[activeStatusSegment] || []);
 
                  const statusKeys = ["Não iniciada", "Em andamento", "Concluída"];
@@ -13362,7 +13370,11 @@ export function PlanningTab({
 
                  const activeCatGroup = catsWithTasks.find(c => String(c.cat.id) === String(activeCategorySegment));
                  const displayTasks = activeCategorySegment === "all"
-                   ? Array.from(new Map(catsWithTasks.flatMap(c => c.tasks).map(t => [t.id, t])).values())
+                   ? Array.from(new Map(catsWithTasks.flatMap(c => c.tasks).map(t => [t.id, t])).values()).sort((a, b) => {
+                       const d1 = a.endDate ? new Date(a.endDate).getTime() : Infinity;
+                       const d2 = b.endDate ? new Date(b.endDate).getTime() : Infinity;
+                       return d1 - d2;
+                     })
                    : (activeCatGroup ? activeCatGroup.tasks : Array.from(new Map(catsWithTasks.flatMap(c => c.tasks).map(t => [t.id, t])).values()));
                  const totalCatTasks = Array.from(new Map(catsWithTasks.flatMap(c => c.tasks).map(t => [t.id, t])).values()).length;
 
@@ -13447,7 +13459,11 @@ export function PlanningTab({
 
                  const activeAreaGroup = areasWithTasks.find(a => String(a.ar.id) === String(activeAreaSegment));
                  const displayTasks = activeAreaSegment === "all"
-                   ? Array.from(new Map(areasWithTasks.flatMap(a => a.tasks).map(t => [t.id, t])).values())
+                   ? Array.from(new Map(areasWithTasks.flatMap(a => a.tasks).map(t => [t.id, t])).values()).sort((a, b) => {
+                       const d1 = a.endDate ? new Date(a.endDate).getTime() : Infinity;
+                       const d2 = b.endDate ? new Date(b.endDate).getTime() : Infinity;
+                       return d1 - d2;
+                     })
                    : (activeAreaGroup ? activeAreaGroup.tasks : Array.from(new Map(areasWithTasks.flatMap(a => a.tasks).map(t => [t.id, t])).values()));
                  const totalAreaTasks = Array.from(new Map(areasWithTasks.flatMap(a => a.tasks).map(t => [t.id, t])).values()).length;
 
