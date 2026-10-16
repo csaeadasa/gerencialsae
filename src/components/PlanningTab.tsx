@@ -631,6 +631,8 @@ export function PlanningTab({
     ? ["Não iniciada", "Em andamento", "Concluída"]
     : ["Não iniciada", "Em andamento"];
 
+  const defaultSituationFilter = ["No Prazo", "Crítica", "Atrasada"];
+
   useEffect(() => {
     setStatusFilter(defaultStatusFilter);
   }, [activeSubTab, isMyTasksSelected]);
@@ -641,7 +643,7 @@ export function PlanningTab({
   const [searchTerm, setSearchTerm] = useState("");
   const [hasSubtasksFilter, setHasSubtasksFilter] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string[]>(defaultStatusFilter);
-  const [situationFilter, setSituationFilter] = useState<string>("all");
+  const [situationFilter, setSituationFilter] = useState<string[]>(defaultSituationFilter);
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [isProgrammedFilter, setIsProgrammedFilter] = useState<string>("all");
@@ -653,6 +655,16 @@ export function PlanningTab({
         return prev.filter(s => s !== statusVal);
       } else {
         return [...prev, statusVal];
+      }
+    });
+  };
+
+  const handleSituationFilterToggle = (situationVal: string) => {
+    setSituationFilter(prev => {
+      if (prev.includes(situationVal)) {
+        return prev.filter(s => s !== situationVal);
+      } else {
+        return [...prev, situationVal];
       }
     });
   };
@@ -673,9 +685,10 @@ export function PlanningTab({
 
   const isAnyFilterActive = useMemo(() => {
     const isStatusFiltered = statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s));
+    const isSituationFiltered = situationFilter.length !== defaultSituationFilter.length || !defaultSituationFilter.every(s => situationFilter.includes(s));
     return (
       isStatusFiltered ||
-      situationFilter !== "all" ||
+      isSituationFiltered ||
       priorityFilter !== "all" ||
       categoryFilter !== "all" ||
       isProgrammedFilter !== "all" ||
@@ -2915,7 +2928,7 @@ export function PlanningTab({
           setViewMode(prev => (["area", "responsible", "gantt"].includes(prev as any) ? "board" : prev));
         }
         setStatusFilter(defaultStatusFilter);
-        setSituationFilter("all");
+        setSituationFilter(defaultSituationFilter);
         setPriorityFilter("all");
         setCategoryFilter("all");
         setIsProgrammedFilter("all");
@@ -2993,8 +3006,10 @@ export function PlanningTab({
     }
 
     // Check situation
-    if (situationFilter !== "all") {
-      if (getDeadlineStatus(t.endDate, t.status) !== situationFilter) return false;
+    if (situationFilter.length < 3) {
+      if (situationFilter.length === 0) return false;
+      const dlStatus = getDeadlineStatus(t.endDate, t.status);
+      if (!situationFilter.includes(dlStatus)) return false;
     }
 
     // Check priority
@@ -3337,8 +3352,10 @@ export function PlanningTab({
     }
 
     // 9. Check situation (heavier check with date parsing)
-    if (situationFilter !== "all") {
-      if (getDeadlineStatus(t.endDate, t.status) !== situationFilter) return false;
+    if (situationFilter.length < 3) {
+      if (situationFilter.length === 0) return false;
+      const dlStatus = getDeadlineStatus(t.endDate, t.status);
+      if (!situationFilter.includes(dlStatus)) return false;
     }
 
     // 10. Check Period (Month / Quarter / Semester)
@@ -8898,17 +8915,40 @@ export function PlanningTab({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📅 Situação</span>
-                <select
-                  value={situationFilter}
-                  onChange={(e) => setSituationFilter(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-600 bg-white text-slate-700 font-bold"
-                >
-                  <option value="all">Todas as Situações</option>
-                  <option value="No Prazo">NO PRAZO</option>
-                  <option value="Crítica">CRÍTICA</option>
-                  <option value="Atrasada">ATRASADA</option>
-                </select>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📅 Situação</span>
+                  <span className="text-[10px] font-bold text-slate-400">
+                    {situationFilter.length === 3 ? "Todas" : `${situationFilter.length} sel.`}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-white border border-slate-200 rounded-xl min-h-[38px]">
+                  {[
+                    { id: "No Prazo", label: "No prazo", dot: "bg-emerald-500" },
+                    { id: "Crítica", label: "Crítica", dot: "bg-amber-500" },
+                    { id: "Atrasada", label: "Atrasada", dot: "bg-rose-500" },
+                  ].map((opt) => {
+                    const isChecked = situationFilter.includes(opt.id);
+                    return (
+                      <label
+                        key={opt.id}
+                        className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs font-semibold cursor-pointer transition-all select-none ${
+                          isChecked
+                            ? "bg-indigo-50/70 border-indigo-200 text-indigo-900 shadow-xs"
+                            : "bg-transparent border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleSituationFilterToggle(opt.id)}
+                          className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 accent-indigo-600 cursor-pointer"
+                        />
+                        <span className={`w-1.5 h-1.5 rounded-full ${opt.dot}`} />
+                        <span className="whitespace-nowrap text-[11px] sm:text-xs">{opt.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -9046,7 +9086,7 @@ export function PlanningTab({
             </div>
 
             {/* Clear Filters Button if any is changed */}
-            {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || periodTypeFilter !== "all" || periodValueFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all") && (
+            {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || (situationFilter.length !== defaultSituationFilter.length || !defaultSituationFilter.every(s => situationFilter.includes(s))) || priorityFilter !== "all" || categoryFilter !== "all" || periodTypeFilter !== "all" || periodValueFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all") && (
               <div className="pt-2 flex justify-end">
                 <button
                   onClick={() => {
@@ -9054,7 +9094,7 @@ export function PlanningTab({
                     setSelectedAreaIds([]);
                     setSelectedResponsibleIds([]);
                     setStatusFilter(defaultStatusFilter);
-                    setSituationFilter("all");
+                    setSituationFilter(defaultSituationFilter);
                     setPriorityFilter("all");
                     setCategoryFilter("all");
                     setPeriodTypeFilter("all");
@@ -12425,17 +12465,40 @@ export function PlanningTab({
 
                     {/* Situação */}
                     <div className="flex flex-col gap-1.5">
-                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📅 Situação</span>
-                      <select
-                        value={situationFilter}
-                        onChange={(e) => setSituationFilter(e.target.value)}
-                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
-                      >
-                        <option value="all">Todas as Situações</option>
-                        <option value="No Prazo">NO PRAZO</option>
-                        <option value="Crítica">CRÍTICA</option>
-                        <option value="Atrasada">ATRASADA</option>
-                      </select>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📅 Situação</span>
+                        <span className="text-[10px] font-bold text-slate-400">
+                          {situationFilter.length === 3 ? "Todas" : `${situationFilter.length} sel.`}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-white border border-slate-200 rounded-xl min-h-[42px]">
+                        {[
+                          { id: "No Prazo", label: "No prazo", dot: "bg-emerald-500" },
+                          { id: "Crítica", label: "Crítica", dot: "bg-amber-500" },
+                          { id: "Atrasada", label: "Atrasada", dot: "bg-rose-500" },
+                        ].map((opt) => {
+                          const isChecked = situationFilter.includes(opt.id);
+                          return (
+                            <label
+                              key={opt.id}
+                              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold cursor-pointer transition-all select-none ${
+                                isChecked
+                                  ? "bg-slate-100 border-slate-300 text-slate-800 shadow-xs"
+                                  : "bg-transparent border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleSituationFilterToggle(opt.id)}
+                                className="w-3.5 h-3.5 rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid accent-adasa-mid cursor-pointer"
+                              />
+                              <span className={`w-1.5 h-1.5 rounded-full ${opt.dot}`} />
+                              <span className="whitespace-nowrap text-[11px] sm:text-xs">{opt.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
 
@@ -12467,12 +12530,12 @@ export function PlanningTab({
 
                   {/* Consultar / Limpar Buttons */}
                   <div className="flex flex-wrap justify-center items-center gap-3 pt-2">
-                    {(planFilter !== "all" || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || situationFilter !== "all" || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
+                    {(planFilter !== "all" || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || (situationFilter.length !== defaultSituationFilter.length || !defaultSituationFilter.every(s => situationFilter.includes(s))) || taskTypeFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
                       <button
                         onClick={() => {
                           setPlanFilter("all");
                           setStatusFilter(defaultStatusFilter);
-                          setSituationFilter("all");
+                          setSituationFilter(defaultSituationFilter);
                           setTaskTypeFilter("all");
                           setSearchTerm("");
                           setHasSubtasksFilter(false);
@@ -12694,17 +12757,40 @@ export function PlanningTab({
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📅 Situação</span>
-                  <select
-                    value={situationFilter}
-                    onChange={(e) => setSituationFilter(e.target.value)}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-adasa-mid bg-white text-slate-700 font-bold"
-                  >
-                    <option value="all">Todas as Situações</option>
-                    <option value="No Prazo">NO PRAZO</option>
-                    <option value="Crítica">CRÍTICA</option>
-                    <option value="Atrasada">ATRASADA</option>
-                  </select>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">📅 Situação</span>
+                    <span className="text-[10px] font-bold text-slate-400">
+                      {situationFilter.length === 3 ? "Todas" : `${situationFilter.length} sel.`}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-white border border-slate-200 rounded-xl min-h-[42px]">
+                    {[
+                      { id: "No Prazo", label: "No prazo", dot: "bg-emerald-500" },
+                      { id: "Crítica", label: "Crítica", dot: "bg-amber-500" },
+                      { id: "Atrasada", label: "Atrasada", dot: "bg-rose-500" },
+                    ].map((opt) => {
+                      const isChecked = situationFilter.includes(opt.id);
+                      return (
+                        <label
+                          key={opt.id}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold cursor-pointer transition-all select-none ${
+                            isChecked
+                              ? "bg-slate-100 border-slate-300 text-slate-800 shadow-xs"
+                              : "bg-transparent border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleSituationFilterToggle(opt.id)}
+                            className="w-3.5 h-3.5 rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid accent-adasa-mid cursor-pointer"
+                          />
+                          <span className={`w-1.5 h-1.5 rounded-full ${opt.dot}`} />
+                          <span className="whitespace-nowrap text-[11px] sm:text-xs">{opt.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-1.5">
@@ -12869,14 +12955,14 @@ export function PlanningTab({
 
               {/* Consultar / Limpar Buttons */}
               <div className="flex flex-wrap justify-center items-center gap-3 pt-2">
-                  {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || situationFilter !== "all" || priorityFilter !== "all" || categoryFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all" || periodTypeFilter !== "all" || periodValueFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
+                  {(planFilter !== "all" || selectedAreaIds.length > 0 || selectedResponsibleIds.length > 0 || (statusFilter.length !== defaultStatusFilter.length || !defaultStatusFilter.every(s => statusFilter.includes(s))) || (situationFilter.length !== defaultSituationFilter.length || !defaultSituationFilter.every(s => situationFilter.includes(s))) || priorityFilter !== "all" || categoryFilter !== "all" || isProgrammedFilter !== "all" || taskTypeFilter !== "all" || periodTypeFilter !== "all" || periodValueFilter !== "all" || hasSubtasksFilter || searchTerm !== "") && (
                     <button
                       onClick={() => {
                         setPlanFilter("all");
                         setSelectedAreaIds([]);
                         setSelectedResponsibleIds([]);
                         setStatusFilter(defaultStatusFilter);
-                        setSituationFilter("all");
+                        setSituationFilter(defaultSituationFilter);
                         setPriorityFilter("all");
                         setCategoryFilter("all");
                         setSearchTerm("");

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   
@@ -11,8 +13,29 @@
 }
 
 @layer base {
+  :root {
+    --bg-page: #f8fafc;
+    --bg-card: #ffffff;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
+  }
+
+  .dark {
+    --bg-page: #0b0f19;
+    --bg-card: #131b2e;
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    --border-color: #1e293b;
+    color-scheme: dark;
+  }
+
   body {
-    @apply bg-slate-50 antialiased selection:bg-indigo-100 selection:text-indigo-900;
+    @apply bg-slate-50 text-slate-900 antialiased selection:bg-indigo-100 selection:text-indigo-900 transition-colors duration-200;
+  }
+
+  .dark body, html.dark body {
+    @apply bg-slate-950 text-slate-100 selection:bg-indigo-900 selection:text-indigo-100;
   }
 }
 
@@ -36,6 +59,10 @@
     @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
   }
 
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-slate-700 hover:bg-slate-600;
+  }
+
   .kanban-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -43,9 +70,75 @@
   .kanban-scrollbar::-webkit-scrollbar-track {
     @apply bg-slate-100 rounded-full;
   }
+  .dark .kanban-scrollbar::-webkit-scrollbar-track {
+    @apply bg-slate-900;
+  }
   .kanban-scrollbar::-webkit-scrollbar-thumb {
     @apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors;
   }
+  .dark .kanban-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-slate-700 hover:bg-slate-600;
+  }
+}
+
+/* Dark Mode Overrides for Charts, Tables and Card Containers */
+.dark .recharts-default-tooltip {
+  background-color: #131b2e !important;
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6) !important;
+}
+.dark .recharts-cartesian-grid line {
+  stroke: #1e293b !important;
+}
+.dark .recharts-text {
+  fill: #94a3b8 !important;
+}
+.dark .recharts-legend-item-text {
+  color: #cbd5e1 !important;
+}
+
+/* Dark mode table & card styles */
+.dark table {
+  color: #e2e8f0;
+}
+.dark th {
+  background-color: #0f172a !important;
+  color: #94a3b8 !important;
+  border-color: #1e293b !important;
+}
+.dark td {
+  border-color: #1e293b !important;
+}
+.dark .bg-white {
+  background-color: #131b2e !important;
+}
+.dark .bg-slate-50 {
+  background-color: #0b0f19 !important;
+}
+.dark .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+.dark .bg-slate-200 {
+  background-color: #334155 !important;
+}
+.dark .border-slate-100, .dark .border-slate-200, .dark .border-slate-200\/80 {
+  border-color: #1e293b !important;
+}
+.dark .text-slate-900, .dark .text-slate-800, .dark .text-slate-700 {
+  color: #f1f5f9 !important;
+}
+.dark .text-slate-600, .dark .text-slate-500 {
+  color: #94a3b8 !important;
+}
+.dark .text-slate-400 {
+  color: #64748b !important;
+}
+.dark .hover\:bg-slate-50:hover {
+  background-color: #1e293b !important;
+}
+.dark .hover\:bg-slate-100:hover {
+  background-color: #334155 !important;
 }
 
 @media print {

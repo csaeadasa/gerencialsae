@@ -36,6 +36,8 @@ import {
   Shield,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   LayoutDashboard,
   Map as MapIcon,
   Layers,
@@ -65,7 +67,15 @@ import {
   List,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Pin,
+  PinOff,
+  CheckCircle2,
+  Circle,
+  Eye,
+  EyeOff,
+  Sun,
+  Moon
 } from "lucide-react";
 import {
   LineChart,
@@ -355,8 +365,73 @@ interface PresentationConfig {
 export default function App() {
   const { currentUser, isSessionVerified, roles, logout, checkPermission } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [notificationsMenuOpen, setNotificationsMenuOpen] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("adasa_theme");
+      if (saved) return saved === "dark";
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("adasa_theme", isDarkMode ? "dark" : "light");
+      if (isDarkMode) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [isDarkMode]);
+  const [isNotificationSidebarCollapsed, setIsNotificationSidebarCollapsed] = useState(() => {
+    try {
+      const saved = localStorage.getItem("adasa_notification_sidebar_collapsed");
+      return saved === "true";
+    } catch {
+      return false;
+    }
+  });
+  const [notificationsMenuOpen, setNotificationsMenuOpen] = useState(true);
   const [notificationFilter, setNotificationFilter] = useState("all");
+  const [notificationSidebarWidth, setNotificationSidebarWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("adasa_notification_sidebar_width");
+      return saved ? Math.max(200, Math.min(650, Number(saved))) : 236;
+    } catch {
+      return 236;
+    }
+  });
+  const [isResizingNotificationSidebar, setIsResizingNotificationSidebar] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem("adasa_notification_sidebar_width", notificationSidebarWidth.toString());
+  }, [notificationSidebarWidth]);
+
+  const handleMouseDownResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizingNotificationSidebar(true);
+    const startX = e.clientX;
+    const startWidth = notificationSidebarWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = startX - moveEvent.clientX;
+      const newWidth = Math.max(200, Math.min(650, startWidth + deltaX));
+      setNotificationSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingNotificationSidebar(false);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
   const [replyingNotifId, setReplyingNotifId] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState("");
   const [notifications, setNotifications] = useState<any[]>(() => {
@@ -372,6 +447,10 @@ export default function App() {
     localStorage.setItem("adasa_notifications", JSON.stringify(notifications));
   }, [notifications]);
 
+  useEffect(() => {
+    localStorage.setItem("adasa_notification_sidebar_collapsed", isNotificationSidebarCollapsed ? "true" : "false");
+  }, [isNotificationSidebarCollapsed]);
+
   const groupedNotifications = useMemo(() => {
     const sorted = [...notifications].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const grouped: any[] = [];
@@ -382,26 +461,53 @@ export default function App() {
         if (last && last.title === notif.title && last.relatedTaskId === notif.relatedTaskId && last.read === notif.read && last.type === notif.type) {
           if (!last.groupedMessages) {
             last.groupedMessages = [last.message];
+            last.groupedIds = [last.id];
           }
           last.groupedMessages.push(notif.message);
+          if (!last.groupedIds) last.groupedIds = [last.id];
+          last.groupedIds.push(notif.id);
           continue;
         }
       }
-      grouped.push({ ...notif, groupedMessages: [notif.message] });
+      grouped.push({ ...notif, groupedMessages: [notif.message], groupedIds: [notif.id] });
     }
     return grouped;
   }, [notifications]);
 
   const filteredNotifications = useMemo(() => {
     return groupedNotifications.filter(notif => {
-      if (notificationFilter === "all") return true;
-      if (notificationFilter === "comment") return notif.title.startsWith("Novo Comentário");
-      if (notificationFilter === "alert") return notif.type === "alert" || notif.type === "warning";
-      if (notificationFilter === "info") return notif.type === "info" && !notif.title.startsWith("Novo Comentário");
-      if (notificationFilter === "success") return notif.type === "success";
+      if (notificationFilter === "unread") return !notif.read;
+      if (notificationFilter === "read") return notif.read;
       return true;
     });
   }, [groupedNotifications, notificationFilter]);
+
+  const toggleNotificationRead = (notif: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const idsToToggle = notif.groupedIds || [notif.id];
+    const targetState = !notif.read;
+    setNotifications(prev => prev.map(n => idsToToggle.includes(n.id) ? { ...n, read: targetState } : n));
+  };
+
+  const markAllNotificationsRead = (readState: boolean) => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: readState })));
+  };
+
+  const getTaskIdFromNotif = (notif: any): number | null => {
+    if (notif.relatedTaskId) return Number(notif.relatedTaskId);
+    if (notif.taskId) return Number(notif.taskId);
+    return null;
+  };
+
+  const handleOpenTaskFromNotification = (taskId: number, notifId?: string) => {
+    if (notifId) {
+      setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, read: true } : n));
+    }
+    setIsMyTasksSelected(false);
+    setEditingTaskIdFromPainel(taskId);
+    setActivePlanningSubTab("tasks");
+    handleTabChange("planning");
+  };
 
   useEffect(() => {
     const handleNotify = (e: CustomEvent) => {
@@ -4208,6 +4314,351 @@ const renderSupplyTable = () => {
     );
   }
 
+  const renderCollapsedNotificationSidebar = () => {
+    const unreadCount = notifications.filter(n => !n.read).length;
+
+    return (
+      <div className="flex flex-col items-center py-4 px-2 h-full bg-white select-none overflow-hidden gap-3">
+        {/* Bell Icon Trigger */}
+        <button
+          onClick={() => setIsNotificationSidebarCollapsed(false)}
+          className="relative p-2.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl transition-all cursor-pointer shadow-2xs"
+          title="Expandir Notificações"
+        >
+          <Bell size={20} />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full border-2 border-white shadow-2xs">
+              {unreadCount}
+            </span>
+          )}
+        </button>
+
+        {/* Expand Button */}
+        <button
+          onClick={() => setIsNotificationSidebarCollapsed(false)}
+          className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+          title="Expandir Barra de Notificações"
+        >
+          <PanelRightOpen size={18} />
+        </button>
+
+        <div className="h-px bg-slate-200 w-full my-1" />
+
+        {/* Unread Dots / Recent Notifications */}
+        <div className="flex flex-col gap-2 overflow-y-auto flex-1 custom-scrollbar items-center w-full">
+          {notifications.slice(0, 10).map(notif => (
+            <button
+              key={notif.id}
+              onClick={() => {
+                setIsNotificationSidebarCollapsed(false);
+                if (!notif.read) toggleNotificationRead(notif);
+              }}
+              className={cn(
+                "w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer relative shrink-0 border",
+                notif.read
+                  ? "bg-slate-50 text-slate-400 border-slate-200/60 hover:bg-slate-100"
+                  : "bg-indigo-50/90 text-indigo-700 border-indigo-200 hover:bg-indigo-100 font-bold shadow-2xs"
+              )}
+              title={`${notif.title} (${notif.read ? 'Lida' : 'Não lida'})`}
+            >
+              {notif.type === 'alert' || notif.type === 'warning' ? (
+                <AlertTriangle size={15} className={notif.read ? "text-slate-400" : "text-rose-500"} />
+              ) : notif.type === 'success' ? (
+                <Check size={15} className={notif.read ? "text-slate-400" : "text-emerald-500"} />
+              ) : notif.title.startsWith("Novo Comentário") ? (
+                <MessageSquare size={15} className={notif.read ? "text-slate-400" : "text-indigo-600"} />
+              ) : (
+                <Info size={15} className={notif.read ? "text-slate-400" : "text-sky-600"} />
+              )}
+              {!notif.read && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full border border-white" />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderNotificationSidebarContent = () => {
+    const unreadCount = notifications.filter(n => !n.read).length;
+    const readCount = notifications.filter(n => n.read).length;
+
+    return (
+      <div className="flex flex-col h-full bg-white select-none overflow-hidden">
+        {/* Header */}
+        <div className="px-4 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50/80 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg">
+              <Bell size={18} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-black uppercase text-slate-900 tracking-wider">
+                  Notificações
+                </h3>
+                {unreadCount > 0 && (
+                  <span className="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow-xs">
+                    {unreadCount}
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-500 font-medium">
+                {unreadCount > 0 ? `${unreadCount} não lida(s)` : "Todas as notificações lidas"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {/* Close Sidebar */}
+            <button
+              onClick={() => setNotificationsMenuOpen(false)}
+              title="Fechar barra de notificações"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Global Action Bar & Filters */}
+        <div className="bg-white border-b border-slate-200 p-2.5 flex flex-col gap-2 shrink-0">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+              Filtros
+            </span>
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 ? (
+                <button
+                  onClick={() => markAllNotificationsRead(true)}
+                  className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 uppercase tracking-wider transition-colors cursor-pointer"
+                  title="Marcar todas as notificações como lidas"
+                >
+                  <CheckCheck size={12} />
+                  Marcar tudo lido
+                </button>
+              ) : notifications.length > 0 ? (
+                <button
+                  onClick={() => markAllNotificationsRead(false)}
+                  className="text-[10px] font-bold text-slate-500 hover:text-slate-700 flex items-center gap-1 uppercase tracking-wider transition-colors cursor-pointer"
+                  title="Marcar todas as notificações como não lidas"
+                >
+                  <RotateCcw size={12} />
+                  Marcar tudo não lido
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Category Pills */}
+          <div className="flex gap-1 overflow-x-auto custom-scrollbar pb-0.5">
+            {[
+              { id: "all", label: `Todas (${notifications.length})` },
+              { id: "unread", label: `Não Lidas (${unreadCount})` },
+              { id: "read", label: `Lidas (${readCount})` }
+            ].map(filter => (
+              <button
+                key={filter.id}
+                onClick={() => setNotificationFilter(filter.id)}
+                className={cn(
+                  "px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0 transition-all outline-none cursor-pointer border",
+                  notificationFilter === filter.id
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900"
+                )}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* List Area */}
+        <div className="overflow-y-auto flex-1 p-3 custom-scrollbar space-y-2 bg-slate-50/50">
+          {notifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-300 mb-3">
+                <Bell size={24} />
+              </div>
+              <p className="text-xs font-bold text-slate-600">Nenhuma notificação</p>
+              <p className="text-[11px] text-slate-400 mt-1 max-w-[200px]">Você não possui notificações registradas no momento.</p>
+            </div>
+          ) : filteredNotifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-300 mb-3">
+                <Bell size={24} className="opacity-50" />
+              </div>
+              <p className="text-xs font-bold text-slate-600">Nenhuma notificação encontrada</p>
+              <p className="text-[11px] text-slate-400 mt-1 max-w-[200px]">Nenhuma notificação atende ao filtro selecionado.</p>
+            </div>
+          ) : (
+            filteredNotifications.map(notif => {
+              let taskId = getTaskIdFromNotif(notif);
+              if (!taskId && tasks && tasks.length > 0) {
+                const found = tasks.find((t: any) =>
+                  t.title && (notif.title.includes(t.title) || (notif.message && notif.message.includes(t.title)))
+                );
+                if (found) taskId = found.id;
+              }
+
+              return (
+                <motion.div
+                  layout
+                  key={notif.id}
+                  initial={{ opacity: 0, scale: 0.96, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                  className={cn(
+                    "relative p-3.5 rounded-xl transition-all border text-left flex flex-col gap-2.5 overflow-hidden shadow-2xs",
+                    notif.read
+                      ? "bg-white hover:bg-slate-50/90 border-slate-200/80 text-slate-700"
+                      : "bg-indigo-50/80 hover:bg-indigo-50 border-indigo-200/90 text-slate-900 shadow-indigo-100/50"
+                  )}
+                >
+                  {!notif.read && (
+                    <div className="absolute top-0 left-0 w-1 h-full bg-indigo-600 rounded-l-xl" />
+                  )}
+
+                  <div className="flex gap-2.5 items-start relative z-10 pl-1">
+                    <div className="mt-0.5 shrink-0">
+                      {notif.type === "alert" || notif.type === "warning" ? (
+                        <div className="p-1.5 rounded-lg bg-rose-100 text-rose-600">
+                          <AlertTriangle size={15} />
+                        </div>
+                      ) : notif.type === "success" ? (
+                        <div className="p-1.5 rounded-lg bg-emerald-100 text-emerald-600">
+                          <Check size={15} />
+                        </div>
+                      ) : notif.title.startsWith("Novo Comentário") ? (
+                        <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-600">
+                          <MessageSquare size={15} />
+                        </div>
+                      ) : (
+                        <div className="p-1.5 rounded-lg bg-sky-100 text-sky-600">
+                          <Info size={15} />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <p className={cn("text-xs leading-snug", notif.read ? "text-slate-700 font-bold" : "text-slate-900 font-extrabold")}>
+                          {notif.title}
+                        </p>
+                        <span className="text-[9px] font-medium text-slate-400 shrink-0">
+                          {new Date(notif.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+
+                      <div className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                        {notif.groupedMessages && notif.groupedMessages.length > 1 ? (
+                          <>
+                            <p className="font-bold text-indigo-950 mb-0.5">
+                              {notif.groupedMessages.length} mensagens neste grupo:
+                            </p>
+                            <p className="line-clamp-2 pl-2 border-l-2 border-indigo-200 italic text-slate-600">
+                              {notif.groupedMessages[0]}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="line-clamp-3">{notif.message}</p>
+                        )}
+                      </div>
+
+                      <p className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider mt-1.5">
+                        {new Date(notif.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Quick reply for comment notifications */}
+                  {notif.title.startsWith("Novo Comentário") && taskId && (
+                    <div className="pl-8 pr-1 mt-0.5">
+                      {replyingNotifId === notif.id ? (
+                        <div className="flex bg-white border border-indigo-300 rounded-lg shadow-2xs focus-within:border-indigo-600 focus-within:ring-1 focus-within:ring-indigo-600 transition-all overflow-hidden">
+                          <input
+                            autoFocus
+                            type="text"
+                            value={replyContent}
+                            onChange={(e) => setReplyContent(e.target.value)}
+                            placeholder="Escreva sua resposta..."
+                            className="flex-1 text-[11px] text-slate-800 bg-transparent border-none focus:ring-0 px-2.5 py-1.5"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleQuickReply(notif.id, taskId);
+                            }}
+                          />
+                          <button
+                            onClick={() => handleQuickReply(notif.id, taskId)}
+                            disabled={!replyContent.trim()}
+                            className="px-2.5 bg-indigo-50 text-indigo-600 hover:text-indigo-800 disabled:text-slate-300 disabled:bg-slate-50 border-l border-slate-100 flex items-center justify-center transition-colors cursor-pointer"
+                          >
+                            <Send size={12} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setReplyingNotifId(notif.id);
+                            setReplyContent("");
+                          }}
+                          className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors bg-white hover:bg-indigo-50/50 border border-indigo-200 px-2.5 py-1 rounded-lg shadow-2xs cursor-pointer"
+                        >
+                          <CornerDownRight size={10} />
+                          Responder comentário
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Action Bar (Task link & Read/Unread toggle) */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 mt-1 pl-1 gap-2 flex-wrap">
+                    {taskId ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenTaskFromNotification(taskId, notif.id);
+                        }}
+                        className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-900 border border-indigo-200/80 px-2.5 py-1 rounded-lg transition-all cursor-pointer shadow-2xs"
+                        title="Abrir detalhes desta tarefa no sistema"
+                      >
+                        <ListTodo size={12} className="text-indigo-600 shrink-0" />
+                        <span>Abrir Tarefa</span>
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn("w-2 h-2 rounded-full", notif.read ? "bg-slate-300" : "bg-rose-500 animate-pulse")} />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          {notif.read ? "Lida" : "Não lida"}
+                        </span>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={(e) => toggleNotificationRead(notif, e)}
+                      className={cn(
+                        "p-1.5 rounded-lg border transition-all cursor-pointer shadow-2xs ml-auto flex items-center justify-center shrink-0",
+                        notif.read
+                          ? "bg-slate-100 hover:bg-slate-200 text-slate-500 border-slate-200"
+                          : "bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600"
+                      )}
+                      title={notif.read ? "Marcar como não lida" : "Marcar como lida"}
+                    >
+                      {notif.read ? (
+                        <EyeOff size={14} className="text-slate-500" />
+                      ) : (
+                        <CheckCircle2 size={14} className="text-white" />
+                      )}
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-adasa-light selection:text-adasa-dark">
       {toastMessage && (
@@ -5923,181 +6374,41 @@ const renderSupplyTable = () => {
             )}
           </div>
           <div className="flex flex-col md:flex-row items-center gap-3">
+            {/* Dark / Light Mode Toggle Button */}
+            <div className="relative z-50 hidden md:block">
+              <button
+                onClick={() => setIsDarkMode(!isDarkMode)}
+                className={cn(
+                  "p-2.5 rounded-2xl border shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-adasa-mid/20 cursor-pointer flex items-center justify-center",
+                  isDarkMode
+                    ? "bg-slate-800 border-slate-700 text-amber-400 hover:bg-slate-700 shadow-slate-900"
+                    : "bg-white border-slate-200 text-slate-600 hover:border-adasa-mid hover:bg-slate-50"
+                )}
+                title={isDarkMode ? "Mudar para Modo Claro" : "Mudar para Modo Escuro"}
+              >
+                {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </button>
+            </div>
+
             <div className="relative z-50 hidden md:block">
               <button
                 onClick={() => {
                   setNotificationsMenuOpen(!notificationsMenuOpen);
                   setUserMenuOpen(false);
                 }}
-                className="relative p-2.5 bg-white rounded-2xl border border-slate-200 shadow-sm transition-all hover:border-adasa-mid hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-adasa-mid/20"
+                className={cn(
+                  "relative p-2.5 rounded-2xl border shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-adasa-mid/20 cursor-pointer",
+                  notificationsMenuOpen
+                    ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-indigo-100"
+                    : "bg-white border-slate-200 text-slate-600 hover:border-adasa-mid hover:bg-slate-50"
+                )}
+                title="Notificações"
               >
-                <Bell size={20} className="text-slate-600" />
+                <Bell size={20} className={notificationsMenuOpen ? "text-indigo-600" : "text-slate-600"} />
                 {notifications.filter(n => !n.read).length > 0 && (
                   <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-white"></span>
                 )}
               </button>
-
-              <AnimatePresence>
-                {notificationsMenuOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setNotificationsMenuOpen(false)} />
-                    <motion.div
-                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 flex flex-col max-h-[85vh] overflow-hidden"
-                    >
-                      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
-                        <p className="text-xs font-black uppercase text-slate-800 tracking-wider">Minhas Notificações</p>
-                        {notifications.length > 0 && notifications.some(n => !n.read) && (
-                          <button 
-                            onClick={() => setNotifications(notifications.map(n => ({...n, read: true})))}
-                            className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 uppercase tracking-widest flex items-center gap-1 transition-colors"
-                          >
-                            <CheckCheck size={12} />
-                            Marcar tudo como lido
-                          </button>
-                        )}
-                      </div>
-
-                      {notifications.length > 0 && (
-                        <div className="bg-white border-b border-slate-100 p-2 flex gap-1 overflow-x-auto custom-scrollbar shrink-0">
-                          {[
-                            { id: "all", label: "Todas" },
-                            { id: "comment", label: "Comentários" },
-                            { id: "alert", label: "Alertas" },
-                            { id: "info", label: "Info" }
-                          ].map(filter => (
-                            <button
-                              key={filter.id}
-                              onClick={() => setNotificationFilter(filter.id)}
-                              className={cn(
-                                "px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 transition-colors outline-none",
-                                notificationFilter === filter.id 
-                                  ? "bg-indigo-100 text-indigo-700" 
-                                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
-                              )}
-                            >
-                              {filter.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      
-                      <div className="overflow-y-auto flex-1 p-2 custom-scrollbar">
-                        {notifications.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
-                            <Bell size={32} className="text-slate-200 mb-3" />
-                            <p className="text-sm font-semibold text-slate-500">Nenhuma notificação</p>
-                            <p className="text-xs text-slate-400 mt-1">Você não possui notificações no momento.</p>
-                          </div>
-                        ) : filteredNotifications.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
-                            <Bell size={32} className="text-slate-200 mb-3 opacity-50" />
-                            <p className="text-sm font-semibold text-slate-500">Nenhuma notificação encontrada</p>
-                            <p className="text-xs text-slate-400 mt-1">Nenhuma notificação atende ao filtro selecionado.</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            {filteredNotifications.map(notif => (
-                              <motion.div 
-                                layout
-                                key={notif.id} 
-                                initial={{ opacity: 0, scale: 0.95, x: 20 }}
-                                animate={{ opacity: 1, scale: 1, x: 0 }}
-                                transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                                className={cn(
-                                  "relative p-3 rounded-xl transition-colors text-left flex flex-col gap-2 overflow-hidden",
-                                  notif.read ? "bg-transparent hover:bg-slate-50" : "bg-indigo-50/60 hover:bg-indigo-50 border border-indigo-100/50"
-                                )}
-                              >
-                                {!notif.read && (
-                                  <motion.div
-                                    className="absolute inset-0 bg-indigo-300/10 pointer-events-none"
-                                    animate={{ opacity: [0, 1, 0] }}
-                                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                                  />
-                                )}
-                                <div className="flex gap-3 relative z-10">
-                                  <div className="mt-0.5">
-                                    {notif.type === "alert" || notif.type === "warning" ? (
-                                      <AlertTriangle size={16} className={notif.type === "alert" ? "text-rose-500" : "text-amber-500"} />
-                                    ) : notif.type === "success" ? (
-                                      <Check size={16} className="text-emerald-500" />
-                                    ) : (
-                                      <Info size={16} className="text-indigo-500" />
-                                    )}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className={cn("text-xs leading-snug", notif.read ? "text-slate-700 font-semibold" : "text-slate-900 font-bold")}>
-                                      {notif.title}
-                                    </p>
-                                    <div className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                                      {notif.groupedMessages && notif.groupedMessages.length > 1 ? (
-                                        <>
-                                          <p className="font-semibold text-indigo-900/70 mb-1">{notif.groupedMessages.length} novos comentários recebidos.</p>
-                                          <p className="line-clamp-2 pl-2 border-l-2 border-slate-200 italic">{notif.groupedMessages[0]}</p>
-                                        </>
-                                      ) : (
-                                        <p className="line-clamp-2">{notif.message}</p>
-                                      )}
-                                    </div>
-                                    <p className="text-[9px] text-slate-400 font-medium uppercase tracking-widest mt-2 block">
-                                      {new Date(notif.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-                                    </p>
-                                  </div>
-                                  {!notif.read && (
-                                    <div className="w-2 h-2 rounded-full bg-indigo-500 shrink-0 self-center"></div>
-                                  )}
-                                </div>
-                                
-                                {notif.title.startsWith("Novo Comentário") && notif.relatedTaskId && (
-                                  <div className="pl-7 pr-1 mt-1">
-                                    {replyingNotifId === notif.id ? (
-                                      <div className="flex bg-white border border-slate-200 rounded-lg shadow-sm focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition-all overflow-hidden">
-                                        <input
-                                          autoFocus
-                                          type="text"
-                                          value={replyContent}
-                                          onChange={(e) => setReplyContent(e.target.value)}
-                                          placeholder="Escreva sua resposta..."
-                                          className="flex-1 text-[11px] text-slate-700 bg-transparent border-none focus:ring-0 px-3 py-2"
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleQuickReply(notif.id, notif.relatedTaskId);
-                                          }}
-                                        />
-                                        <button
-                                          onClick={() => handleQuickReply(notif.id, notif.relatedTaskId)}
-                                          disabled={!replyContent.trim()}
-                                          className="px-3 bg-slate-50 text-indigo-600 hover:text-indigo-800 disabled:text-slate-300 disabled:bg-slate-50 border-l border-slate-100 flex items-center justify-center transition-colors"
-                                        >
-                                          <Send size={12} className="ml-0.5" />
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <button 
-                                        onClick={() => {
-                                          setReplyingNotifId(notif.id);
-                                          setReplyContent("");
-                                        }}
-                                        className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors bg-white hover:bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg shadow-sm"
-                                      >
-                                        <CornerDownRight size={10} />
-                                        Responder
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </motion.div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
             </div>
 
             <div className="relative z-50 hidden md:block">
@@ -6137,13 +6448,30 @@ const renderSupplyTable = () => {
                         <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Logado como</p>
                         <p className="text-xs font-bold text-slate-800 truncate mt-0.5">{currentUser?.email}</p>
                       </div>
-                      <div className="p-1">
+                      <div className="p-1 space-y-0.5">
+                        <button
+                          onClick={() => {
+                            setIsDarkMode(!isDarkMode);
+                          }}
+                          className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-50 rounded-xl text-xs font-bold transition-colors text-left text-slate-700 cursor-pointer"
+                        >
+                          <span className="flex items-center gap-2.5">
+                            {isDarkMode ? <Sun size={14} className="text-amber-400" /> : <Moon size={14} className="text-indigo-600" />}
+                            {isDarkMode ? "Modo Claro" : "Modo Escuro"}
+                          </span>
+                          <span className={cn(
+                            "w-7 h-4 rounded-full p-0.5 transition-colors duration-200 flex items-center",
+                            isDarkMode ? "bg-indigo-600 justify-end" : "bg-slate-300 justify-start"
+                          )}>
+                            <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                          </span>
+                        </button>
                         <button
                           onClick={() => {
                             setUserMenuOpen(false);
                             setIsChangePasswordModalOpen(true);
                           }}
-                          className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 rounded-xl text-xs font-bold transition-colors text-left text-slate-700"
+                          className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 rounded-xl text-xs font-bold transition-colors text-left text-slate-700 cursor-pointer"
                         >
                           <Key size={14} className="text-slate-400" />
                           Alterar Senha
@@ -10224,6 +10552,48 @@ const renderSupplyTable = () => {
         </AnimatePresence>
         </ErrorBoundary>
       </main>
+
+      {/* Right Notification Sidebar */}
+      {notificationsMenuOpen && (
+        <aside
+          style={{ width: isNotificationSidebarCollapsed ? '64px' : `${notificationSidebarWidth}px` }}
+          className="hidden md:flex flex-col bg-white border-l border-slate-200 h-screen shrink-0 z-30 shadow-lg sticky top-0 relative select-none transition-all duration-300"
+        >
+          {/* Circular Expand/Collapse Button on Left Edge */}
+          <button
+            onClick={() => setIsNotificationSidebarCollapsed(!isNotificationSidebarCollapsed)}
+            className="absolute -left-3.5 top-10 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full p-1.5 shadow-xl border border-white/20 hover:scale-110 active:scale-95 transition-all z-50 cursor-pointer"
+            title={isNotificationSidebarCollapsed ? "Expandir Notificações" : "Recolher Notificações"}
+          >
+            {isNotificationSidebarCollapsed ? <PanelRightOpen size={14} /> : <PanelRightClose size={14} />}
+          </button>
+
+          {/* Drag Resizer Handle (only when expanded) */}
+          {!isNotificationSidebarCollapsed && (
+            <div
+              onMouseDown={handleMouseDownResize}
+              onDoubleClick={() => setNotificationSidebarWidth(236)}
+              className={cn(
+                "absolute left-0 top-0 bottom-0 w-2.5 -ml-1 z-40 cursor-col-resize flex items-center justify-center group hover:bg-indigo-500/20 transition-colors select-none",
+                isResizingNotificationSidebar && "bg-indigo-500/30"
+              )}
+              title="Arraste para alterar a largura (duplo clique para restaurar 236px)"
+            >
+              <div
+                className={cn(
+                  "w-1 h-8 rounded-full bg-slate-300 group-hover:bg-indigo-600 transition-colors",
+                  isResizingNotificationSidebar && "bg-indigo-600 h-12"
+                )}
+              />
+            </div>
+          )}
+
+          {isNotificationSidebarCollapsed
+            ? renderCollapsedNotificationSidebar()
+            : renderNotificationSidebarContent()
+          }
+        </aside>
+      )}
       
       {presentationConfig.isActive && (
         <PresentationControls 
