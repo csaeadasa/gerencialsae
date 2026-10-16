@@ -118,8 +118,8 @@ interface PlanningTabProps {
   setAreasProp?: React.Dispatch<React.SetStateAction<Area[]>>;
   setCategoriesProp?: React.Dispatch<React.SetStateAction<Category[]>>;
   setResponsiblesProp?: React.Dispatch<React.SetStateAction<Responsible[]>>;
-  editingTaskIdFromPainel?: number | null;
-  setEditingTaskIdFromPainel?: React.Dispatch<React.SetStateAction<number | null>>;
+  editingTaskIdFromPainel?: number | { id: number; tab?: string } | null;
+  setEditingTaskIdFromPainel?: React.Dispatch<React.SetStateAction<any>>;
   externalPlanFilter?: string | null;
   externalAreaFilter?: number[] | null;
   externalFilterTrigger?: number;
@@ -5274,7 +5274,7 @@ export function PlanningTab({
   };
 
   // Open modal for task editing
-  const handleEditTask = (task: Task) => {
+  const handleEditTask = (task: Task, initialTab?: string) => {
     setFormMode("edit");
     setEditTaskParentSearch("");
     setNewRelatedSeiInput("");
@@ -5300,24 +5300,27 @@ export function PlanningTab({
       comments: Array.isArray(task.comments) ? task.comments : [],
       weight: task.weight !== undefined && task.weight !== null ? task.weight : 1
     });
-    setTaskFormTab("form");
+    setTaskFormTab(initialTab || "form");
     setIsFormOpen(true);
   };
 
   useEffect(() => {
     if (editingTaskIdFromPainel !== null && editingTaskIdFromPainel !== undefined) {
-      const task = tasks.find(t => t.id === editingTaskIdFromPainel);
+      const targetId = typeof editingTaskIdFromPainel === "object" ? editingTaskIdFromPainel.id : editingTaskIdFromPainel;
+      const targetTab = typeof editingTaskIdFromPainel === "object" ? editingTaskIdFromPainel.tab : undefined;
+
+      const task = tasks.find(t => t.id === targetId);
       if (task) {
-        handleEditTask(task);
+        handleEditTask(task, targetTab);
         if (setEditingTaskIdFromPainel) {
           setEditingTaskIdFromPainel(null);
         }
       } else {
-        fetch(`/api/tasks/${editingTaskIdFromPainel}`)
+        fetch(`/api/tasks/${targetId}`)
           .then(res => res.json())
           .then(data => {
             if (data && data.id) {
-              handleEditTask(data);
+              handleEditTask(data, targetTab);
               if (setEditingTaskIdFromPainel) {
                 setEditingTaskIdFromPainel(null);
               }

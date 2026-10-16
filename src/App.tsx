@@ -396,7 +396,7 @@ export default function App() {
     }
   });
   const [notificationsMenuOpen, setNotificationsMenuOpen] = useState(true);
-  const [notificationFilter, setNotificationFilter] = useState("all");
+  const [notificationFilter, setNotificationFilter] = useState("unread");
   const [notificationSidebarWidth, setNotificationSidebarWidth] = useState<number>(() => {
     try {
       const saved = localStorage.getItem("adasa_notification_sidebar_width");
@@ -500,12 +500,15 @@ export default function App() {
     return null;
   };
 
-  const handleOpenTaskFromNotification = (taskId: number, notifId?: string) => {
+  const handleOpenTaskFromNotification = (taskId: number, notifId?: string, targetTab?: string) => {
     if (notifId) {
       setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, read: true } : n));
     }
     setIsMyTasksSelected(false);
-    setEditingTaskIdFromPainel(taskId);
+    setEditingTaskIdFromPainel({
+      id: taskId,
+      tab: targetTab || "form"
+    });
     setActivePlanningSubTab("tasks");
     handleTabChange("planning");
   };
@@ -736,7 +739,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"home" | "gerencial" | "public_hub" | "edit" | "compare" | "manage" | "analyze" | "templates" | "planning" | "users" | "departments" | "reg_cadastro" | "reg_agenda" | "reg_subsidios" | "reg_subsidios_painel" | "reg_painel" | "reg_agenda_painel" | "pub_cadastro" | "pub_painel" | "fisc_operational" | "recurso_painel" | "overview_panels">(
     "home",
   );
-  const [editingTaskIdFromPainel, setEditingTaskIdFromPainel] = useState<number | null>(null);
+  const [editingTaskIdFromPainel, setEditingTaskIdFromPainel] = useState<number | { id: number; tab?: string } | null>(null);
   const [activePlanningSubTab, setActivePlanningSubTab] = useState<"tasks" | "dashboard" | "plans" | "areas" | "categories" | "responsibles" | "import" | "models" | "radar">("dashboard");
   const [isMyTasksSelected, setIsMyTasksSelected] = useState(false);
   const [myTasksFilterTrigger, setMyTasksFilterTrigger] = useState(0);
@@ -4617,10 +4620,11 @@ const renderSupplyTable = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleOpenTaskFromNotification(taskId, notif.id);
+                          const isCommentNotif = notif.title.startsWith("Novo Comentário") || notif.type === "comment" || notif.title.toLowerCase().includes("comentário");
+                          handleOpenTaskFromNotification(taskId, notif.id, isCommentNotif ? "comments" : "form");
                         }}
                         className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-900 border border-indigo-200/80 px-2.5 py-1 rounded-lg transition-all cursor-pointer shadow-2xs"
-                        title="Abrir detalhes desta tarefa no sistema"
+                        title={notif.title.startsWith("Novo Comentário") ? "Abrir comentários desta tarefa no sistema" : "Abrir detalhes desta tarefa no sistema"}
                       >
                         <ListTodo size={12} className="text-indigo-600 shrink-0" />
                         <span>Abrir Tarefa</span>
@@ -4739,7 +4743,7 @@ const renderSupplyTable = () => {
       </AnimatePresence>
 
       {/* Mobile Header Menu */}
-      <div className="md:hidden flex items-center justify-between p-4 bg-adasa-dark text-white sticky top-0 z-40 shadow-md">
+      <div className="md:hidden flex items-center justify-between p-4 bg-adasa-dark dark:bg-slate-900 text-white sticky top-0 z-40 shadow-md">
          <div className="flex items-center gap-2">
             <TrendingUp size={22} className="text-adasa-light" />
             <div className="flex flex-col">
@@ -4758,7 +4762,7 @@ const renderSupplyTable = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="md:hidden fixed inset-0 bg-adasa-dark/95 z-30 pt-20 px-6 flex flex-col backdrop-blur-sm"
+            className="md:hidden fixed inset-0 bg-adasa-dark/95 dark:bg-slate-950/95 z-30 pt-20 px-6 flex flex-col backdrop-blur-sm"
           >
             <nav className="space-y-4 flex-1 overflow-y-auto pb-6">
               <div>
@@ -5325,13 +5329,13 @@ const renderSupplyTable = () => {
       {/* Sidebar Navigation */}
       <aside
         className={cn(
-          "hidden md:flex bg-adasa-dark flex-col p-5 transition-all duration-300 border-r border-white/10 h-screen sticky top-0 z-20 shadow-2xl select-none",
+          "hidden md:flex bg-adasa-dark dark:bg-slate-900 flex-col p-5 transition-all duration-300 border-r border-white/10 dark:border-slate-800 h-screen sticky top-0 z-20 shadow-2xl select-none",
           isSidebarCollapsed ? "w-20 p-4 items-center" : "w-64"
         )}
       >
         <button
           onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          className="absolute -right-3 top-10 bg-[#1A3E8A] hover:bg-[#122C66] text-white rounded-full p-1.5 shadow-xl border border-white/20 hover:scale-110 active:scale-95 transition-all z-50 cursor-pointer"
+          className="absolute -right-3 top-10 bg-[#1A3E8A] dark:bg-slate-800 hover:bg-[#122C66] dark:hover:bg-slate-700 text-white rounded-full p-1.5 shadow-xl border border-white/20 dark:border-slate-700 hover:scale-110 active:scale-95 transition-all z-50 cursor-pointer"
           title={isSidebarCollapsed ? "Expandir Menu" : "Recolher Menu"}
         >
           {isSidebarCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}

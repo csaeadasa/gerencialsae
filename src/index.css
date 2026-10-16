@@ -22,9 +22,9 @@
   }
 
   .dark {
-    --bg-page: #0b0f19;
-    --bg-card: #131b2e;
-    --text-main: #f1f5f9;
+    --bg-page: #000000;
+    --bg-card: #080d1a;
+    --text-main: #ffffff;
     --text-muted: #94a3b8;
     --border-color: #1e293b;
     color-scheme: dark;
@@ -35,7 +35,8 @@
   }
 
   .dark body, html.dark body {
-    @apply bg-slate-950 text-slate-100 selection:bg-indigo-900 selection:text-indigo-100;
+    @apply bg-black text-white selection:bg-indigo-900 selection:text-indigo-100;
+    background-color: #000000 !important;
   }
 }
 
@@ -83,10 +84,10 @@
 
 /* Dark Mode Overrides for Charts, Tables and Card Containers */
 .dark .recharts-default-tooltip {
-  background-color: #131b2e !important;
+  background-color: #090d16 !important;
   border-color: #1e293b !important;
   color: #f8fafc !important;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6) !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8) !important;
 }
 .dark .recharts-cartesian-grid line {
   stroke: #1e293b !important;
@@ -98,47 +99,85 @@
   color: #cbd5e1 !important;
 }
 
-/* Dark mode table & card styles */
+.dark .bg-adasa-dark, .dark aside.bg-adasa-dark {
+  background-color: #000000 !important;
+}
+.dark .bg-\[\#1A3E8A\] {
+  background-color: #0d1322 !important;
+}
+.dark .hover\:bg-\[\#122C66\]:hover {
+  background-color: #1a233a !important;
+}
+
+/* Dark mode table & card styles - PURE BLACK NO GRAY THEME */
 .dark table {
-  color: #e2e8f0;
+  color: #ffffff;
 }
 .dark th {
-  background-color: #0f172a !important;
+  background-color: #000000 !important;
   color: #94a3b8 !important;
   border-color: #1e293b !important;
 }
 .dark td {
   border-color: #1e293b !important;
 }
-.dark .bg-white {
-  background-color: #131b2e !important;
+
+/* Force pure black backgrounds for all container elements, panels, cards, inputs and select boxes in dark mode */
+.dark .bg-white, .dark [class*="bg-white/"] {
+  background-color: #000000 !important;
 }
-.dark .bg-slate-50 {
-  background-color: #0b0f19 !important;
+
+.dark .bg-blue-100, .dark .bg-blue-50, .dark [class*="bg-blue-50/"], .dark [class*="bg-blue-100/"],
+.dark .bg-emerald-100, .dark .bg-emerald-50, .dark [class*="bg-emerald-50/"], .dark [class*="bg-emerald-100/"],
+.dark .bg-indigo-100, .dark .bg-indigo-50, .dark [class*="bg-indigo-50/"], .dark [class*="bg-indigo-100/"],
+.dark .bg-amber-100, .dark .bg-amber-50, .dark [class*="bg-amber-50/"], .dark [class*="bg-amber-100/"],
+.dark .bg-rose-100, .dark .bg-rose-50, .dark [class*="bg-rose-50/"], .dark [class*="bg-rose-100/"],
+.dark .bg-slate-100, .dark .bg-slate-50, .dark [class*="bg-slate-50/"], .dark [class*="bg-slate-100/"], .dark [class*="bg-slate-200/"],
+.dark [class*="bg-slate-"] {
+  background-color: #000000 !important;
 }
-.dark .bg-slate-100 {
-  background-color: #1e293b !important;
-}
-.dark .bg-slate-200 {
-  background-color: #334155 !important;
-}
-.dark .border-slate-100, .dark .border-slate-200, .dark .border-slate-200\/80 {
+
+.dark select, .dark input, .dark textarea {
+  background-color: #050812 !important;
+  color: #ffffff !important;
   border-color: #1e293b !important;
 }
-.dark .text-slate-900, .dark .text-slate-800, .dark .text-slate-700 {
-  color: #f1f5f9 !important;
+
+.dark option {
+  background-color: #000000 !important;
+  color: #ffffff !important;
 }
-.dark .text-slate-600, .dark .text-slate-500 {
-  color: #94a3b8 !important;
+
+.dark [class*="border-slate-"] {
+  border-color: #1e293b !important;
 }
-.dark .text-slate-400 {
-  color: #64748b !important;
+
+.dark [class*="border-indigo-"] {
+  border-color: #312e81 !important;
 }
-.dark .hover\:bg-slate-50:hover {
-  background-color: #1e293b !important;
+
+.dark .text-slate-900, .dark .text-slate-800, .dark .text-slate-700, .dark .text-slate-600 {
+  color: #ffffff !important;
 }
-.dark .hover\:bg-slate-100:hover {
-  background-color: #334155 !important;
+
+.dark .text-slate-500, .dark .text-slate-400, .dark .text-slate-300 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-indigo-950, .dark .text-indigo-900, .dark .text-indigo-800 {
+  color: #e0e7ff !important;
+}
+
+.dark .hover\:bg-slate-50:hover, .dark .hover\:bg-slate-100:hover, .dark .hover\:bg-slate-200:hover {
+  background-color: #111827 !important;
+}
+
+.dark .from-white, .dark [class*="from-slate-"] {
+  --tw-gradient-from: #050812 !important;
+}
+
+.dark .to-emerald-50\/50, .dark [class*="to-slate-"] {
+  --tw-gradient-to: #000000 !important;
 }
 
 @media print {

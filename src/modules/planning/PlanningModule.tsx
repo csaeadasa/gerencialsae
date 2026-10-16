@@ -19,8 +19,8 @@ interface PlanningModuleProps {
   setAreasProp: React.Dispatch<React.SetStateAction<any[]>>;
   setCategoriesProp: React.Dispatch<React.SetStateAction<any[]>>;
   setResponsiblesProp: React.Dispatch<React.SetStateAction<any[]>>;
-  editingTaskIdFromPainel?: number | null;
-  setEditingTaskIdFromPainel?: React.Dispatch<React.SetStateAction<number | null>>;
+  editingTaskIdFromPainel?: number | { id: number; tab?: string } | null;
+  setEditingTaskIdFromPainel?: React.Dispatch<React.SetStateAction<any>>;
   externalPlanFilter?: string | null;
   externalAreaFilter?: number[] | null;
   externalFilterTrigger?: number;
