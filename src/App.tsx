@@ -400,9 +400,10 @@ export default function App() {
   const [notificationSidebarWidth, setNotificationSidebarWidth] = useState<number>(() => {
     try {
       const saved = localStorage.getItem("adasa_notification_sidebar_width");
-      return saved ? Math.max(200, Math.min(650, Number(saved))) : 236;
+      if (saved && saved !== "236") return Math.max(200, Math.min(650, Number(saved)));
+      return 256;
     } catch {
-      return 236;
+      return 256;
     }
   });
   const [isResizingNotificationSidebar, setIsResizingNotificationSidebar] = useState(false);
