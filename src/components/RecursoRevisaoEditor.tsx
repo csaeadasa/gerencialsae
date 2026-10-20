@@ -510,7 +510,7 @@ export const RecursoRevisaoEditor: React.FC<Props> = ({ data, onChange }) => {
                   )}
                 </h4>
                 <p className="text-[11px] font-medium opacity-80">
-                  Prazo legal de 60 dias corridos a partir da data de recebimento do recurso.
+                  Prazo legal de 60 dias a partir da data de recebimento do recurso.
                 </p>
               </div>
             </div>

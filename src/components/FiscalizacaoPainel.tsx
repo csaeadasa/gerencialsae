@@ -1784,7 +1784,7 @@ export function FiscalizacaoPainel({ tasks, plans = [], onEditTaskClick }: Fisca
                                   return (
                                     <>
                                       <span className="text-slate-300 font-normal">|</span>
-                                      <span>Duração: {dur} {dur === 1 ? "dia corrido" : "dias corridos"}</span>
+                                      <span>Duração: {dur} {dur === 1 ? "dia" : "dias"}</span>
                                     </>
                                   );
                                 })()}

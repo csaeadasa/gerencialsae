@@ -31,8 +31,7 @@ export function calculateDurationInDays(
   }
 }
 
-export function formatDurationDays(days: number | null | undefined, fullLabel: boolean = true): string {
+export function formatDurationDays(days: number | null | undefined, _fullLabel: boolean = true): string {
   if (!days || days <= 0) return "-";
-  if (!fullLabel) return `${days} ${days === 1 ? "dia" : "dias"}`;
-  return `${days} ${days === 1 ? "dia corrido" : "dias corridos"}`;
+  return `${days} ${days === 1 ? "dia" : "dias"}`;
 }

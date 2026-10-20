@@ -788,32 +788,32 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
                               </div>
 
                               {/* Dates block */}
-                              <div className="flex items-center gap-3 shrink-0 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 shadow-2xs flex-wrap justify-end">
+                              <div className="flex items-center gap-3 shrink-0 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 shadow-2xs flex-wrap justify-end dark:bg-slate-900 dark:border-slate-800">
                                 <div className="flex flex-col items-start">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1 dark:text-slate-400">
                                     <CalendarRange size={11} className="text-adasa-mid" /> Início
                                   </span>
-                                  <span className="text-xs font-black text-slate-800">{formatDate(task.startDate) || "Não definido"}</span>
+                                  <span className="text-xs font-extrabold text-black dark:text-white">{formatDate(task.startDate) || "Não definido"}</span>
                                 </div>
-                                <div className="w-px h-7 bg-slate-200" />
+                                <div className="w-px h-7 bg-slate-200 dark:bg-slate-800" />
                                 <div className="flex flex-col items-start">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1 dark:text-slate-400">
                                     <CalendarRange size={11} className="text-adasa-mid" /> Prazo final
                                   </span>
-                                  <span className="text-xs font-black text-slate-800">{formatDate(task.endDate) || "Não definido"}</span>
+                                  <span className="text-xs font-extrabold text-black dark:text-white">{formatDate(task.endDate) || "Não definido"}</span>
                                 </div>
                                 {(() => {
                                   const dur = calculateDurationInDays(task.startDate, task.endDate);
                                   if (!dur) return null;
                                   return (
                                     <>
-                                      <div className="w-px h-7 bg-slate-200" />
+                                      <div className="w-px h-7 bg-slate-200 dark:bg-slate-800" />
                                       <div className="flex flex-col items-start">
-                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1 dark:text-slate-400">
                                           <Clock size={11} className="text-adasa-mid" /> Duração
                                         </span>
-                                        <span className="text-xs font-black text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200" title={`${dur} dias corridos`}>
-                                          {dur} {dur === 1 ? "dia corrido" : "dias corridos"}
+                                        <span className="text-xs font-black text-black bg-slate-100 px-2 py-0.5 rounded border border-slate-300 dark:bg-slate-950 dark:text-white dark:border-slate-700" title={`${dur} ${dur === 1 ? "dia" : "dias"}`}>
+                                          {dur} {dur === 1 ? "dia" : "dias"}
                                         </span>
                                       </div>
                                     </>

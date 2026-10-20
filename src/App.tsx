@@ -387,14 +387,7 @@ export default function App() {
       console.error(e);
     }
   }, [isDarkMode]);
-  const [isNotificationSidebarCollapsed, setIsNotificationSidebarCollapsed] = useState(() => {
-    try {
-      const saved = localStorage.getItem("adasa_notification_sidebar_collapsed");
-      return saved === "true";
-    } catch {
-      return false;
-    }
-  });
+  const [isNotificationSidebarCollapsed, setIsNotificationSidebarCollapsed] = useState(false);
   const [notificationsMenuOpen, setNotificationsMenuOpen] = useState(true);
   const [notificationFilter, setNotificationFilter] = useState("unread");
   const [notificationSidebarWidth, setNotificationSidebarWidth] = useState<number>(() => {
@@ -407,6 +400,14 @@ export default function App() {
     }
   });
   const [isResizingNotificationSidebar, setIsResizingNotificationSidebar] = useState(false);
+
+  useEffect(() => {
+    setIsNotificationSidebarCollapsed(false);
+    setNotificationsMenuOpen(true);
+    try {
+      localStorage.removeItem("adasa_notification_sidebar_collapsed");
+    } catch {}
+  }, [currentUser?.id]);
 
   useEffect(() => {
     localStorage.setItem("adasa_notification_sidebar_width", notificationSidebarWidth.toString());
@@ -435,10 +436,35 @@ export default function App() {
   };
   const [replyingNotifId, setReplyingNotifId] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState("");
+  const READ_NOTIFICATION_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
+
+  const isReadNotificationExpired = (n: any, nowMs: number = Date.now()): boolean => {
+    if (!n.read) return false;
+    const refDate = n.readAt || n.createdAt;
+    if (!refDate) return false;
+    const timeMs = new Date(refDate).getTime();
+    if (isNaN(timeMs)) return false;
+    return nowMs - timeMs > READ_NOTIFICATION_EXPIRY_MS;
+  };
+
   const [notifications, setNotifications] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem("adasa_notifications");
-      return saved ? JSON.parse(saved) : [];
+      const parsed: any[] = saved ? JSON.parse(saved) : [];
+      if (!Array.isArray(parsed)) return [];
+      const nowMs = Date.now();
+      const seenUnreadKeys = new Set<string>();
+      const sorted = [...parsed].sort(
+        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      );
+      return sorted.filter(n => {
+        if (isReadNotificationExpired(n, nowMs)) return false;
+        if (n.read) return true;
+        const key = `${n.relatedTaskId ?? ""}::${n.title ?? ""}::${n.message ?? ""}`;
+        if (seenUnreadKeys.has(key)) return false;
+        seenUnreadKeys.add(key);
+        return true;
+      });
     } catch {
       return [];
     }
@@ -448,12 +474,10 @@ export default function App() {
     localStorage.setItem("adasa_notifications", JSON.stringify(notifications));
   }, [notifications]);
 
-  useEffect(() => {
-    localStorage.setItem("adasa_notification_sidebar_collapsed", isNotificationSidebarCollapsed ? "true" : "false");
-  }, [isNotificationSidebarCollapsed]);
-
   const groupedNotifications = useMemo(() => {
-    const sorted = [...notifications].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const nowMs = Date.now();
+    const validNotifications = notifications.filter(n => !isReadNotificationExpired(n, nowMs));
+    const sorted = [...validNotifications].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const grouped: any[] = [];
 
     for (const notif of sorted) {
@@ -487,11 +511,25 @@ export default function App() {
     if (e) e.stopPropagation();
     const idsToToggle = notif.groupedIds || [notif.id];
     const targetState = !notif.read;
-    setNotifications(prev => prev.map(n => idsToToggle.includes(n.id) ? { ...n, read: targetState } : n));
+    const nowIso = new Date().toISOString();
+    setNotifications(prev =>
+      prev.map(n =>
+        idsToToggle.includes(n.id)
+          ? { ...n, read: targetState, readAt: targetState ? nowIso : undefined }
+          : n
+      )
+    );
   };
 
   const markAllNotificationsRead = (readState: boolean) => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: readState })));
+    const nowIso = new Date().toISOString();
+    setNotifications(prev =>
+      prev.map(n => ({
+        ...n,
+        read: readState,
+        readAt: readState ? (n.readAt || nowIso) : undefined
+      }))
+    );
   };
 
   const getTaskIdFromNotif = (notif: any): number | null => {
@@ -502,7 +540,10 @@ export default function App() {
 
   const handleOpenTaskFromNotification = (taskId: number, notifId?: string, targetTab?: string) => {
     if (notifId) {
-      setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, read: true } : n));
+      const nowIso = new Date().toISOString();
+      setNotifications(prev =>
+        prev.map(n => (n.id === notifId ? { ...n, read: true, readAt: n.readAt || nowIso } : n))
+      );
     }
     setIsMyTasksSelected(false);
     setEditingTaskIdFromPainel({
@@ -516,17 +557,30 @@ export default function App() {
   useEffect(() => {
     const handleNotify = (e: CustomEvent) => {
       const detail = e.detail;
-      const newNotif = {
-        id: crypto.randomUUID(),
-        userId: currentUser?.id || "system",
-        title: detail.title,
-        message: detail.message,
-        type: detail.type || "info",
-        read: false,
-        createdAt: new Date().toISOString(),
-        relatedTaskId: detail.relatedTaskId
-      };
-      setNotifications(prev => [newNotif, ...prev]);
+      const nowMs = Date.now();
+      setNotifications(prev => {
+        const cleaned = prev.filter(n => !isReadNotificationExpired(n, nowMs));
+        const isDuplicateUnread = cleaned.some(n =>
+          !n.read &&
+          n.title === detail.title &&
+          n.message === detail.message &&
+          String(n.relatedTaskId ?? "") === String(detail.relatedTaskId ?? "")
+        );
+        if (isDuplicateUnread) {
+          return cleaned;
+        }
+        const newNotif = {
+          id: crypto.randomUUID(),
+          userId: currentUser?.id || "system",
+          title: detail.title,
+          message: detail.message,
+          type: detail.type || "info",
+          read: false,
+          createdAt: new Date().toISOString(),
+          relatedTaskId: detail.relatedTaskId
+        };
+        return [newNotif, ...cleaned];
+      });
     };
 
     window.addEventListener("adasa_notify" as any, handleNotify);
@@ -572,7 +626,8 @@ export default function App() {
       console.error("Erro ao enviar resposta:", e);
       showToast("Erro", "Erro ao responder comentário", "error");
     } finally {
-      setNotifications(prev => prev.map(n => n.id === notifId ? {...n, read: true} : n));
+      const nowIso = new Date().toISOString();
+      setNotifications(prev => prev.map(n => n.id === notifId ? {...n, read: true, readAt: n.readAt || nowIso} : n));
       setReplyingNotifId(null);
       setReplyContent("");
     }

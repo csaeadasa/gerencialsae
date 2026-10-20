@@ -1217,7 +1217,7 @@ export function PlanningTab({
   const [timelineTaskId, setTimelineTaskId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"tree" | "status" | "category" | "area" | "responsible" | "board" | "gantt" | "recurso">("board");
   const [agrupamentoTaskType, setAgrupamentoTaskType] = useState<"demanda_ouvidoria" | "fiscalizacao" | "recurso_revisao" | "recurso">("demanda_ouvidoria");
-  const [areaTableViewMode, setAreaTableViewMode] = useState<"table" | "calendar">("table");
+  const [areaTableViewMode, setAreaTableViewMode] = useState<"table" | "gantt">("table");
   const [areaCalendarScale, setAreaCalendarScale] = useState<"mes" | "trimestre" | "semestre">("mes");
   const [areaCalendarYear, setAreaCalendarYear] = useState<number>(new Date().getFullYear());
   const [areaCalendarMonth, setAreaCalendarMonth] = useState<number>(new Date().getMonth());
@@ -1810,6 +1810,7 @@ export function PlanningTab({
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [editingTask, setEditingTask] = useState<Partial<Task>>({});
   const [editTaskParentSearch, setEditTaskParentSearch] = useState("");
+  const [showParentSearch, setShowParentSearch] = useState(false);
   const [newRelatedSeiInput, setNewRelatedSeiInput] = useState("");
 
   const handleAddRelatedSei = () => {
@@ -5270,6 +5271,7 @@ export function PlanningTab({
     setNewRelatedSeiInput("");
     setTaskFormTab("form");
     setEditTaskParentSearch("");
+    setShowParentSearch(false);
     setIsFormOpen(true);
   };
 
@@ -5277,6 +5279,7 @@ export function PlanningTab({
   const handleEditTask = (task: Task, initialTab?: string) => {
     setFormMode("edit");
     setEditTaskParentSearch("");
+    setShowParentSearch(false);
     setNewRelatedSeiInput("");
 
     const isProgrammedValue = task.fiscalizacaoData?.programacao
@@ -10755,547 +10758,602 @@ export function PlanningTab({
                     </button>
                   </div>
 
-                  {/* Selector: Tabela vs Calendário */}
+                  {/* Selector: Tabela vs Gantt */}
                   <div className="flex items-center gap-3">
                     <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Visualização:</span>
                     <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
                       <button
+                        type="button"
                         onClick={() => setAreaTableViewMode("table")}
                         className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${areaTableViewMode === "table" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
                       >
                         Tabela
                       </button>
                       <button
-                        onClick={() => setAreaTableViewMode("calendar")}
-                        className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${areaTableViewMode === "calendar" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                        type="button"
+                        onClick={() => setAreaTableViewMode("gantt")}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${areaTableViewMode === "gantt" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
                       >
-                        Calendário
+                        Gantt
                       </button>
                     </div>
                   </div>
 
-                  {areaTableViewMode === "table" ? (
-                    <div className="flex flex-col md:flex-row items-end md:items-center gap-4">
+                  <div className="flex flex-wrap items-center justify-end gap-3">
+                    {areaTableViewMode === "gantt" && (
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            setCollapsedAreas({});
-                            setCollapsedTableCategories({});
-                            const allExpanded: Record<number, boolean> = {};
-                            tasks.forEach(t => {
-                              if ((childrenMap[t.id] || []).length > 0) allExpanded[t.id] = true;
-                            });
-                            setExpandedTasks(allExpanded);
-                          }}
-                          className="px-3 py-1.5 text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-100/80 transition-colors uppercase tracking-wider cursor-pointer"
-                        >
-                          Expandir Todos
-                        </button>
-                        <button
-                          onClick={() => {
-                            const newCollapsedAreas: Record<string, boolean> = {};
-                            const newCollapsedCategories: Record<string, boolean> = {};
-                            const targetAreas = selectedAreaIds.length > 0 ? areas.filter(a => selectedAreaIds.includes(a.id)) : areas;
-                            const allAreas = [...targetAreas, ...(selectedAreaIds.length === 0 ? [{ id: 0, name: "Sem Área de Atuação" } as any] : [])];
-                            allAreas.forEach((a: any) => newCollapsedAreas[a.name] = true);
-                            
-                            const allCats = [...categories, { id: -1, name: "Sem Categoria" } as any];
-                            const allStatuses = [{ name: "Não iniciada" }, { name: "Em andamento" }, { name: "Concluída" }];
-                            
-                            allAreas.forEach((a: any) => {
-                              if (areaTableGroupMode === "category") {
-                                allCats.forEach((c: any) => newCollapsedCategories[`${a.name}-${c.name}`] = true);
-                              } else {
-                                allStatuses.forEach((s: any) => newCollapsedCategories[`${a.name}-${s.name}`] = true);
-                              }
-                            });
-                            setCollapsedAreas(newCollapsedAreas);
-                            setCollapsedTableCategories(newCollapsedCategories);
-                            setExpandedTasks({});
-                          }}
-                          className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition-colors uppercase tracking-wider cursor-pointer"
-                        >
-                          Recolher Todos
-                        </button>
-                      </div>
-                      <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
-                        <button
-                          onClick={() => setAreaTableGroupMode("category")}
-                          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${areaTableGroupMode === "category" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-                        >
-                          Área e Categoria
-                        </button>
-                        <button
-                          onClick={() => setAreaTableGroupMode("status")}
-                          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${areaTableGroupMode === "status" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-                        >
-                          Área e Status
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col md:flex-row items-end md:items-center gap-4">
-                      <div className="flex items-center gap-3">
                         <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Escala:</span>
                         <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-xs shrink-0">
                           <button
-                            onClick={() => { setAreaCalendarScale("mes"); setSelectedAreaCalendarDay(null); }}
+                            type="button"
+                            onClick={() => setAreaCalendarScale("mes")}
                             className={`px-3 py-1.5 rounded-lg text-xs uppercase tracking-wider font-extrabold transition-all duration-200 cursor-pointer ${areaCalendarScale === "mes" ? "bg-white text-slate-850 shadow-sm border border-slate-200/40" : "text-slate-500 hover:text-slate-800"}`}
                           >
                             Mês
                           </button>
                           <button
-                            onClick={() => { setAreaCalendarScale("trimestre"); setSelectedAreaCalendarDay(null); }}
+                            type="button"
+                            onClick={() => setAreaCalendarScale("trimestre")}
                             className={`px-3 py-1.5 rounded-lg text-xs uppercase tracking-wider font-extrabold transition-all duration-200 cursor-pointer ${areaCalendarScale === "trimestre" ? "bg-white text-slate-850 shadow-sm border border-slate-200/40" : "text-slate-500 hover:text-slate-800"}`}
                           >
                             Trimestre
                           </button>
                           <button
-                            onClick={() => { setAreaCalendarScale("semestre"); setSelectedAreaCalendarDay(null); }}
+                            type="button"
+                            onClick={() => setAreaCalendarScale("semestre")}
                             className={`px-3 py-1.5 rounded-lg text-xs uppercase tracking-wider font-extrabold transition-all duration-200 cursor-pointer ${areaCalendarScale === "semestre" ? "bg-white text-slate-850 shadow-sm border border-slate-200/40" : "text-slate-500 hover:text-slate-800"}`}
                           >
                             Semestre
                           </button>
                         </div>
                       </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCollapsedAreas({});
+                          setCollapsedTableCategories({});
+                          const allExpanded: Record<number, boolean> = {};
+                          tasks.forEach(t => {
+                            if ((childrenMap[t.id] || []).length > 0) allExpanded[t.id] = true;
+                          });
+                          setExpandedTasks(allExpanded);
+                        }}
+                        className="px-3 py-1.5 text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-100/80 transition-colors uppercase tracking-wider cursor-pointer"
+                      >
+                        Expandir Todos
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCollapsedAreas: Record<string, boolean> = {};
+                          const newCollapsedCategories: Record<string, boolean> = {};
+                          const targetAreas = selectedAreaIds.length > 0 ? areas.filter(a => selectedAreaIds.includes(a.id)) : areas;
+                          const allAreas = [...targetAreas, ...(selectedAreaIds.length === 0 ? [{ id: 0, name: "Sem Área de Atuação" } as any] : [])];
+                          allAreas.forEach((a: any) => newCollapsedAreas[a.name] = true);
+                          
+                          const allCats = [...categories, { id: -1, name: "Sem Categoria" } as any];
+                          const allStatuses = [{ name: "Não iniciada" }, { name: "Em andamento" }, { name: "Concluída" }];
+                          
+                          allAreas.forEach((a: any) => {
+                            if (areaTableGroupMode === "category") {
+                              allCats.forEach((c: any) => newCollapsedCategories[`${a.name}-${c.name}`] = true);
+                            } else {
+                              allStatuses.forEach((s: any) => newCollapsedCategories[`${a.name}-${s.name}`] = true);
+                            }
+                          });
+                          setCollapsedAreas(newCollapsedAreas);
+                          setCollapsedTableCategories(newCollapsedCategories);
+                          setExpandedTasks({});
+                        }}
+                        className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition-colors uppercase tracking-wider cursor-pointer"
+                      >
+                        Recolher Todos
+                      </button>
                     </div>
-                  )}
+
+                    <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setAreaTableGroupMode("category")}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${areaTableGroupMode === "category" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                      >
+                        Área e Categoria
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAreaTableGroupMode("status")}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${areaTableGroupMode === "status" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                      >
+                        Área e Status
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {areaTableViewMode === "calendar" ? (
+              {areaTableViewMode === "gantt" ? (
                 (() => {
                   const parseSafeDate = (dateStr: string | null | undefined): Date | null => {
                     if (!dateStr) return null;
                     try {
+                      const raw = String(dateStr).trim();
+                      if (!raw) return null;
                       let d: Date;
-                      if (dateStr.includes("-")) {
-                        const parts = dateStr.split("T")[0].split("-");
-                        d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+                      if (raw.includes("-")) {
+                        const parts = raw.split("T")[0].split("-");
+                        const y = Number(parts[0]);
+                        const m = Number(parts[1]) - 1;
+                        const day = Number(parts[2]);
+                        if (isNaN(y) || y < 2015 || y > 2040) return null;
+                        d = new Date(y, m, day);
                       } else {
-                        d = new Date(dateStr);
+                        d = new Date(raw);
+                        if (isNaN(d.getTime()) || d.getFullYear() < 2015 || d.getFullYear() > 2040) return null;
                       }
                       return isNaN(d.getTime()) ? null : d;
-                    } catch (e) {
+                    } catch {
                       return null;
                     }
                   };
 
-                  const isTaskActiveOnDay = (task: any, day: Date) => {
-                    if (!task.startDate || !task.endDate) return false;
-                    const start = parseSafeDate(task.startDate);
-                    const end = parseSafeDate(task.endDate);
-                    if (!start || !end) return false;
-                    const s = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                    const e = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-                    const d = new Date(day.getFullYear(), day.getMonth(), day.getDate());
-                    return d >= s && d <= e;
-                  };
+                  const currentYear = new Date().getFullYear();
+                  let startDateLimit = new Date(currentYear, 0, 1);
+                  let endDateLimit = new Date(currentYear, 11, 31);
 
-                  const getMonthDays = (year: number, month: number) => {
-                    const firstDayIndex = new Date(year, month, 1).getDay();
-                    const totalDays = new Date(year, month + 1, 0).getDate();
-                    const prevMonthTotalDays = new Date(year, month, 0).getDate();
-                    
-                    const cells: { date: Date; isCurrentMonth: boolean; dayNum: number }[] = [];
-                    
-                    for (let i = firstDayIndex - 1; i >= 0; i--) {
-                      const d = prevMonthTotalDays - i;
-                      cells.push({
-                        date: new Date(month === 0 ? year - 1 : year, month === 0 ? 11 : month - 1, d),
-                        isCurrentMonth: false,
-                        dayNum: d
-                      });
+                  const parsedTasks = filteredTasks
+                    .map(t => ({
+                      task: t,
+                      start: parseSafeDate(t.startDate),
+                      end: parseSafeDate(t.endDate)
+                    }))
+                    .filter((item): item is { task: Task; start: Date; end: Date } =>
+                      item.start !== null && item.end !== null && item.start <= item.end
+                    );
+
+                  if (parsedTasks.length > 0) {
+                    const startTimes = parsedTasks.map(t => t.start.getTime());
+                    const endTimes = parsedTasks.map(t => t.end.getTime());
+                    let minTime = startTimes[0];
+                    let maxTime = endTimes[0];
+                    for (let i = 1; i < startTimes.length; i++) {
+                      if (startTimes[i] < minTime) minTime = startTimes[i];
+                      if (endTimes[i] > maxTime) maxTime = endTimes[i];
                     }
-                    
-                    for (let d = 1; d <= totalDays; d++) {
-                      cells.push({
-                        date: new Date(year, month, d),
-                        isCurrentMonth: true,
-                        dayNum: d
-                      });
+                    const minT = new Date(minTime);
+                    const maxT = new Date(maxTime);
+                    minT.setDate(1);
+                    maxT.setMonth(maxT.getMonth() + 1, 0);
+
+                    // Prevent span from exceeding 36 months so the header grid stays fast and readable
+                    const maxSpanMs = 36 * 30.5 * 24 * 60 * 60 * 1000;
+                    if (maxT.getTime() - minT.getTime() > maxSpanMs) {
+                      startDateLimit = new Date(currentYear, 0, 1);
+                      endDateLimit = new Date(currentYear, 11, 31);
+                    } else {
+                      startDateLimit = minT;
+                      endDateLimit = maxT;
                     }
-                    
-                    let nextMonthDay = 1;
-                    while (cells.length < 42) {
-                      cells.push({
-                        date: new Date(month === 11 ? year + 1 : year, month === 11 ? 0 : month + 1, nextMonthDay),
-                        isCurrentMonth: false,
-                        dayNum: nextMonthDay
-                      });
-                      nextMonthDay++;
-                    }
-                    
-                    return cells;
-                  };
-
-                  const monthNames = [
-                    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-                    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-                  ];
-
-                  const weekdayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
-                  const navigateCalendar = (direction: "prev" | "next") => {
-                    const step = direction === "prev" ? -1 : 1;
-                    if (areaCalendarScale === "mes") {
-                      let newMonth = areaCalendarMonth + step;
-                      let newYear = areaCalendarYear;
-                      if (newMonth < 0) {
-                        newMonth = 11;
-                        newYear -= 1;
-                      } else if (newMonth > 11) {
-                        newMonth = 0;
-                        newYear += 1;
-                      }
-                      setAreaCalendarMonth(newMonth);
-                      setAreaCalendarYear(newYear);
-                    } else if (areaCalendarScale === "trimestre") {
-                      let newMonth = areaCalendarMonth + (step * 3);
-                      let newYear = areaCalendarYear;
-                      if (newMonth < 0) {
-                        newMonth = 9;
-                        newYear -= 1;
-                      } else if (newMonth > 11) {
-                        newMonth = 0;
-                        newYear += 1;
-                      }
-                      const q = Math.floor(newMonth / 3);
-                      setAreaCalendarMonth(q * 3);
-                      setAreaCalendarYear(newYear);
-                    } else { // Semestre
-                      let newMonth = areaCalendarMonth + (step * 6);
-                      let newYear = areaCalendarYear;
-                      if (newMonth < 0) {
-                        newMonth = 6;
-                        newYear -= 1;
-                      } else if (newMonth > 11) {
-                        newMonth = 0;
-                        newYear += 1;
-                      }
-                      const s = Math.floor(newMonth / 6);
-                      setAreaCalendarMonth(s * 6);
-                      setAreaCalendarYear(newYear);
-                    }
-                  };
-
-                  const tasksWithDates = filteredTasks.filter(t => t.startDate && t.endDate);
-                  const activeDay = selectedAreaCalendarDay || new Date();
-                  
-                  // Compute months in view
-                  let monthsInView: number[] = [];
-                  if (areaCalendarScale === "mes") {
-                    monthsInView = [areaCalendarMonth];
-                  } else if (areaCalendarScale === "trimestre") {
-                    const qIdx = Math.floor(areaCalendarMonth / 3);
-                    monthsInView = [qIdx * 3, qIdx * 3 + 1, qIdx * 3 + 2];
-                  } else { // Semestre
-                    const sIdx = Math.floor(areaCalendarMonth / 6);
-                    monthsInView = [sIdx * 6, sIdx * 6 + 1, sIdx * 6 + 2, sIdx * 6 + 3, sIdx * 6 + 4, sIdx * 6 + 5];
                   }
 
-                  // Active day tasks grouped by Área Temática
-                  const activeDayTasks = tasksWithDates.filter(t => isTaskActiveOnDay(t, activeDay));
-                  
-                  // Now group these tasks by Area
-                  const groupedActiveDayTasks: { areaName: string; tasks: any[] }[] = [];
-                  const targetAreas = selectedAreaIds.length > 0 
+                  startDateLimit.setHours(0, 0, 0, 0);
+                  endDateLimit.setHours(23, 59, 59, 999);
+
+                  const totalDays = Math.max(1, Math.round((endDateLimit.getTime() - startDateLimit.getTime()) / (1000 * 60 * 60 * 24)));
+                  const gridColumns: { label: string; widthPercent: number; key: string }[] = [];
+
+                  if (areaCalendarScale === "mes") {
+                    const currentPointer = new Date(startDateLimit.getFullYear(), startDateLimit.getMonth(), 1);
+                    const endPointer = new Date(endDateLimit);
+                    let guard = 0;
+
+                    while (currentPointer <= endPointer && guard < 48) {
+                      guard++;
+                      const year = currentPointer.getFullYear();
+                      const month = currentPointer.getMonth();
+                      const monthStart = new Date(year, month, 1, 0, 0, 0, 0);
+                      const monthEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
+                      const startClamp = monthStart < startDateLimit ? startDateLimit : monthStart;
+                      const endClamp = monthEnd > endDateLimit ? endDateLimit : monthEnd;
+                      const clampDays = Math.max(0, Math.round((endClamp.getTime() - startClamp.getTime()) / (1000 * 60 * 60 * 24)));
+                      if (clampDays > 0) {
+                        const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+                        const pct = (clampDays / totalDays) * 100;
+                        gridColumns.push({
+                          label: `${monthNames[month]}/${year}`,
+                          widthPercent: pct,
+                          key: `${year}-${month}`
+                        });
+                      }
+                      currentPointer.setMonth(currentPointer.getMonth() + 1);
+                    }
+                  } else if (areaCalendarScale === "trimestre") {
+                    const startQ = Math.floor(startDateLimit.getMonth() / 3);
+                    const currentPointer = new Date(startDateLimit.getFullYear(), startQ * 3, 1);
+                    const endPointer = new Date(endDateLimit);
+                    let guard = 0;
+
+                    while (currentPointer <= endPointer && guard < 24) {
+                      guard++;
+                      const year = currentPointer.getFullYear();
+                      const quarter = Math.floor(currentPointer.getMonth() / 3);
+                      const qStartMonth = quarter * 3;
+                      const qEndMonth = (quarter + 1) * 3 - 1;
+                      const qStart = new Date(year, qStartMonth, 1, 0, 0, 0, 0);
+                      const qEnd = new Date(year, qEndMonth + 1, 0, 23, 59, 59, 999);
+                      const startClamp = qStart < startDateLimit ? startDateLimit : qStart;
+                      const endClamp = qEnd > endDateLimit ? endDateLimit : qEnd;
+                      const clampDays = Math.max(0, Math.round((endClamp.getTime() - startClamp.getTime()) / (1000 * 60 * 60 * 24)));
+                      if (clampDays > 0) {
+                        const pct = (clampDays / totalDays) * 100;
+                        gridColumns.push({
+                          label: `${quarter + 1}º Trim/${year}`,
+                          widthPercent: pct,
+                          key: `${year}-Q${quarter}`
+                        });
+                      }
+                      currentPointer.setMonth(currentPointer.getMonth() + 3);
+                    }
+                  } else {
+                    const startS = Math.floor(startDateLimit.getMonth() / 6);
+                    const currentPointer = new Date(startDateLimit.getFullYear(), startS * 6, 1);
+                    const endPointer = new Date(endDateLimit);
+                    let guard = 0;
+
+                    while (currentPointer <= endPointer && guard < 16) {
+                      guard++;
+                      const year = currentPointer.getFullYear();
+                      const semester = Math.floor(currentPointer.getMonth() / 6);
+                      const sStartMonth = semester * 6;
+                      const sEndMonth = (semester + 1) * 6 - 1;
+                      const sStart = new Date(year, sStartMonth, 1, 0, 0, 0, 0);
+                      const sEnd = new Date(year, sEndMonth + 1, 0, 23, 59, 59, 999);
+                      const startClamp = sStart < startDateLimit ? startDateLimit : sStart;
+                      const endClamp = sEnd > endDateLimit ? endDateLimit : sEnd;
+                      const clampDays = Math.max(0, Math.round((endClamp.getTime() - startClamp.getTime()) / (1000 * 60 * 60 * 24)));
+                      if (clampDays > 0) {
+                        const pct = (clampDays / totalDays) * 100;
+                        gridColumns.push({
+                          label: `${semester + 1}º Sem/${year}`,
+                          widthPercent: pct,
+                          key: `${year}-S${semester}`
+                        });
+                      }
+                      currentPointer.setMonth(currentPointer.getMonth() + 6);
+                    }
+                  }
+
+                  const now = new Date();
+                  const showTodayMarker = now >= startDateLimit && now <= endDateLimit;
+                  const todayPct = showTodayMarker
+                    ? Math.max(0, Math.min(100, ((now.getTime() - startDateLimit.getTime()) / (1000 * 60 * 60 * 24)) / totalDays * 100))
+                    : null;
+
+                  const sortTaskList = sortAreaTaskList;
+                  const targetAreas = selectedAreaIds.length > 0
                     ? areas.filter(a => selectedAreaIds.includes(a.id))
                     : areas;
-                  const allAreasForGrouping = [
+                  const allAreas = [
                     ...targetAreas,
                     ...(selectedAreaIds.length === 0 ? [{ id: 0, name: "Sem Área de Atuação" }] : [])
                   ];
+                  const sortedAreas = [...allAreas].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+                  const sortedCategories = [...categories].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+                  const allCategoriesForGroup = [
+                    ...sortedCategories,
+                    { id: -1, name: "Sem Categoria" }
+                  ];
 
-                  allAreasForGrouping.forEach(area => {
-                    const areaTasks = activeDayTasks.filter(t => {
-                      const hasArea = t.areaIds && t.areaIds.length > 0;
-                      if (area.id === 0) {
-                        return !hasArea;
-                      } else {
-                        return t.areaIds && t.areaIds.includes(area.id);
-                      }
-                    });
-                    if (areaTasks.length > 0) {
-                      groupedActiveDayTasks.push({
-                        areaName: area.name,
-                        tasks: areaTasks
+                  const ganttRows: React.ReactNode[] = [];
+
+                  const renderGanttRowHierarchical = (
+                    t: Task,
+                    depth: number,
+                    areaName: string,
+                    categoryName: string,
+                    visited: Set<number> = new Set()
+                  ) => {
+                    if (visited.has(t.id) || depth > 12) return;
+                    visited.add(t.id);
+
+                    const subTasksCount = childrenMap[t.id]?.length || 0;
+                    const isExpanded = expandedTasks[t.id] !== undefined ? expandedTasks[t.id] : (searchTerm.trim() !== "" ? true : false);
+                    const dateStart = parseSafeDate(t.startDate);
+                    const dateEnd = parseSafeDate(t.endDate);
+                    const hasDates = Boolean(dateStart && dateEnd && dateEnd >= dateStart);
+                    const statusName = normalizeStatus(t.status);
+
+                    const statusColor = statusName === "Concluída"
+                      ? "bg-emerald-500 hover:bg-emerald-600"
+                      : statusName === "Em andamento"
+                      ? "bg-blue-500 hover:bg-blue-600"
+                      : "bg-slate-400 hover:bg-slate-500";
+
+                    let leftPct = 0;
+                    let widthPct = 0;
+
+                    if (hasDates && dateStart && dateEnd) {
+                      const sClamped = dateStart < startDateLimit ? startDateLimit : dateStart;
+                      const eClamped = dateEnd > endDateLimit ? endDateLimit : dateEnd;
+                      const diffLeft = Math.max(0, sClamped.getTime() - startDateLimit.getTime());
+                      leftPct = Math.max(0, Math.min(98, (diffLeft / (1000 * 60 * 60 * 24)) / totalDays * 100));
+                      const diffWidth = Math.max(0, eClamped.getTime() - sClamped.getTime());
+                      widthPct = Math.max(1.5, Math.min(100 - leftPct, ((diffWidth / (1000 * 60 * 60 * 24)) + 1) / totalDays * 100));
+                    }
+
+                    const dlStatus = getDeadlineStatus(t.endDate, t.status);
+                    const dlGanttBorder = dlStatus === "Atrasada"
+                      ? "border-l-4 border-l-rose-500"
+                      : dlStatus === "Crítica"
+                      ? "border-l-4 border-l-amber-400"
+                      : "border-l-4 border-l-emerald-500";
+
+                    const dur = calculateDurationInDays(t.startDate, t.endDate);
+                    const startFormatted = t.startDate ? formatDateBR(t.startDate) : null;
+                    const endFormatted = t.endDate ? formatDateBR(t.endDate) : null;
+
+                    ganttRows.push(
+                      <div
+                        key={`gantt-row-${areaName}-${categoryName}-${t.id}`}
+                        className={`flex transition-colors hover:bg-slate-50/70 group items-stretch min-h-[54px] border-b border-slate-100 ${dlGanttBorder}`}
+                      >
+                        <div
+                          className="w-[430px] min-w-[430px] shrink-0 px-4 py-2 border-r border-slate-200 flex flex-col justify-center text-left bg-white group-hover:bg-slate-50/40"
+                          style={{ paddingLeft: `${20 + depth * 20}px` }}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-0.5">
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                              {subTasksCount > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleExpand(t.id);
+                                  }}
+                                  className="cursor-pointer w-5 h-5 flex items-center justify-center rounded hover:bg-slate-200 text-slate-500 shrink-0"
+                                  title={isExpanded ? "Recolher subatividades" : "Expandir subatividades"}
+                                >
+                                  {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                                </button>
+                              ) : depth > 0 ? (
+                                <span className="w-4 h-4 shrink-0 border-l border-b border-slate-300 rounded-bl-sm opacity-50 relative -top-1" />
+                              ) : null}
+                              <span className={`w-2 h-2 rounded-full shrink-0 ${statusName === "Concluída" ? "bg-emerald-500" : statusName === "Em andamento" ? "bg-blue-500" : "bg-slate-400"}`} />
+                              <span
+                                onClick={() => handleEditTask(t)}
+                                className={cn(
+                                  "truncate cursor-pointer hover:text-indigo-600 transition-colors",
+                                  depth > 0 ? "text-xs font-semibold text-slate-700" : "text-xs font-extrabold text-slate-900"
+                                )}
+                                title={t.title}
+                              >
+                                {t.title}
+                              </span>
+                              {subTasksCount > 0 && (
+                                <span className="text-[10px] text-slate-400 font-bold shrink-0">({subTasksCount})</span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setTimelineTaskId(t.id);
+                              }}
+                              className="p-1 px-1.5 bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 rounded-md transition shadow-2xs shrink-0 cursor-pointer"
+                              title="Ver Linha do Tempo"
+                            >
+                              <Activity size={11} className="text-indigo-600" />
+                            </button>
+                          </div>
+
+                          <div
+                            className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px] text-black font-extrabold dark:text-white"
+                            style={{ paddingLeft: subTasksCount > 0 ? "26px" : depth > 0 ? "22px" : "14px" }}
+                          >
+                            {startFormatted && startFormatted !== "-" ? (
+                              <span>Início: {startFormatted}</span>
+                            ) : null}
+                            {endFormatted && endFormatted !== "-" ? (
+                              <span>Prazo: {endFormatted}</span>
+                            ) : null}
+                            {dur ? (
+                              <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-slate-100 text-black border border-slate-300 text-[9.5px] font-black dark:bg-slate-900 dark:text-white dark:border-slate-700">
+                                {dur} {dur === 1 ? "dia" : "dias"}
+                              </span>
+                            ) : null}
+                            {(!startFormatted || startFormatted === "-") && (!endFormatted || endFormatted === "-") && (
+                              <span className="text-amber-500 font-bold normal-case">Período não definido</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex-1 relative flex bg-white group-hover:bg-slate-50/20 min-w-[650px]">
+                          {todayPct !== null && (
+                            <div
+                              style={{ left: `${todayPct}%` }}
+                              className="absolute inset-y-0 w-px bg-rose-500/60 z-10 pointer-events-none"
+                              title="Hoje"
+                            />
+                          )}
+
+                          {hasDates ? (
+                            <div className="w-full h-full relative flex items-center px-1">
+                              <div
+                                style={{ marginLeft: `${leftPct}%`, width: `${widthPct}%` }}
+                                onClick={() => handleEditTask(t)}
+                                className={`h-7 rounded-lg relative overflow-hidden transition-all duration-300 shadow-xs cursor-pointer select-none flex items-center ${statusColor}`}
+                                title={`${t.title} — ${t.progress || 0}% (${startFormatted || "-"} a ${endFormatted || "-"})`}
+                              >
+                                <div
+                                  className="absolute inset-y-0 left-0 bg-black/20 transition-all duration-500"
+                                  style={{ width: `${t.progress || 0}%` }}
+                                />
+                                <span className="relative z-10 left-2 text-[9.5px] font-black uppercase text-white tracking-wider drop-shadow-xs whitespace-nowrap overflow-hidden text-ellipsis max-w-[calc(100%-10px)] pointer-events-none">
+                                  {t.progress || 0}%
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="w-full flex items-center justify-center p-2 text-[10px] text-slate-300 italic">
+                              -
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+
+                    if (isExpanded && subTasksCount > 0) {
+                      const children = (childrenMap[t.id] || []).filter(c => filteredTasks.some(x => x.id === c.id));
+                      const sortedChildren = sortTaskList(children);
+                      sortedChildren.forEach(child => {
+                        renderGanttRowHierarchical(child, depth + 1, areaName, categoryName, visited);
                       });
+                    }
+                  };
+
+                  sortedAreas.forEach(area => {
+                    const areaTasks = filteredTasks.filter(t => {
+                      const hasArea = t.areaIds && t.areaIds.length > 0;
+                      if (area.id === 0) return !hasArea;
+                      return t.areaIds && t.areaIds.includes(area.id);
+                    });
+
+                    if (areaTasks.length > 0) {
+                      const isAreaCollapsed = collapsedAreas[area.name] || false;
+
+                      ganttRows.push(
+                        <div
+                          key={`gantt-area-${area.name}`}
+                          onClick={() => setCollapsedAreas(prev => ({ ...prev, [area.name]: !prev[area.name] }))}
+                          className="flex items-center bg-slate-100/85 border-t-2 border-b border-slate-200 px-4 py-2.5 cursor-pointer hover:bg-slate-200/75 transition-colors border-l-4 border-l-indigo-500 select-none"
+                        >
+                          <div className="flex items-center gap-2 font-black text-xs text-slate-800 uppercase tracking-wide">
+                            {isAreaCollapsed ? <ChevronRight size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                            <span>{area.name}</span>
+                            <span className="text-[10px] text-slate-500 font-bold ml-2 bg-slate-200 px-2 py-0.5 rounded-full">
+                              {areaTasks.length} ATIVIDADE(S)
+                            </span>
+                          </div>
+                        </div>
+                      );
+
+                      if (!isAreaCollapsed) {
+                        const secondLevelGroups = areaTableGroupMode === "category"
+                          ? allCategoriesForGroup
+                          : [
+                              { id: "Não iniciada", name: "Não iniciada" },
+                              { id: "Em andamento", name: "Em andamento" },
+                              { id: "Concluída", name: "Concluída" }
+                            ];
+
+                        secondLevelGroups.forEach(groupDesc => {
+                          const groupTasks = areaTasks.filter(t => {
+                            if (areaTableGroupMode === "category") {
+                              const hasCat = t.categoryIds && t.categoryIds.length > 0;
+                              if (groupDesc.id === -1) return !hasCat;
+                              return t.categoryIds && t.categoryIds.includes(groupDesc.id as number);
+                            } else {
+                              return normalizeStatus(t.status) === groupDesc.name;
+                            }
+                          });
+
+                          if (groupTasks.length > 0) {
+                            const collKey = `${area.name}-${groupDesc.name}`;
+                            const isCategoryCollapsed = collapsedTableCategories[collKey] || false;
+
+                            ganttRows.push(
+                              <div
+                                key={`gantt-group-${area.name}-${groupDesc.name}`}
+                                onClick={() => setCollapsedTableCategories(prev => ({
+                                  ...prev,
+                                  [collKey]: !isCategoryCollapsed
+                                }))}
+                                className={cn(
+                                  "flex items-center bg-slate-50/90 border-b border-slate-100 px-4 py-2 cursor-pointer hover:bg-slate-100/80 transition-colors select-none border-l-[3px]",
+                                  areaTableGroupMode === "status" && groupDesc.name === "Concluída"
+                                    ? "border-l-emerald-500"
+                                    : areaTableGroupMode === "status" && groupDesc.name === "Em andamento"
+                                    ? "border-l-blue-500"
+                                    : areaTableGroupMode === "status"
+                                    ? "border-l-slate-400"
+                                    : "border-l-amber-500/80"
+                                )}
+                              >
+                                <div className="flex items-center gap-2 pl-4">
+                                  {isCategoryCollapsed ? <ChevronRight size={12} className="text-slate-400" /> : <ChevronDown size={12} className="text-slate-400" />}
+                                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                                    {areaTableGroupMode === "category" ? "Categoria:" : "Status:"}
+                                  </span>
+                                  <span className="text-xs font-black text-slate-700">{groupDesc.name}</span>
+                                  <span className="text-[9px] text-slate-500 font-bold ml-1.5 bg-slate-200/60 border border-slate-200/60 px-1.5 py-0.5 rounded-full">
+                                    {groupTasks.length} ATIVIDADE(S)
+                                  </span>
+                                </div>
+                              </div>
+                            );
+
+                            if (!isCategoryCollapsed) {
+                              const groupRoots = groupTasks.filter(t => !t.parentId || !groupTasks.some(x => x.id === t.parentId));
+                              const sortedRoots = sortTaskList(groupRoots);
+                              sortedRoots.forEach(t => {
+                                renderGanttRowHierarchical(t, 0, area.name, groupDesc.name);
+                              });
+                            }
+                          }
+                        });
+                      }
                     }
                   });
 
                   return (
-                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-4 text-left">
-                      {/* Calendar Navigation and Grid */}
-                      <div className="lg:col-span-3 bg-slate-50/50 border border-slate-200/60 rounded-3xl p-5 flex flex-col space-y-4">
-                        
-                        {/* Navigation Row */}
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200/50 pb-4">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => navigateCalendar("prev")}
-                              className="p-1.5 border border-slate-200 hover:bg-white text-slate-600 rounded-xl transition cursor-pointer"
-                            >
-                              <ChevronLeft size={16} />
-                            </button>
-                            <button
-                              onClick={() => {
-                                const today = new Date();
-                                setAreaCalendarMonth(today.getMonth());
-                                setAreaCalendarYear(today.getFullYear());
-                                setSelectedAreaCalendarDay(today);
-                              }}
-                              className="px-2.5 py-1.5 border border-slate-200 hover:bg-white text-slate-700 text-[10px] font-bold rounded-xl transition uppercase tracking-wider cursor-pointer"
-                            >
-                              Hoje
-                            </button>
-                            <button
-                              onClick={() => navigateCalendar("next")}
-                              className="p-1.5 border border-slate-200 hover:bg-white text-slate-600 rounded-xl transition cursor-pointer"
-                            >
-                              <ChevronRight size={16} />
-                            </button>
-                            
-                            <h5 className="text-xs font-black text-slate-800 uppercase tracking-widest ml-1">
-                              {areaCalendarScale === "mes" && `${monthNames[areaCalendarMonth]} de ${areaCalendarYear}`}
-                              {areaCalendarScale === "trimestre" && `${Math.floor(areaCalendarMonth / 3) + 1}º Trimestre de ${areaCalendarYear}`}
-                              {areaCalendarScale === "semestre" && `${Math.floor(areaCalendarMonth / 6) + 1}º Semestre de ${areaCalendarYear}`}
-                            </h5>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+                        <div className="flex flex-wrap items-center gap-4 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full" /> Concluída
                           </div>
-                          
-                          {/* Legend of Statuses */}
-                          <div className="flex items-center gap-3 text-[9px] font-black uppercase tracking-wider text-slate-500">
-                            <div className="flex items-center gap-1">
-                              <span className="w-2 h-2 bg-emerald-500 rounded-full" /> Concluída
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span className="w-2 h-2 bg-blue-500 rounded-full" /> Em andamento
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span className="w-2 h-2 bg-slate-400 rounded-full" /> Não iniciada
-                            </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 bg-blue-500 rounded-full" /> Em andamento
                           </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 bg-slate-400 rounded-full" /> Não iniciada
+                          </div>
+                          {todayPct !== null && (
+                            <div className="flex items-center gap-1.5 text-rose-600">
+                              <span className="w-2.5 h-0.5 bg-rose-500" /> Linha de Hoje
+                            </div>
+                          )}
                         </div>
-
-                        {/* RENDER THE SCALES */}
-                        {areaCalendarScale === "mes" && (
-                          <div className="flex flex-col flex-1">
-                            {/* Weekdays */}
-                            <div className="grid grid-cols-7 gap-1 text-center font-bold text-[10px] uppercase text-slate-400 tracking-wider mb-2">
-                              {weekdayNames.map(dayName => (
-                                <div key={dayName}>{dayName}</div>
-                              ))}
-                            </div>
-                            
-                            {/* Calendar Days */}
-                            <div className="grid grid-cols-7 gap-1.5 bg-slate-100/50 p-1.5 rounded-2xl border border-slate-200/40 flex-1 min-h-[400px]">
-                              {getMonthDays(areaCalendarYear, areaCalendarMonth).map(({ date, isCurrentMonth, dayNum }, idx) => {
-                                const activeTasks = tasksWithDates.filter(t => isTaskActiveOnDay(t, date));
-                                const isToday = new Date().toDateString() === date.toDateString();
-                                const isSelected = activeDay.toDateString() === date.toDateString();
-                                
-                                return (
-                                  <div
-                                    key={idx}
-                                    onClick={() => setSelectedAreaCalendarDay(date)}
-                                    className={cn(
-                                      "bg-white rounded-xl p-1.5 border flex flex-col justify-between transition-all cursor-pointer min-h-[75px] group",
-                                      isCurrentMonth ? "border-slate-100" : "border-slate-100/30 opacity-40 hover:opacity-70",
-                                      isSelected ? "ring-2 ring-indigo-500 bg-indigo-50/10 border-indigo-200" : "hover:border-indigo-400 hover:shadow-xs"
-                                    )}
-                                  >
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-[8px] font-bold text-slate-400">
-                                        {activeTasks.length > 0 && `${activeTasks.length} atv`}
-                                      </span>
-                                      <span className={cn(
-                                        "w-5 h-5 flex items-center justify-center text-[10px] font-black rounded-full",
-                                        isToday ? "bg-indigo-600 text-white shadow-sm" : isSelected ? "bg-indigo-100 text-indigo-700" : "text-slate-700"
-                                      )}>
-                                        {dayNum}
-                                      </span>
-                                    </div>
-                                    
-                                    <div className="space-y-1 overflow-hidden flex-1 flex flex-col justify-end mt-1">
-                                      {activeTasks.slice(0, 2).map(t => {
-                                        const statusName = normalizeStatus(t.status);
-                                        const colorClass = statusName === "Concluída" 
-                                          ? "bg-emerald-500" 
-                                          : statusName === "Em andamento" 
-                                          ? "bg-blue-500" 
-                                          : "bg-slate-400";
-                                          
-                                        return (
-                                          <div
-                                            key={t.id}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleEditTask(t);
-                                            }}
-                                            className={cn(
-                                              "px-1 py-0.5 rounded text-[8px] font-bold uppercase text-white truncate transition-all flex items-center gap-1 border border-black/5 hover:brightness-95",
-                                              colorClass
-                                            )}
-                                            title={getTaskDisplayName(t)}
-                                          >
-                                            <span className="truncate">{getTaskDisplayName(t)}</span>
-                                          </div>
-                                        );
-                                      })}
-                                      {activeTasks.length > 2 && (
-                                        <div className="text-[8px] font-extrabold text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded text-center uppercase tracking-wider">
-                                          + {activeTasks.length - 2} mais
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* TRIMESTRE & SEMESTRE SCALES */}
-                        {(areaCalendarScale === "trimestre" || areaCalendarScale === "semestre") && (
-                          <div className={cn(
-                            "grid gap-4 flex-1",
-                            areaCalendarScale === "trimestre" ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3"
-                          )}>
-                            {monthsInView.map(m => {
-                              const monthDays = getMonthDays(areaCalendarYear, m);
-                              
-                              return (
-                                <div key={m} className="bg-white border border-slate-200/60 rounded-2xl p-3 flex flex-col">
-                                  <h6 
-                                    onClick={() => {
-                                      setAreaCalendarMonth(m);
-                                      setAreaCalendarScale("mes");
-                                    }}
-                                    className="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-2 border-b border-slate-100 pb-1 flex justify-between items-center cursor-pointer hover:text-indigo-600 transition-colors"
-                                  >
-                                    <span>{monthNames[m]}</span>
-                                    <span className="text-[8px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-black">Mês</span>
-                                  </h6>
-                                  
-                                  <div className="grid grid-cols-7 gap-1 text-center text-[9px] font-bold text-slate-400 uppercase mb-1">
-                                    {weekdayNames.map(dayName => (
-                                      <div key={dayName}>{dayName[0]}</div>
-                                    ))}
-                                  </div>
-                                  
-                                  <div className="grid grid-cols-7 gap-1 bg-slate-50 p-1 rounded-xl border border-slate-100 flex-1">
-                                    {monthDays.map(({ date, isCurrentMonth, dayNum }, idx) => {
-                                      const activeTasks = tasksWithDates.filter(t => isTaskActiveOnDay(t, date));
-                                      const isToday = new Date().toDateString() === date.toDateString();
-                                      const isSelected = activeDay.toDateString() === date.toDateString();
-                                      
-                                      const completed = activeTasks.filter(t => normalizeStatus(t.status) === "Concluída").length;
-                                      const inProgress = activeTasks.filter(t => normalizeStatus(t.status) === "Em andamento").length;
-                                      const pending = activeTasks.length - completed - inProgress;
-                                      
-                                      return (
-                                        <div
-                                          key={idx}
-                                          onClick={() => setSelectedAreaCalendarDay(date)}
-                                          className={cn(
-                                            "aspect-square rounded-lg flex flex-col items-center justify-center relative cursor-pointer group transition-all text-[9px] font-bold",
-                                            isCurrentMonth ? "text-slate-700 bg-white" : "text-slate-300 opacity-30",
-                                            isSelected ? "bg-indigo-100 text-indigo-700 font-extrabold ring-1 ring-indigo-300" : "hover:bg-slate-100",
-                                            isToday && !isSelected ? "border border-indigo-500 font-black text-indigo-600" : ""
-                                          )}
-                                        >
-                                          <span>{dayNum}</span>
-                                          {activeTasks.length > 0 && isCurrentMonth && (
-                                            <div className="absolute bottom-0.5 flex gap-0.5 justify-center">
-                                              {completed > 0 && <span className="w-1 h-1 bg-emerald-500 rounded-full" />}
-                                              {inProgress > 0 && <span className="w-1 h-1 bg-blue-500 rounded-full" />}
-                                              {pending > 0 && <span className="w-1 h-1 bg-slate-400 rounded-full" />}
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                        
                       </div>
 
-                      {/* Side Grouped Agenda Panel */}
-                      <div className="lg:col-span-1 flex flex-col space-y-4">
-                        <div className="bg-white border border-slate-200/70 rounded-3xl p-5 shadow-sm flex flex-col h-full min-h-[350px]">
-                          <div className="border-b border-slate-100 pb-3 mb-3">
-                            <div className="flex items-center gap-2 text-indigo-600 mb-1">
-                              <CalendarDays size={16} />
-                              <h3 className="text-[10px] font-black uppercase tracking-wider">Atividades por Área</h3>
+                      <div className="overflow-x-auto border border-slate-200/70 rounded-2xl shadow-xs bg-white">
+                        <div className="flex flex-col min-w-[1100px]">
+                          <div className="flex bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-wider select-none">
+                            <div className="w-[430px] min-w-[430px] shrink-0 px-4 py-3.5 bg-slate-100/40 border-r border-slate-200">
+                              Título da Atividade / Agrupamento por Área
                             </div>
-                            <p className="text-[11px] font-bold text-slate-800 leading-snug">
-                              {activeDay.toLocaleDateString("pt-BR", { weekday: 'short', day: 'numeric', month: 'short' })} de {activeDay.getFullYear()}
-                            </p>
+                            <div className="flex-1 relative flex min-w-[650px]">
+                              {gridColumns.map(gc => (
+                                <div
+                                  key={gc.key}
+                                  style={{ width: `${gc.widthPercent}%` }}
+                                  className="px-2 py-3.5 border-r border-slate-200 last:border-r-0 text-center text-[10px] truncate"
+                                >
+                                  {gc.label}
+                                </div>
+                              ))}
+                            </div>
                           </div>
 
-                          <div className="flex-1 overflow-y-auto space-y-4 pr-1 max-h-[420px] custom-scrollbar">
-                            {groupedActiveDayTasks.length === 0 ? (
-                              <div className="py-12 text-center text-slate-400 font-semibold italic text-xs flex flex-col items-center justify-center space-y-2">
-                                <CalendarCheck size={28} className="text-slate-300" />
-                                <span>Nenhuma atividade nesta data.</span>
+                          <div className="divide-y divide-slate-100 max-h-[650px] overflow-y-auto custom-scrollbar">
+                            {ganttRows.length === 0 ? (
+                              <div className="p-12 text-center text-slate-400 italic font-bold text-xs">
+                                Nenhuma tarefa encontrada com os filtros atuais.
                               </div>
                             ) : (
-                              groupedActiveDayTasks.map(group => (
-                                <div key={group.areaName} className="space-y-2">
-                                  {/* Area Badge/Header */}
-                                  <div className="bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg text-[9px] font-black text-slate-700 uppercase tracking-wider flex justify-between items-center">
-                                    <span className="truncate max-w-[150px]">{group.areaName}</span>
-                                    <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full">{group.tasks.length}</span>
-                                  </div>
-                                  
-                                  {/* Tasks */}
-                                  <div className="space-y-1.5 pl-1.5 border-l border-slate-100">
-                                    {group.tasks.map(t => {
-                                      const normStatus = normalizeStatus(t.status);
-                                      let statusClasses = "bg-slate-200 text-slate-600";
-                                      if (normStatus === "Concluída") {
-                                        statusClasses = "bg-emerald-500 text-white";
-                                      } else if (normStatus === "Em andamento") {
-                                        statusClasses = "bg-blue-500 text-white";
-                                      }
-
-                                      const dlStatus = getDeadlineStatus(t.endDate, t.status);
-                                      const calCardBorder = dlStatus === "Atrasada"
-                                        ? "border-2 border-rose-500 shadow-rose-500/10"
-                                        : dlStatus === "Crítica"
-                                        ? "border-2 border-amber-400 shadow-amber-400/10"
-                                        : "border-2 border-emerald-500 shadow-emerald-500/10";
-
-                                      return (
-                                        <div
-                                          key={t.id}
-                                          onClick={() => handleEditTask(t)}
-                                          className={`hover:border-indigo-300 p-2.5 rounded-xl transition-all cursor-pointer bg-white hover:bg-slate-50/50 flex flex-col space-y-1 ${calCardBorder}`}
-                                        >
-                                          <div className="flex items-start justify-between gap-1.5">
-                                            <span className="text-[8px] text-slate-400 font-bold">ID: {t.id}</span>
-                                            <span className={cn("text-[7px] font-black uppercase px-1 rounded-sm leading-none py-0.5", statusClasses)}>
-                                              {normStatus}
-                                            </span>
-                                          </div>
-                                          <h6 className="text-[11px] font-black text-slate-800 leading-snug hover:text-indigo-600 transition-colors">
-                                            {getTaskDisplayName(t)}
-                                          </h6>
-                                          {t.endDate && (
-                                            <div className="text-[8px] font-bold text-slate-400">
-                                              Fim: {t.endDate.split("T")[0].split("-").reverse().join("/")}
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              ))
+                              ganttRows
                             )}
                           </div>
                         </div>
@@ -11458,18 +11516,18 @@ export function PlanningTab({
                                   )}
                                 </div>
                               </td>
-                              <td className="px-4 py-3 text-center text-slate-650 font-mono">
-                                {formattedStartDate !== '-' ? formattedStartDate : <span className="text-slate-300">-</span>}
+                              <td className="px-4 py-3 text-center font-mono font-extrabold text-black dark:text-white">
+                                {formattedStartDate !== '-' ? <span className="text-black font-extrabold dark:text-white">{formattedStartDate}</span> : <span className="text-slate-300 font-normal">-</span>}
                               </td>
-                              <td className="px-4 py-3 text-center text-slate-650 font-mono">
-                                {formattedEndDate}
+                              <td className="px-4 py-3 text-center font-mono font-extrabold text-black dark:text-white">
+                                {formattedEndDate !== '-' ? <span className="text-black font-extrabold dark:text-white">{formattedEndDate}</span> : <span className="text-slate-300 font-normal">-</span>}
                               </td>
-                              <td className="px-4 py-3 text-center text-slate-650 whitespace-nowrap">
+                              <td className="px-4 py-3 text-center whitespace-nowrap">
                                 {(() => {
                                   const dur = calculateDurationInDays(t.startDate, t.endDate);
                                   if (dur === null) return <span className="text-slate-300">-</span>;
                                   return (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200" title={`${dur} dias corridos`}>
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10.5px] font-black bg-slate-100 text-black border border-slate-300 shadow-2xs dark:bg-slate-900 dark:text-white dark:border-slate-700" title={`${dur} ${dur === 1 ? "dia" : "dias"}`}>
                                       {dur} {dur === 1 ? "dia" : "dias"}
                                     </span>
                                   );
@@ -12227,13 +12285,13 @@ export function PlanningTab({
                             </h4>
 
                             {/* Meta: Datas e Responsáveis */}
-                            <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500 font-medium">
+                            <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs font-medium">
                               <div className="flex items-center gap-1.5">
-                                <Calendar size={13} className="text-slate-400" />
-                                <span>
+                                <Calendar size={13} className="text-black shrink-0 dark:text-white" />
+                                <span className="text-black font-extrabold dark:text-white">
                                   {task.startDate ? formatDateBR(task.startDate) : "Início n/d"}
                                   {" → "}
-                                  <strong className={taskDlStatus === "Atrasada" ? "text-rose-600 font-black" : taskDlStatus === "Crítica" ? "text-amber-600 font-black" : "text-slate-800"}>
+                                  <strong className={taskDlStatus === "Atrasada" ? "text-rose-600 font-black" : taskDlStatus === "Crítica" ? "text-amber-600 font-black" : "text-black font-extrabold dark:text-white"}>
                                     {task.endDate ? formatDateBR(task.endDate) : "Sem prazo"}
                                   </strong>
                                 </span>
@@ -14211,9 +14269,9 @@ export function PlanningTab({
 
                                         {/* Dates */}
                                         {(task.startDate || task.endDate) && (
-                                          <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400 flex-wrap">
-                                            <CalendarRange size={12} className="text-slate-350 shrink-0" />
-                                            <span className="truncate">
+                                          <div className="flex items-center gap-1.5 text-xs font-black text-black dark:text-white flex-wrap">
+                                            <CalendarRange size={14} className="text-black shrink-0 dark:text-white" />
+                                            <span className="truncate text-black font-extrabold dark:text-white text-xs">
                                               {task.startDate ? new Date(task.startDate).toLocaleDateString("pt-BR", { timeZone: "UTC" }) : "S/D"}
                                               {" - "}
                                               {task.endDate ? new Date(task.endDate).toLocaleDateString("pt-BR", { timeZone: "UTC" }) : "S/D"}
@@ -14222,7 +14280,7 @@ export function PlanningTab({
                                               const dur = calculateDurationInDays(task.startDate, task.endDate);
                                               if (!dur) return null;
                                               return (
-                                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10.5px] font-black bg-slate-100 text-black border border-slate-300 dark:bg-slate-900 dark:text-white dark:border-slate-700">
                                                   {dur} {dur === 1 ? "dia" : "dias"}
                                                 </span>
                                               );
@@ -14375,12 +14433,18 @@ export function PlanningTab({
                                         {/* Parent Task Subtask Indicator */}
                                         {parentTask && (
                                           <div className="pt-2 mt-1 border-t border-slate-100 border-dashed">
-                                            <span 
-                                              className="text-[9px] font-black text-indigo-500 uppercase tracking-widest block truncate"
-                                              title={`Subtarefa de: ${parentTask.title}`}
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleEditTask(parentTask);
+                                              }}
+                                              className="text-[9px] font-black text-indigo-500 hover:text-indigo-700 uppercase tracking-widest flex items-center gap-1 w-full text-left cursor-pointer transition-colors group/parent hover:underline"
+                                              title={`Clique para abrir a atividade pai: ${parentTask.title}`}
                                             >
-                                              Subtarefa de: {parentTask.title}
-                                            </span>
+                                              <CornerDownRight size={11} className="shrink-0 text-indigo-400 group-hover/parent:text-indigo-600 transition-colors" />
+                                              <span className="truncate">Subtarefa de: {parentTask.title}</span>
+                                            </button>
                                           </div>
                                         )}
                                       </motion.div>
@@ -14773,13 +14837,13 @@ export function PlanningTab({
                                           </span>
                                         )}
                                       </div>
-                                      <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-slate-400 font-bold uppercase tracking-wider" style={{ paddingLeft: hasSubs || depth > 0 ? '22px' : '0' }}>
+                                      <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 text-[9.5px] text-black font-extrabold uppercase tracking-wider dark:text-white" style={{ paddingLeft: hasSubs || depth > 0 ? '22px' : '0' }}>
                                         {t.startDate ? <span>Início: {t.startDate.split("T")[0].split("-").reverse().join("/")}</span> : null}
                                         {t.endDate ? <span>Término: {t.endDate.split("T")[0].split("-").reverse().join("/")}</span> : null}
                                         {(() => {
                                           const dur = calculateDurationInDays(t.startDate, t.endDate);
                                           if (!dur) return null;
-                                          return <span>Duração: {dur} {dur === 1 ? "dia" : "dias"}</span>;
+                                          return <span className="text-black font-extrabold dark:text-white">Duração: {dur} {dur === 1 ? "dia" : "dias"}</span>;
                                         })()}
                                         {!hasDates && <span className="text-amber-500 font-bold normal-case">Período não definido</span>}
                                       </div>
@@ -15422,39 +15486,61 @@ export function PlanningTab({
                 </div>
 
                 {/* Atividade Pai */}
-                <div className="space-y-1.5 min-w-0">
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center justify-between gap-1.5" title="Define a hierarquia. Se preenchido, esta se tornará uma subatividade">
-                    <span className="flex items-center gap-1.5">
-                      <Layers size={15} className="text-emerald-500 shrink-0" /> Atividade Pai
-                    </span>
-                    {editTaskParentSearch && (
-                      <span className="text-xs font-bold text-slate-400 lowercase font-normal">
-                        filtrando por "{editTaskParentSearch}"
+                <div className="space-y-1.5 min-w-0 md:col-span-2">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Define a hierarquia. Se preenchido, esta se tornará uma subatividade">
+                      <span className="flex items-center gap-1.5">
+                        <Layers size={15} className="text-emerald-500 shrink-0" /> Atividade Pai
                       </span>
-                    )}
-                  </label>
+                      {editTaskParentSearch && !showParentSearch && (
+                        <span className="text-[10px] font-bold text-indigo-600 lowercase font-normal">
+                          (filtrado: "{editTaskParentSearch}")
+                        </span>
+                      )}
+                    </label>
 
-                  {/* Campo de filtro de texto para facilitar a busca no combobox */}
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Buscar / filtrar atividade pai por nome ou SEI..."
-                      value={editTaskParentSearch}
-                      onChange={(e) => setEditTaskParentSearch(e.target.value)}
-                      className="w-full pl-8 pr-14 py-2 text-sm font-semibold text-slate-700 border-2 border-slate-200 rounded-xl outline-none focus:border-adasa-mid bg-slate-50/10 focus:bg-white"
-                    />
-                    <Search size={14} className="absolute left-3 top-3 text-slate-400" />
-                    {editTaskParentSearch && (
-                      <button
-                        type="button"
-                        onClick={() => setEditTaskParentSearch("")}
-                        className="absolute right-2 top-2 text-[10px] font-black bg-slate-100 hover:bg-slate-200 text-slate-500 px-2 py-0.5 rounded uppercase cursor-pointer"
-                        title="Limpar filtro"
-                      >
-                        Limpar
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowParentSearch(prev => !prev);
+                      }}
+                      className={cn(
+                        "p-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider",
+                        showParentSearch || editTaskParentSearch
+                          ? "bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-700"
+                          : "bg-slate-50 text-slate-600 hover:text-slate-900 hover:bg-slate-100 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-800"
+                      )}
+                      title={showParentSearch ? "Fechar campo de busca" : "Buscar / filtrar atividade pai por nome ou SEI"}
+                    >
+                      <Search size={13} />
+                      <span>{showParentSearch ? "Ocultar Busca" : "Buscar"}</span>
+                    </button>
                   </div>
+
+                  {/* Campo de filtro de texto - exibido somente quando a lupa/botão de busca for clicado */}
+                  {showParentSearch && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-150">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="Buscar / filtrar atividade pai por nome ou SEI..."
+                        value={editTaskParentSearch}
+                        onChange={(e) => setEditTaskParentSearch(e.target.value)}
+                        className="w-full pl-8 pr-14 py-2 text-sm font-semibold text-slate-700 border-2 border-indigo-300 rounded-xl outline-none focus:border-adasa-mid bg-indigo-50/20 focus:bg-white dark:bg-slate-950 dark:text-slate-100 dark:border-indigo-800"
+                      />
+                      <Search size={14} className="absolute left-3 top-3 text-indigo-500" />
+                      {editTaskParentSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setEditTaskParentSearch("")}
+                          className="absolute right-2 top-2 text-[10px] font-black bg-slate-100 hover:bg-slate-200 text-slate-500 px-2 py-0.5 rounded uppercase cursor-pointer dark:bg-slate-800 dark:text-slate-300"
+                          title="Limpar filtro"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   <select
                     value={editingTask.parentId || ""}
@@ -15504,7 +15590,7 @@ export function PlanningTab({
                         const displayName = getTaskDisplayName(t);
                         return (
                           <option key={t.id} value={t.id} title={displayName}>
-                            {displayName.length > 70 ? displayName.slice(0, 70) + "..." : displayName}
+                            {displayName.length > 130 ? displayName.slice(0, 130) + "..." : displayName}
                           </option>
                         );
                       })}
@@ -15512,7 +15598,7 @@ export function PlanningTab({
                 </div>
 
                 {/* Dependency (Depends On) */}
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 min-w-0 md:col-span-2">
                   <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Atividade que deve ser concluída antes desta iniciar (vincula as datas automaticamente)">
                     <Link2 size={15} className="text-orange-500 shrink-0" />
                     Depende de (Pré-requisito)
@@ -15564,7 +15650,7 @@ export function PlanningTab({
                       const displayName = getTaskDisplayName(t);
                       return (
                         <option key={t.id} value={t.id} title={displayName}>
-                          {displayName.length > 70 ? displayName.slice(0, 70) + "..." : displayName}
+                          {displayName.length > 130 ? displayName.slice(0, 130) + "..." : displayName}
                         </option>
                       );
                     })}
@@ -15623,11 +15709,11 @@ export function PlanningTab({
                           <span>Duração da atividade:</span>
                         </div>
                         {dur !== null ? (
-                          <span className="font-bold text-slate-800 bg-white border border-slate-200 px-2.5 py-0.5 rounded-md shadow-2xs">
-                            {dur} {dur === 1 ? "dia corrido" : "dias corridos"}
+                          <span className="font-extrabold text-black bg-white border border-slate-300 px-2.5 py-0.5 rounded-md shadow-2xs dark:bg-slate-900 dark:text-white dark:border-slate-700">
+                            {dur} {dur === 1 ? "dia" : "dias"}
                           </span>
                         ) : (
-                          <span className="text-slate-400 italic text-[11px]">Informe data de início e fim para calcular os dias corridos</span>
+                          <span className="text-slate-400 italic text-[11px]">Informe data de início e fim para calcular a duração</span>
                         )}
                       </div>
                     </div>
@@ -17615,19 +17701,19 @@ export function PlanningTab({
 
                   {/* Row 2: Cronograma, Responsáveis & Dependências */}
                   <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-600 flex-wrap pt-0.5">
-                    <span className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/80 flex-wrap text-xs shadow-2xs">
-                      <Calendar size={13} className="text-slate-400 shrink-0" />
-                      <span><span className="text-slate-400 font-normal">Início:</span> {formatDate(task.startDate)}</span>
+                    <span className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/80 flex-wrap text-xs shadow-2xs dark:bg-slate-900 dark:border-slate-800">
+                      <Calendar size={13} className="text-black shrink-0 dark:text-white" />
+                      <span className="text-black font-extrabold dark:text-white"><span className="text-slate-500 font-medium">Início:</span> {formatDate(task.startDate)}</span>
                       <span className="text-slate-300 mx-0.5">|</span>
-                      <span><span className="text-slate-400 font-normal">Prazo:</span> {formatDate(task.endDate)}</span>
+                      <span className="text-black font-extrabold dark:text-white"><span className="text-slate-500 font-medium">Prazo:</span> {formatDate(task.endDate)}</span>
                       {(() => {
                         const dur = calculateDurationInDays(task.startDate, task.endDate);
                         if (dur === null) return null;
                         return (
                           <>
                             <span className="text-slate-300 mx-0.5">|</span>
-                            <span title="Duração da atividade em dias corridos">
-                              <span className="text-slate-400 font-normal">Duração:</span> {dur} {dur === 1 ? "dia corrido" : "dias corridos"}
+                            <span className="text-black font-extrabold dark:text-white" title={`Duração da atividade: ${dur} ${dur === 1 ? 'dia' : 'dias'}`}>
+                              <span className="text-slate-500 font-medium">Duração:</span> {dur} {dur === 1 ? "dia" : "dias"}
                             </span>
                           </>
                         );
