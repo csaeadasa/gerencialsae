@@ -606,9 +606,9 @@ async function runStartupMigration() {
           parent_id INTEGER REFERENCES pl_tasks(id) ON DELETE CASCADE,
           progress INTEGER DEFAULT 0,
           priority VARCHAR(50),
-          category VARCHAR(100),
-          assigned_to VARCHAR(255),
-          created_by VARCHAR(255),
+          category TEXT,
+          assigned_to TEXT,
+          created_by TEXT,
           notes TEXT
         );
       `);
@@ -954,7 +954,18 @@ async function runStartupMigration() {
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS depends_on_task_id INTEGER REFERENCES pl_tasks(id) ON DELETE SET NULL;`);
       
       // Add updated_at, updated_by, created_at, created_by, completed_at, completed_by to tables
-      await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP, ADD COLUMN IF NOT EXISTS updated_by VARCHAR(255), ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW(), ADD COLUMN IF NOT EXISTS created_by VARCHAR(255), ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP, ADD COLUMN IF NOT EXISTS completed_by VARCHAR(255);`);
+      await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP, ADD COLUMN IF NOT EXISTS updated_by TEXT, ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW(), ADD COLUMN IF NOT EXISTS created_by TEXT, ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP, ADD COLUMN IF NOT EXISTS completed_by TEXT;`);
+      await client.query(`
+        ALTER TABLE pl_tasks
+          ALTER COLUMN assigned_to TYPE TEXT,
+          ALTER COLUMN category TYPE TEXT,
+          ALTER COLUMN updated_by TYPE TEXT,
+          ALTER COLUMN created_by TYPE TEXT,
+          ALTER COLUMN completed_by TYPE TEXT,
+          ALTER COLUMN status TYPE TEXT,
+          ALTER COLUMN priority TYPE TEXT,
+          ALTER COLUMN type TYPE TEXT;
+      `);
       await client.query(`ALTER TABLE pl_plans ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP, ADD COLUMN IF NOT EXISTS updated_by VARCHAR(255);`);
       await client.query(`ALTER TABLE pl_plans ADD COLUMN IF NOT EXISTS created_at TIMESTAMP, ADD COLUMN IF NOT EXISTS created_by VARCHAR(255);`);
       await client.query(`ALTER TABLE pl_plans ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT FALSE;`);
@@ -979,12 +990,13 @@ async function runStartupMigration() {
       // Ensure pl_tasks has weight column
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS weight REAL DEFAULT 1.0;`);
       
-      await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'default';`);
+      await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'default';`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS fiscalizacao_data JSONB;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS ouvidoria_data JSONB;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS recurso_rev_data JSONB;`);
       await client.query(`ALTER TABLE pl_tasks ADD COLUMN IF NOT EXISTS agenda_regulatoria_data JSONB;`);
-      await client.query(`ALTER TABLE re_agenda_tasks ADD COLUMN IF NOT EXISTS tema VARCHAR(255);`);
+      await client.query(`ALTER TABLE re_agenda_tasks ADD COLUMN IF NOT EXISTS tema TEXT;`);
+      await client.query(`ALTER TABLE re_agenda_tasks ALTER COLUMN tema TYPE TEXT;`);
 
       // Initial migration: sync existing re_agenda_tasks into pl_tasks agenda_regulatoria_data and type
       try {
@@ -6249,12 +6261,34 @@ export async function startServer(isVercel = false) {
     }
   }
 
+  let plTasksTextColumnsEnsured = false;
+  async function ensurePlTasksTextColumns(client: any) {
+    if (plTasksTextColumnsEnsured) return;
+    try {
+      await client.query(`
+        ALTER TABLE pl_tasks
+          ALTER COLUMN assigned_to TYPE TEXT,
+          ALTER COLUMN category TYPE TEXT,
+          ALTER COLUMN updated_by TYPE TEXT,
+          ALTER COLUMN created_by TYPE TEXT,
+          ALTER COLUMN completed_by TYPE TEXT,
+          ALTER COLUMN status TYPE TEXT,
+          ALTER COLUMN priority TYPE TEXT,
+          ALTER COLUMN type TYPE TEXT;
+      `);
+      plTasksTextColumnsEnsured = true;
+    } catch (e) {
+      console.warn("Aviso ao converter colunas de pl_tasks para TEXT:", e);
+    }
+  }
+
   app.post("/api/tasks", async (req, res) => {
     try {
       const { title, description, startDate, endDate, status, parentId, progress, priority, category, assignedTo, notes, checklist, links, comments, planId, areaIds, responsibleIds, categoryIds, dependsOnTaskId, type, fiscalizacaoData, recursoData, ouvidoriaData, recursoRevData, agendaRegulatoriaData, isProgrammed, is_programmed } = req.body;
       const pool = getDbPool();
       const client = await pool.connect();
       try {
+        await ensurePlTasksTextColumns(client);
         await client.query("BEGIN");
         const finalProgress = progress !== undefined ? parseInt(progress) : 0;
         const finalStatus = finalProgress === 100 ? "Concluída" : finalProgress > 0 ? "Em andamento" : "Não iniciada";
@@ -6483,6 +6517,7 @@ export async function startServer(isVercel = false) {
       const pool = getDbPool();
       const client = await pool.connect();
       try {
+        await ensurePlTasksTextColumns(client);
         await client.query("BEGIN");
         
         const currentTaskRes = await client.query("SELECT parent_id, start_date, end_date, progress, status, depends_on_task_id, links, comments, is_programmed, related_sei_processes, created_at, created_by, completed_at, completed_by FROM pl_tasks WHERE id = $1", [taskId]);

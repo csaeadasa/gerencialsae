@@ -1129,6 +1129,70 @@ export function PlanningTab({
       showToast("Validação", "Selecione o plano de trabalho para receber as atividades.", "warning");
       return;
     }
+    if (areas && areas.length > 0 && (!genAreaIds || genAreaIds.length === 0)) {
+      showToast("Validação", "A seleção de pelo menos uma Área de Vinculação é obrigatória.", "warning");
+      return;
+    }
+    if (categories && categories.length > 0) {
+      if (!genCategoryIds || genCategoryIds.length === 0) {
+        showToast("Validação", "A seleção de pelo menos uma Categoria é obrigatória.", "warning");
+        return;
+      }
+      if (genAreaIds && genAreaIds.length > 0) {
+        const areasWithoutCat = genAreaIds.filter(areaId =>
+          !genCategoryIds.some(catId => {
+            const cat = categories.find(c => Number(c.id) === Number(catId));
+            return cat?.areaIds?.some(aid => Number(aid) === Number(areaId));
+          })
+        );
+        if (areasWithoutCat.length > 0) {
+          const missingNames = areasWithoutCat
+            .map(aid => {
+              const a = areas.find(ar => Number(ar.id) === Number(aid));
+              return a ? (a.abbreviation ? `${a.name} (${a.abbreviation})` : a.name) : `Área #${aid}`;
+            })
+            .join(", ");
+          showToast(
+            "Validação de Categorias",
+            genAreaIds.length > 1
+              ? `Selecione pelo menos uma categoria para cada área selecionada. Área(s) sem categoria: ${missingNames}.`
+              : `Selecione pelo menos uma categoria vinculada à área selecionada (${missingNames}).`,
+            "warning"
+          );
+          return;
+        }
+      }
+    }
+    if (responsibles && responsibles.length > 0) {
+      if (!genResponsibleIds || genResponsibleIds.length === 0) {
+        showToast("Validação", "A designação de pelo menos um Responsável é obrigatória.", "warning");
+        return;
+      }
+      if (genAreaIds && genAreaIds.length > 0) {
+        const areasWithoutResp = genAreaIds.filter(areaId =>
+          !genResponsibleIds.some(respId => {
+            const resp = responsibles.find(r => Number(r.id) === Number(respId));
+            return resp?.areaIds?.some(aid => Number(aid) === Number(areaId));
+          })
+        );
+        if (areasWithoutResp.length > 0) {
+          const missingNames = areasWithoutResp
+            .map(aid => {
+              const a = areas.find(ar => Number(ar.id) === Number(aid));
+              return a ? (a.abbreviation ? `${a.name} (${a.abbreviation})` : a.name) : `Área #${aid}`;
+            })
+            .join(", ");
+          showToast(
+            "Validação de Responsáveis",
+            genAreaIds.length > 1
+              ? `Selecione pelo menos um responsável para cada área selecionada. Área(s) sem responsável: ${missingNames}.`
+              : `Selecione pelo menos um responsável vinculado à área selecionada (${missingNames}).`,
+            "warning"
+          );
+          return;
+        }
+      }
+    }
 
     setGenSubmitting(true);
     try {
@@ -5038,20 +5102,81 @@ export function PlanningTab({
 
     // 5. Áreas de Vinculação: Obrigatório se houver áreas cadastradas
     if (areas && areas.length > 0 && (!editingTask.areaIds || editingTask.areaIds.length === 0)) {
+      setTaskFormTab("form");
       showToast("Validação", "A seleção de pelo menos uma Área de Vinculação é obrigatória.", "warning");
       return;
     }
 
-    // 6. Categorias: Obrigatório se houver categorias cadastradas
-    if (categories && categories.length > 0 && (!editingTask.categoryIds || editingTask.categoryIds.length === 0)) {
-      showToast("Validação", "A seleção de pelo menos uma Categoria é obrigatória.", "warning");
-      return;
+    // 6. Categorias: Obrigatório se houver categorias cadastradas, exigindo pelo menos uma categoria para cada área selecionada
+    if (categories && categories.length > 0) {
+      if (!editingTask.categoryIds || editingTask.categoryIds.length === 0) {
+        setTaskFormTab("form");
+        showToast("Validação", "A seleção de pelo menos uma Categoria é obrigatória.", "warning");
+        return;
+      }
+
+      if (editingTask.areaIds && editingTask.areaIds.length > 0) {
+        const areasWithoutCategory = editingTask.areaIds.filter(areaId => {
+          return !editingTask.categoryIds?.some(catId => {
+            const cat = categories.find(c => Number(c.id) === Number(catId));
+            return cat?.areaIds?.some(aid => Number(aid) === Number(areaId));
+          });
+        });
+
+        if (areasWithoutCategory.length > 0) {
+          const missingAreaNames = areasWithoutCategory
+            .map(aid => {
+              const a = areas.find(ar => Number(ar.id) === Number(aid));
+              return a ? (a.abbreviation ? `${a.name} (${a.abbreviation})` : a.name) : `Área #${aid}`;
+            })
+            .join(", ");
+          setTaskFormTab("form");
+          showToast(
+            "Validação de Categorias",
+            editingTask.areaIds.length > 1
+              ? `Quando mais de uma área de vinculação é selecionada, deve ser selecionada pelo menos uma categoria de cada área. Área(s) sem categoria: ${missingAreaNames}.`
+              : `Selecione pelo menos uma categoria vinculada à área selecionada (${missingAreaNames}).`,
+            "warning"
+          );
+          return;
+        }
+      }
     }
 
-    // 7. Responsáveis Designados: Obrigatório para criação de novas tarefas
-    if (formMode === "create" && responsibles && responsibles.length > 0 && (!editingTask.responsibleIds || editingTask.responsibleIds.length === 0)) {
-      showToast("Validação", "A designação de pelo menos um Responsável é obrigatória.", "warning");
-      return;
+    // 7. Responsáveis Designados: Obrigatório se houver responsáveis cadastrados, exigindo pelo menos um responsável para cada área selecionada
+    if (responsibles && responsibles.length > 0) {
+      if (!editingTask.responsibleIds || editingTask.responsibleIds.length === 0) {
+        setTaskFormTab("form");
+        showToast("Validação", "A designação de pelo menos um Responsável é obrigatória.", "warning");
+        return;
+      }
+
+      if (editingTask.areaIds && editingTask.areaIds.length > 0) {
+        const areasWithoutResponsible = editingTask.areaIds.filter(areaId => {
+          return !editingTask.responsibleIds?.some(respId => {
+            const resp = responsibles.find(r => Number(r.id) === Number(respId));
+            return resp?.areaIds?.some(aid => Number(aid) === Number(areaId));
+          });
+        });
+
+        if (areasWithoutResponsible.length > 0) {
+          const missingAreaNames = areasWithoutResponsible
+            .map(aid => {
+              const a = areas.find(ar => Number(ar.id) === Number(aid));
+              return a ? (a.abbreviation ? `${a.name} (${a.abbreviation})` : a.name) : `Área #${aid}`;
+            })
+            .join(", ");
+          setTaskFormTab("form");
+          showToast(
+            "Validação de Responsáveis",
+            editingTask.areaIds.length > 1
+              ? `Quando mais de uma área de vinculação é selecionada, deve ser selecionado pelo menos um usuário responsável de cada área. Área(s) sem responsável: ${missingAreaNames}.`
+              : `Selecione pelo menos um usuário responsável vinculado à área selecionada (${missingAreaNames}).`,
+            "warning"
+          );
+          return;
+        }
+      }
     }
 
     try {
@@ -15980,100 +16105,139 @@ export function PlanningTab({
                 </div>
 
                 {/* Categories of Activities (Grouped by Areas) */}
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Assuntos temáticos aos quais a atividade se relaciona, agrupados pelas áreas selecionadas">
-                    <ListTree size={15} className="text-amber-500 shrink-0" />
-                    Categorias (Agrupadas por Área)
-                    {editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length ? " (Herdado e bloqueado pela Atividade Pai)" : ""}
-                  </label>
-                  <div className={`bg-slate-50 border-2 border-slate-200 rounded-xl p-3 min-h-[180px] max-h-80 overflow-y-auto space-y-3 custom-scrollbar ${editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length ? "opacity-60 pointer-events-none" : ""}`}>
-                    {(!editingTask.areaIds || editingTask.areaIds.length === 0) ? (
-                      <div className="py-8 px-4 text-center">
-                        <span className="block text-xs text-slate-400 font-medium italic">
-                          Selecione ao menos uma Área de Vinculação para visualizar as categorias disponíveis.
-                        </span>
-                      </div>
-                    ) : (
-                      (() => {
-                        const selectedAreas = areas
-                          .filter(a => editingTask.areaIds?.includes(a.id))
-                          .sort((a, b) => a.name.localeCompare(b.name));
+                {(() => {
+                  const parentTaskForCats = editingTask.parentId ? taskById[editingTask.parentId] : undefined;
+                  const isCategoriesLockedByParent = !!(
+                    parentTaskForCats?.categoryIds?.length &&
+                    (editingTask.areaIds || []).length > 0 &&
+                    (editingTask.areaIds || []).every(areaId =>
+                      parentTaskForCats.categoryIds?.some(catId => {
+                        const cat = categories.find(c => Number(c.id) === Number(catId));
+                        return cat?.areaIds?.some(aid => Number(aid) === Number(areaId));
+                      })
+                    )
+                  );
 
-                        let totalCategoriesCount = 0;
+                  return (
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5" title="Assuntos temáticos aos quais a atividade se relaciona, agrupados pelas áreas selecionadas">
+                        <ListTree size={15} className="text-amber-500 shrink-0" />
+                        Categorias (Agrupadas por Área)
+                        {isCategoriesLockedByParent ? " (Herdado e bloqueado pela Atividade Pai)" : ""}
+                      </label>
+                      <div className={`bg-slate-50 border-2 border-slate-200 rounded-xl p-3 min-h-[180px] max-h-80 overflow-y-auto space-y-3 custom-scrollbar ${isCategoriesLockedByParent ? "opacity-60 pointer-events-none" : ""}`}>
+                        {(!editingTask.areaIds || editingTask.areaIds.length === 0) ? (
+                          <div className="py-8 px-4 text-center">
+                            <span className="block text-xs text-slate-400 font-medium italic">
+                              Selecione ao menos uma Área de Vinculação para visualizar as categorias disponíveis.
+                            </span>
+                          </div>
+                        ) : (
+                          (() => {
+                            const selectedAreas = areas
+                              .filter(a => editingTask.areaIds?.includes(a.id))
+                              .sort((a, b) => a.name.localeCompare(b.name));
 
-                        const renderedGroups = selectedAreas.map(area => {
-                          const areaCats = categories
-                            .filter(c => !isCategoryArchivedInArea(c, area.id) && c.areaIds?.includes(area.id))
-                            .sort((a, b) => a.name.localeCompare(b.name));
+                            let totalCategoriesCount = 0;
 
-                          totalCategoriesCount += areaCats.length;
+                            const renderedGroups = selectedAreas.map(area => {
+                              const areaCats = categories
+                                .filter(c => (!isCategoryArchivedInArea(c, area.id) || editingTask.categoryIds?.includes(c.id)) && c.areaIds?.includes(area.id))
+                                .sort((a, b) => a.name.localeCompare(b.name));
 
-                          return (
-                            <div key={area.id} className="border border-slate-200/90 rounded-xl p-2.5 bg-white shadow-2xs space-y-2">
-                              {/* Area Group Header */}
-                              <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 text-xs font-bold text-slate-800">
-                                <span className="flex items-center gap-1.5 text-adasa-dark truncate pr-2">
-                                  <Briefcase size={13} className="text-lime-600 shrink-0" />
-                                  {area.name} {area.abbreviation ? `(${area.abbreviation})` : ""}
-                                </span>
-                                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded-full shrink-0">
-                                  {areaCats.length} {areaCats.length === 1 ? "categoria" : "categorias"}
-                                </span>
-                              </div>
+                              totalCategoriesCount += areaCats.length;
 
-                              {/* Categories under this Area */}
-                              {areaCats.length === 0 ? (
-                                <span className="block text-[11px] text-slate-400 italic px-1 py-1">
-                                  Nenhuma categoria vinculada a esta área.
-                                </span>
-                              ) : (
-                                <div className="space-y-1.5 pl-1">
-                                  {areaCats.map(c => {
-                                    const isChecked = editingTask.categoryIds?.includes(c.id);
-                                    return (
-                                      <label key={`${area.id}-${c.id}`} className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 hover:text-slate-900 select-none py-0.5">
-                                        <input
-                                          type="checkbox"
-                                          checked={!!isChecked}
-                                          readOnly={!!(editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length)}
-                                          onChange={(e) => {
-                                            if (editingTask.parentId && taskById[editingTask.parentId]?.categoryIds?.length) return;
-                                            const checked = e.target.checked;
-                                            setEditingTask(prev => {
-                                              const current = prev.categoryIds || [];
-                                              const next = checked 
-                                                ? Array.from(new Set([...current, c.id]))
-                                                : current.filter(id => id !== c.id);
-                                              return { ...prev, categoryIds: next };
-                                            });
-                                          }}
-                                          className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0 cursor-pointer"
-                                        />
-                                        <span className="leading-snug">{c.name}</span>
-                                      </label>
-                                    );
-                                  })}
+                              const selectedInAreaCount = (editingTask.categoryIds || []).filter(cid => {
+                                const cat = categories.find(c => Number(c.id) === Number(cid));
+                                return cat?.areaIds?.some(aid => Number(aid) === Number(area.id));
+                              }).length;
+
+                              return (
+                                <div
+                                  key={area.id}
+                                  className={`border rounded-xl p-2.5 bg-white shadow-2xs space-y-2 transition-colors ${
+                                    selectedInAreaCount === 0
+                                      ? "border-amber-300 bg-amber-50/20"
+                                      : "border-slate-200/90"
+                                  }`}
+                                >
+                                  {/* Area Group Header */}
+                                  <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-100 text-xs font-bold text-slate-800">
+                                    <span className="flex items-center gap-1.5 text-adasa-dark truncate pr-2">
+                                      <Briefcase size={13} className="text-lime-600 shrink-0" />
+                                      {area.name} {area.abbreviation ? `(${area.abbreviation})` : ""}
+                                    </span>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      {selectedInAreaCount > 0 ? (
+                                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                          ✓ {selectedInAreaCount} {selectedInAreaCount === 1 ? "selecionada" : "selecionadas"}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] font-bold text-amber-700 bg-amber-100/80 border border-amber-300 px-2 py-0.5 rounded-full">
+                                          Selecione ao menos 1
+                                        </span>
+                                      )}
+                                      <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded-full">
+                                        {areaCats.length} {areaCats.length === 1 ? "opção" : "opções"}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Categories under this Area */}
+                                  {areaCats.length === 0 ? (
+                                    <span className="block text-[11px] text-slate-400 italic px-1 py-1">
+                                      Nenhuma categoria vinculada a esta área.
+                                    </span>
+                                  ) : (
+                                    <div className="space-y-1.5 pl-1">
+                                      {areaCats.map(c => {
+                                        const isChecked = editingTask.categoryIds?.includes(c.id);
+                                        return (
+                                          <label key={`${area.id}-${c.id}`} className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 hover:text-slate-900 select-none py-0.5">
+                                            <input
+                                              type="checkbox"
+                                              checked={!!isChecked}
+                                              readOnly={isCategoriesLockedByParent}
+                                              onChange={(e) => {
+                                                if (isCategoriesLockedByParent) return;
+                                                const checked = e.target.checked;
+                                                setEditingTask(prev => {
+                                                  const current = prev.categoryIds || [];
+                                                  const next = checked 
+                                                    ? Array.from(new Set([...current, c.id]))
+                                                    : current.filter(id => id !== c.id);
+                                                  return { ...prev, categoryIds: next };
+                                                });
+                                              }}
+                                              className="rounded border-slate-300 text-adasa-mid focus:ring-adasa-mid h-4 w-4 shrink-0 cursor-pointer"
+                                            />
+                                            <span className="leading-snug">{c.name}</span>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                          );
-                        });
+                              );
+                            });
 
-                        if (totalCategoriesCount === 0) {
-                          return (
-                            <div className="py-6 px-4 text-center">
-                              <span className="block text-xs text-slate-400 italic font-medium">
-                                Nenhuma categoria cadastrada para as áreas selecionadas.
-                              </span>
-                            </div>
-                          );
-                        }
+                            if (totalCategoriesCount === 0) {
+                              return (
+                                <div className="py-6 px-4 text-center">
+                                  <span className="block text-xs text-slate-400 italic font-medium">
+                                    Nenhuma categoria cadastrada para as áreas selecionadas.
+                                  </span>
+                                </div>
+                              );
+                            }
 
-                        return renderedGroups;
-                      })()
-                    )}
-                  </div>
-                </div>
+                            return renderedGroups;
+                          })()
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Designated Responsibles (Grouped by Area) */}
                 <div className="space-y-1.5 md:col-span-2">
@@ -16111,17 +16275,40 @@ export function PlanningTab({
 
                           totalActiveResponsiblesCount += areaResponsibles.length;
 
+                          const selectedRespInAreaCount = (editingTask.responsibleIds || []).filter(rid => {
+                            const resp = responsibles.find(r => Number(r.id) === Number(rid));
+                            return resp?.areaIds?.some(aid => Number(aid) === Number(area.id));
+                          }).length;
+
                           return (
-                            <div key={area.id} className="border border-slate-200/90 rounded-xl p-2.5 bg-white shadow-2xs space-y-2">
+                            <div
+                              key={area.id}
+                              className={`border rounded-xl p-2.5 bg-white shadow-2xs space-y-2 transition-colors ${
+                                selectedRespInAreaCount === 0
+                                  ? "border-amber-300 bg-amber-50/20"
+                                  : "border-slate-200/90"
+                              }`}
+                            >
                               {/* Area Group Header */}
-                              <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 text-xs font-bold text-slate-800">
+                              <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-100 text-xs font-bold text-slate-800">
                                 <span className="flex items-center gap-1.5 text-adasa-dark truncate pr-2">
                                   <Briefcase size={13} className="text-lime-600 shrink-0" />
                                   {area.name} {area.abbreviation ? `(${area.abbreviation})` : ""}
                                 </span>
-                                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded-full shrink-0">
-                                  {areaResponsibles.length} {areaResponsibles.length === 1 ? "responsável ativo" : "responsáveis ativos"}
-                                </span>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {selectedRespInAreaCount > 0 ? (
+                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                      ✓ {selectedRespInAreaCount} {selectedRespInAreaCount === 1 ? "selecionado" : "selecionados"}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100/80 border border-amber-300 px-2 py-0.5 rounded-full">
+                                      Selecione ao menos 1
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded-full">
+                                    {areaResponsibles.length} {areaResponsibles.length === 1 ? "responsável ativo" : "responsáveis ativos"}
+                                  </span>
+                                </div>
                               </div>
 
                               {/* Responsibles under this Area */}
