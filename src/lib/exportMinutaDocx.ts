@@ -906,3 +906,563 @@ export async function generateMinutaDocxBlob(options: ExportMinutaDocxOptions): 
 
   return await Packer.toBlob(doc);
 }
+
+export interface NotaTecnicaContributionItem {
+  id: string | number;
+  authorName: string;
+  authorInstitution?: string;
+  originType?: string;
+  protocolNumber?: string;
+  decision?: string;
+  complexity?: string;
+  proposedText: string;
+  justification: string;
+  technicalJustification: string;
+}
+
+export interface NotaTecnicaDeviceItem {
+  index: number;
+  label: string;
+  subjectsText?: string;
+  textoAtual: string;
+  textoProposto: string;
+  justificativaTecnicaFinal: string;
+  redacaoFinal: string;
+  contributions: NotaTecnicaContributionItem[];
+}
+
+export interface ExportNotaTecnicaDocxOptions {
+  superintendencia: string;
+  coordenacao: string;
+  numeroNota: string;
+  siglaUnidade: string;
+  localData: string;
+  destinatario: string;
+  processoSEI: string;
+  docSEI?: string;
+  assunto: string;
+  doObjeto: string[];
+  dosFatos: string[];
+  daFundamentacao: string[];
+  daConclusao: string[];
+  signatarios: Array<{ nome: string; matricula?: string; cargo: string; dataHora?: string }>;
+  devices: NotaTecnicaDeviceItem[];
+}
+
+function createSeiSectionBar(num: string, title: string): Table {
+  const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            shading: { fill: "E5E7EB" },
+            borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder },
+            margins: {
+              top: convertMillimetersToTwip(1.5),
+              bottom: convertMillimetersToTwip(1.5),
+              left: convertMillimetersToTwip(2.5),
+              right: convertMillimetersToTwip(2.5),
+            },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.LEFT,
+                children: [
+                  new TextRun({
+                    text: `${num}\t${title.toUpperCase()}`,
+                    bold: true,
+                    font: "Times New Roman",
+                    size: 24,
+                    color: "000000",
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+function createNumberedSeiParagraph(numPrefix: string, bodyText: string): Paragraph {
+  const clean = bodyText.trim();
+  const match = clean.match(/^(\d+(?:\.\d+)+\.?)\s+(.*)$/);
+  const prefix = match ? match[1] : numPrefix;
+  const content = match ? match[2] : clean;
+
+  return new Paragraph({
+    alignment: AlignmentType.JUSTIFIED,
+    spacing: { before: 100, after: 120, line: 276 },
+    children: [
+      new TextRun({
+        text: `${prefix}\t`,
+        font: "Times New Roman",
+        size: 24,
+      }),
+      new TextRun({
+        text: content,
+        font: "Times New Roman",
+        size: 24,
+      }),
+    ],
+  });
+}
+
+export async function generateNotaTecnicaDocxBlob(options: ExportNotaTecnicaDocxOptions): Promise<Blob> {
+  const FONT = "Times New Roman";
+  const SIZE = 24; // 12pt
+  const SMALL_SIZE = 20; // 10pt
+  const children: Array<Paragraph | Table> = [];
+
+  // 1. Cabeçalho Institucional ADASA / GDF
+  const headerLines = [
+    "Governo do Distrito Federal",
+    "Agência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal",
+    options.superintendencia,
+    options.coordenacao,
+  ].filter(Boolean);
+
+  headerLines.forEach((line, idx) => {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: idx === 0 ? 0 : 20, after: idx === headerLines.length - 1 ? 240 : 20, line: 240 },
+        children: [
+          new TextRun({
+            text: line.trim(),
+            bold: idx < 2,
+            font: FONT,
+            size: 22,
+          }),
+        ],
+      })
+    );
+  });
+
+  // 2. Identificação da Nota Técnica e Local/Data
+  const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+  children.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.LEFT,
+                  children: [
+                    new TextRun({
+                      text: `Nota Técnica N.º ${options.numeroNota} - ${options.siglaUnidade}`,
+                      font: FONT,
+                      size: SIZE,
+                    }),
+                  ],
+                }),
+              ],
+            }),
+            new TableCell({
+              borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.RIGHT,
+                  children: [
+                    new TextRun({
+                      text: options.localData,
+                      font: FONT,
+                      size: SIZE,
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    })
+  );
+
+  // 3. Destinatário e Assunto
+  children.push(
+    new Paragraph({
+      alignment: AlignmentType.LEFT,
+      spacing: { before: 200, after: 160 },
+      children: [
+        new TextRun({
+          text: options.destinatario,
+          font: FONT,
+          size: SIZE,
+        }),
+      ],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.JUSTIFIED,
+      spacing: { before: 80, after: 240, line: 260 },
+      children: [
+        new TextRun({
+          text: "Assunto: ",
+          bold: true,
+          font: FONT,
+          size: SIZE,
+        }),
+        new TextRun({
+          text: options.assunto,
+          font: FONT,
+          size: SIZE,
+        }),
+      ],
+    })
+  );
+
+  // SEÇÃO 1. DO OBJETO
+  children.push(createSeiSectionBar("1.", "DO OBJETO"));
+  options.doObjeto.forEach((line, idx) => {
+    children.push(createNumberedSeiParagraph(`1.${idx + 1}.`, line));
+  });
+
+  // SEÇÃO 2. DOS FATOS
+  children.push(new Paragraph({ spacing: { before: 120, after: 60 }, children: [] }));
+  children.push(createSeiSectionBar("2.", "DOS FATOS"));
+  options.dosFatos.forEach((line, idx) => {
+    children.push(createNumberedSeiParagraph(`2.${idx + 1}.`, line));
+  });
+
+  // SEÇÃO 3. DA ANÁLISE (Preenchido automaticamente)
+  children.push(new Paragraph({ spacing: { before: 120, after: 60 }, children: [] }));
+  children.push(createSeiSectionBar("3.", "DA ANÁLISE"));
+
+  const cellBorder = { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" };
+  const cellBorders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder };
+
+  const makeFieldRow = (label: string, value: string, shadeLabel = "F1F5F9", shadeValue?: string) =>
+    new TableRow({
+      children: [
+        new TableCell({
+          width: { size: 28, type: WidthType.PERCENTAGE },
+          shading: { fill: shadeLabel },
+          borders: cellBorders,
+          margins: {
+            top: convertMillimetersToTwip(2),
+            bottom: convertMillimetersToTwip(2),
+            left: convertMillimetersToTwip(2.5),
+            right: convertMillimetersToTwip(2.5),
+          },
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              spacing: { before: 30, after: 30, line: 240 },
+              children: [
+                new TextRun({
+                  text: label,
+                  bold: true,
+                  font: FONT,
+                  size: SMALL_SIZE,
+                  color: "000000",
+                }),
+              ],
+            }),
+          ],
+        }),
+        new TableCell({
+          width: { size: 72, type: WidthType.PERCENTAGE },
+          shading: shadeValue ? { fill: shadeValue } : undefined,
+          borders: cellBorders,
+          margins: {
+            top: convertMillimetersToTwip(2),
+            bottom: convertMillimetersToTwip(2),
+            left: convertMillimetersToTwip(2.5),
+            right: convertMillimetersToTwip(2.5),
+          },
+          children: (value || "-")
+            .split("\n")
+            .map(
+              (ln) =>
+                new Paragraph({
+                  alignment: AlignmentType.JUSTIFIED,
+                  spacing: { before: 30, after: 30, line: 260 },
+                  children: [
+                    new TextRun({
+                      text: ln,
+                      font: FONT,
+                      size: SIZE,
+                      color: "000000",
+                    }),
+                  ],
+                })
+            ),
+        }),
+      ],
+    });
+
+  if (options.devices.length === 0) {
+    children.push(
+      createNumberedSeiParagraph("3.1.", "Nenhum dispositivo encontrado para compor a análise técnica.")
+    );
+  } else {
+    options.devices.forEach((dev, dIdx) => {
+      const itemNum = `3.${dIdx + 1}.`;
+      const headerText = `${dev.label}${dev.subjectsText ? ` — Assunto: ${dev.subjectsText}` : ""}`;
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { before: 200, after: 100, line: 260 },
+          children: [
+            new TextRun({
+              text: `${itemNum}\t`,
+              bold: true,
+              font: FONT,
+              size: SIZE,
+            }),
+            new TextRun({
+              text: headerText,
+              bold: true,
+              font: FONT,
+              size: SIZE,
+            }),
+          ],
+        })
+      );
+
+      const deviceRows: TableRow[] = [
+        makeFieldRow("DISPOSITIVO", headerText, "E2E8F0"),
+        makeFieldRow("TEXTO ATUAL", dev.textoAtual),
+        makeFieldRow("TEXTO PROPOSTO", dev.textoProposto),
+      ];
+
+      if (dev.contributions.length === 0) {
+        deviceRows.push(
+          makeFieldRow("CONTRIBUIÇÕES", "Nenhuma contribuição recebida para este dispositivo."),
+          makeFieldRow("TEXTO DA CONTRIBUIÇÃO SUGERIDA", "Não houve contribuição sugerida."),
+          makeFieldRow("JUSTIFICATIVA DO PARTICIPANTE", "Não aplicável."),
+          makeFieldRow("JUSTIFICATIVA TÉCNICA (RESPOSTA)", "Não aplicável.")
+        );
+      } else {
+        const resumoContribs = `${dev.contributions.length} contribuição(ões) recebida(s): ` +
+          dev.contributions
+            .map(
+              (c, cIdx) =>
+                `[${cIdx + 1}] ${c.authorName}${c.authorInstitution ? ` (${c.authorInstitution})` : ""} — Parecer: ${c.decision || "Pendente Análise da Equipe"}`
+            )
+            .join("; ");
+        deviceRows.push(makeFieldRow("CONTRIBUIÇÕES", resumoContribs, "EEF2FF"));
+
+        dev.contributions.forEach((c, cIdx) => {
+          const prefix = dev.contributions.length > 1 ? `[Contribuição #${cIdx + 1} - ${c.authorName}${c.authorInstitution ? ` / ${c.authorInstitution}` : ""}]\n` : `[Participante: ${c.authorName}${c.authorInstitution ? ` / ${c.authorInstitution}` : ""}]\n`;
+          const parecerLine = `Parecer Técnico: ${c.decision || "Pendente Análise da Equipe"}${c.complexity ? ` | Complexidade: ${c.complexity}` : ""}\n`;
+          deviceRows.push(
+            makeFieldRow(
+              dev.contributions.length > 1 ? `TEXTO DA CONTRIBUIÇÃO SUGERIDA (#${cIdx + 1})` : "TEXTO DA CONTRIBUIÇÃO SUGERIDA",
+              `${prefix}${c.proposedText || "-"}`
+            ),
+            makeFieldRow(
+              dev.contributions.length > 1 ? `JUSTIFICATIVA DO PARTICIPANTE (#${cIdx + 1})` : "JUSTIFICATIVA DO PARTICIPANTE",
+              c.justification || "Sem justificativa informada pelo participante."
+            ),
+            makeFieldRow(
+              dev.contributions.length > 1 ? `JUSTIFICATIVA TÉCNICA (RESPOSTA) (#${cIdx + 1})` : "JUSTIFICATIVA TÉCNICA (RESPOSTA)",
+              `${parecerLine}${c.technicalJustification || "Pendente de justificativa técnica."}`
+            )
+          );
+        });
+      }
+
+      deviceRows.push(
+        makeFieldRow("JUSTIFICATIVA TÉCNICA FINAL", dev.justificativaTecnicaFinal, "E0E7FF", "F8FAFC"),
+        makeFieldRow("REDAÇÃO FINAL APÓS ANÁLISE", dev.redacaoFinal, "DCFCE7", "F0FDF4")
+      );
+
+      children.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: deviceRows,
+        }),
+        new Paragraph({ spacing: { before: 120, after: 80 }, children: [] })
+      );
+    });
+  }
+
+  // SEÇÃO 4. DA FUNDAMENTAÇÃO LEGAL
+  children.push(new Paragraph({ spacing: { before: 120, after: 60 }, children: [] }));
+  children.push(createSeiSectionBar("4.", "DA FUNDAMENTAÇÃO LEGAL"));
+  options.daFundamentacao.forEach((line, idx) => {
+    children.push(createNumberedSeiParagraph(`4.${idx + 1}.`, line));
+  });
+
+  // SEÇÃO 5. DA CONCLUSÃO
+  children.push(new Paragraph({ spacing: { before: 120, after: 60 }, children: [] }));
+  children.push(createSeiSectionBar("5.", "DA CONCLUSÃO"));
+  options.daConclusao.forEach((line, idx) => {
+    children.push(createNumberedSeiParagraph(`5.${idx + 1}.`, line));
+  });
+
+  // Fecho "Atenciosamente,"
+  children.push(
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 320, after: 280 },
+      children: [
+        new TextRun({
+          text: "Atenciosamente,",
+          font: FONT,
+          size: SIZE,
+        }),
+      ],
+    })
+  );
+
+  // Bloco de Assinaturas Eletrônicas (estilo SEI)
+  options.signatarios.forEach((sig) => {
+    children.push(
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                width: { size: 18, type: WidthType.PERCENTAGE },
+                borders: cellBorders,
+                margins: {
+                  top: convertMillimetersToTwip(2),
+                  bottom: convertMillimetersToTwip(2),
+                  left: convertMillimetersToTwip(2),
+                  right: convertMillimetersToTwip(2),
+                },
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    children: [
+                      new TextRun({
+                        text: "sei!",
+                        bold: true,
+                        font: FONT,
+                        size: 28,
+                        color: "475569",
+                      }),
+                    ],
+                  }),
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    children: [
+                      new TextRun({
+                        text: "assinatura eletrônica",
+                        font: FONT,
+                        size: 16,
+                        color: "64748B",
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+              new TableCell({
+                width: { size: 82, type: WidthType.PERCENTAGE },
+                borders: cellBorders,
+                margins: {
+                  top: convertMillimetersToTwip(2),
+                  bottom: convertMillimetersToTwip(2),
+                  left: convertMillimetersToTwip(3),
+                  right: convertMillimetersToTwip(3),
+                },
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.JUSTIFIED,
+                    children: [
+                      new TextRun({
+                        text: "Documento assinado eletronicamente por ",
+                        font: FONT,
+                        size: SMALL_SIZE,
+                      }),
+                      new TextRun({
+                        text: `${sig.nome}${sig.matricula ? ` - Matr.${sig.matricula}` : ""}, ${sig.cargo}`,
+                        bold: true,
+                        font: FONT,
+                        size: SMALL_SIZE,
+                      }),
+                      new TextRun({
+                        text: `, conforme art. 6º do Decreto n° 36.756, de 16 de setembro de 2015, publicado no Diário Oficial do Distrito Federal nº 180, quinta-feira, 17 de setembro de 2015.`,
+                        font: FONT,
+                        size: SMALL_SIZE,
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+      new Paragraph({ spacing: { before: 80, after: 80 }, children: [] })
+    );
+  });
+
+  // Rodapé Institucional ADASA / SEI
+  children.push(
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 320, after: 40 },
+      children: [
+        new TextRun({
+          text: '"Brasília - Patrimônio Cultural da Humanidade"',
+          font: FONT,
+          size: SMALL_SIZE,
+        }),
+      ],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 20, after: 20 },
+      children: [
+        new TextRun({
+          text: "Setor Ferroviário - Parque Ferroviário de Brasília - Estação Rodoferroviária - Sobreloja - Ala Norte - Bairro SAIN - CEP 70631-900 - DF",
+          font: FONT,
+          size: 18,
+        }),
+      ],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 20, after: 120 },
+      children: [
+        new TextRun({
+          text: "Telefone(s): 3961-4990 | Sítio - www.adasa.df.gov.br",
+          font: FONT,
+          size: 18,
+        }),
+      ],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [
+        new TextRun({
+          text: `SEI ${options.processoSEI}${options.docSEI ? ` | Doc. SEI/GDF ${options.docSEI}` : ""}`,
+          font: FONT,
+          size: 18,
+          color: "64748B",
+        }),
+      ],
+    })
+  );
+
+  const doc = new Document({
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: {
+              top: convertMillimetersToTwip(25),
+              left: convertMillimetersToTwip(25),
+              right: convertMillimetersToTwip(20),
+              bottom: convertMillimetersToTwip(20),
+            },
+          },
+        },
+        children,
+      },
+    ],
+  });
+
+  return await Packer.toBlob(doc);
+}
+

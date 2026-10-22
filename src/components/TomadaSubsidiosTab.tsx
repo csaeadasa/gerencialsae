@@ -13,7 +13,7 @@ import { SubjectPickerModal } from "./SubjectPickerModal";
 import { RegulatoryTableView } from "./RegulatoryTableView";
 import { TableModalPreview } from "./TableModalPreview";
 import { RegulatoryTable, isTableJson, parseTableData, serializeTableData, DEFAULT_TABLE_TEMPLATES, formatContentForExport, formatContentForPdf } from "../lib/tableStructure";
-import { generateMinutaDocxBlob, isChapterOrSectionHeader, isChapterSubtitle, parseNormativePrefix } from "../lib/exportMinutaDocx";
+import { generateMinutaDocxBlob, generateNotaTecnicaDocxBlob, NotaTecnicaDeviceItem, isChapterOrSectionHeader, isChapterSubtitle, parseNormativePrefix } from "../lib/exportMinutaDocx";
 
 
 
@@ -365,6 +365,16 @@ interface ContributionAnalysisItemProps {
   showToast: (title: string, message: string, type: "success" | "error" | "warning" | "info") => void;
 }
 
+const sanitizeInternalNotes = (rawHtml?: string): string => {
+  if (!rawHtml) return "";
+  return DOMPurify.sanitize(rawHtml, {
+    ALLOWED_TAGS: ["b", "strong", "u", "ul", "ol", "li", "p", "div", "br"],
+    ALLOWED_ATTR: [],
+    FORBID_TAGS: ["style", "script", "head", "title", "meta", "xml"],
+    FORBID_CONTENTS: ["style", "script", "head", "title", "meta", "xml"],
+  }).trim();
+};
+
 const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, article, handleUpdateAnalysis, showToast }) => {
   const originalText = (article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText) || "";
   const isTable = article.contentType === 'table' || isTableJson(c.proposedText) || isTableJson(originalText);
@@ -376,14 +386,15 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
   const [decision, setDecision] = useState(c.decision || "");
   const [complexity, setComplexity] = useState(c.complexity || "");
   const [technicalJustification, setTechnicalJustification] = useState(c.technicalJustification || "");
-  const [notes, setNotes] = useState(c.notes || "");
+  const [notes, setNotes] = useState(sanitizeInternalNotes(c.notes || ""));
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
+  const notesEditorRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setDecision(c.decision || "");
     setComplexity(c.complexity || "");
     setTechnicalJustification(c.technicalJustification || "");
-    setNotes(c.notes || "");
+    setNotes(sanitizeInternalNotes(c.notes || ""));
   }, [c]);
 
   const handleSuggestAI = async () => {
@@ -418,7 +429,7 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
   };
 
   const handleSave = () => {
-    handleUpdateAnalysis(c.id, decision, complexity, technicalJustification, notes);
+    handleUpdateAnalysis(c.id, decision, complexity, technicalJustification, sanitizeInternalNotes(notes));
     setIsEditingAnalysis(false);
   };
 
@@ -426,7 +437,7 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
     setDecision(c.decision || "");
     setComplexity(c.complexity || "");
     setTechnicalJustification(c.technicalJustification || "");
-    setNotes(c.notes || "");
+    setNotes(sanitizeInternalNotes(c.notes || ""));
     setIsEditingAnalysis(false);
   };
 
@@ -515,6 +526,8 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
                   <option value="Não Acatada">Não Acatada</option>
                   <option value="Prejudicada">Prejudicada</option>
                   <option value="Retida para Estudos Adicionais">Retida para Estudos Adicionais</option>
+                  <option value="Devolvida para Justificativas Adicionais">Devolvida para Justificativas Adicionais</option>
+                  <option value="Pendente Análise da Equipe">Pendente Análise da Equipe</option>
                 </select>
               </div>
             </>
@@ -532,10 +545,11 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
                   <span className={cn(
                     "text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded border",
                     c.decision === "Acatada" ? "bg-emerald-100 text-emerald-800 border-emerald-300" :
-                    c.decision === "Acatada Parcialmente" ? "bg-amber-100 text-amber-800 border-amber-300" :
+                    (c.decision === "Acatada Parcialmente" || c.decision === "Parcialmente Acatada") ? "bg-amber-100 text-amber-800 border-amber-300" :
                     c.decision === "Não Acatada" ? "bg-rose-100 text-rose-800 border-rose-300" :
                     c.decision === "Prejudicada" ? "bg-slate-200 text-slate-700 border-slate-400" :
                     c.decision === "Retida para Estudos Adicionais" ? "bg-indigo-100 text-indigo-800 border-indigo-300" :
+                    c.decision === "Devolvida para Justificativas Adicionais" ? "bg-orange-100 text-orange-800 border-orange-300" :
                     "bg-slate-100 text-slate-600 border-slate-300"
                   )}>
                     {c.decision}
@@ -648,12 +662,12 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
           {c.notes && !isEditingAnalysis && (
             <div className="pt-4 border-t border-slate-200">
               <div className="flex items-center gap-2 mb-3">
-                <FileText size={14} className="text-emerald-600" />
-                <span className="block text-xs font-black text-emerald-700 uppercase tracking-wider">Anotações Internas</span>
+                <FileText size={14} className="text-slate-600" />
+                <span className="block text-xs font-black text-slate-600 uppercase tracking-wider">Anotações Internas</span>
               </div>
               <div 
-                className="text-xs text-slate-700 leading-relaxed bg-emerald-50/50 p-3 rounded-lg border border-emerald-100 shadow-sm prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1"
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(c.notes || "") }}
+                className="text-xs text-slate-700 font-sans leading-relaxed bg-white p-3 rounded-lg border border-slate-200 shadow-sm [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_p]:my-1 [&_div]:my-0.5 [&_u]:underline [&_b]:font-bold [&_strong]:font-bold"
+                dangerouslySetInnerHTML={{ __html: sanitizeInternalNotes(c.notes || "") }}
               />
             </div>
           )}
@@ -667,7 +681,7 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
             <div className="p-4 border-b border-slate-100 flex items-center justify-between shrink-0">
               <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
                 <FileText size={18} className="text-indigo-600" />
-                Anotações (Formatadas) - {c.authorName}
+                Anotações Internas - {c.authorName}
               </h3>
               <button onClick={() => setIsNotesModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X size={20} />
@@ -675,29 +689,81 @@ const ContributionAnalysisItem: React.FC<ContributionAnalysisItemProps> = ({ c, 
             </div>
             <div className="p-4 overflow-y-auto flex-1 flex flex-col">
               <div className="flex gap-2 mb-2 bg-slate-100 p-2 rounded-lg border border-slate-200 shrink-0">
-                <button onClick={() => document.execCommand('bold', false, '')} className="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-white hover:text-indigo-600 rounded shadow-sm font-serif font-bold transition-colors">B</button>
-                <button onClick={() => document.execCommand('italic', false, '')} className="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-white hover:text-indigo-600 rounded shadow-sm font-serif italic transition-colors">I</button>
-                <button onClick={() => document.execCommand('underline', false, '')} className="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-white hover:text-indigo-600 rounded shadow-sm font-serif underline transition-colors">U</button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => document.execCommand('bold', false, '')}
+                  className="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-white hover:text-indigo-600 rounded shadow-sm font-sans font-bold text-xs transition-colors"
+                  title="Negrito"
+                >
+                  B
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => document.execCommand('underline', false, '')}
+                  className="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-white hover:text-indigo-600 rounded shadow-sm font-sans underline text-xs font-bold transition-colors"
+                  title="Sublinhado (traço embaixo do texto)"
+                >
+                  U
+                </button>
                 <div className="w-px bg-slate-300 mx-1"></div>
-                <button onClick={() => document.execCommand('insertUnorderedList', false, '')} className="px-2 h-8 flex items-center justify-center text-slate-700 hover:bg-white hover:text-indigo-600 rounded shadow-sm text-xs font-bold transition-colors">Lista (Bolinha)</button>
-                <button onClick={() => document.execCommand('insertOrderedList', false, '')} className="px-2 h-8 flex items-center justify-center text-slate-700 hover:bg-white hover:text-indigo-600 rounded shadow-sm text-xs font-bold transition-colors">Lista (Número)</button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => document.execCommand('insertUnorderedList', false, '')}
+                  className="px-2.5 h-8 flex items-center justify-center text-slate-700 hover:bg-white hover:text-indigo-600 rounded shadow-sm text-xs font-bold transition-colors"
+                >
+                  Lista (Marcadores)
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => document.execCommand('insertOrderedList', false, '')}
+                  className="px-2.5 h-8 flex items-center justify-center text-slate-700 hover:bg-white hover:text-indigo-600 rounded shadow-sm text-xs font-bold transition-colors"
+                >
+                  Numeração
+                </button>
               </div>
               <div 
+                ref={notesEditorRef}
                 contentEditable
                 suppressContentEditableWarning
-                className="w-full flex-1 overflow-y-auto border border-slate-300 rounded-lg p-4 text-sm focus:outline-indigo-500 bg-white shadow-inner prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(notes || "") }}
-                onBlur={(e) => setNotes(DOMPurify.sanitize(e.currentTarget.innerHTML))}
+                className="w-full flex-1 overflow-y-auto border border-slate-300 rounded-lg p-4 text-xs text-slate-700 font-sans leading-relaxed focus:outline-indigo-500 bg-white shadow-inner [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_p]:my-1 [&_div]:my-0.5 [&_u]:underline [&_b]:font-bold [&_strong]:font-bold"
+                dangerouslySetInnerHTML={{ __html: sanitizeInternalNotes(notes || "") }}
+                onKeyDown={(e) => {
+                  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
+                    e.preventDefault();
+                  }
+                }}
+                onPaste={(e) => {
+                  e.preventDefault();
+                  const clipboardHtml = e.clipboardData.getData("text/html");
+                  const clipboardText = e.clipboardData.getData("text/plain");
+                  if (clipboardHtml) {
+                    const cleanHtml = sanitizeInternalNotes(clipboardHtml);
+                    document.execCommand("insertHTML", false, cleanHtml);
+                  } else if (clipboardText) {
+                    document.execCommand("insertText", false, clipboardText);
+                  }
+                }}
+                onBlur={(e) => {
+                  const cleaned = sanitizeInternalNotes(e.currentTarget.innerHTML);
+                  setNotes(cleaned);
+                }}
               />
-              <p className="text-[10px] text-slate-500 mt-2 font-medium shrink-0">As anotações são salvas internamente e podem conter destaques, listas e itálico.</p>
+              <p className="text-[10px] text-slate-500 mt-2 font-medium shrink-0">As anotações internas utilizam a mesma fonte e cor de fundo dos demais campos do aplicativo, permitindo negrito, sublinhado, listas e numeração.</p>
             </div>
             <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 rounded-b-2xl shrink-0">
-              <button onClick={() => { setNotes(c.notes || ""); setIsNotesModalOpen(false); }} className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-xl transition-colors">
+              <button onClick={() => { setNotes(sanitizeInternalNotes(c.notes || "")); setIsNotesModalOpen(false); }} className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-xl transition-colors">
                 Cancelar
               </button>
               <button 
                 onClick={() => { 
-                  handleUpdateAnalysis(c.id, decision, complexity, technicalJustification, notes);
+                  const currentHtml = notesEditorRef.current ? notesEditorRef.current.innerHTML : notes;
+                  const cleanedNotes = sanitizeInternalNotes(currentHtml);
+                  setNotes(cleanedNotes);
+                  handleUpdateAnalysis(c.id, decision, complexity, technicalJustification, cleanedNotes);
                   setIsNotesModalOpen(false);
                 }} 
                 className="px-4 py-2 bg-adasa-mid hover:bg-adasa-hover text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors shadow-sm flex items-center gap-2"
@@ -736,7 +802,14 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
   const displayedContributions = React.useMemo(() => {
     return contributions.filter(c => {
       if (filters?.complexity && filters.complexity !== "todos" && (c.complexity || "Não Classificado") !== filters.complexity) return false;
-      if (filters?.decision && filters.decision !== "todos" && (c.decision || "Pendente") !== filters.decision) return false;
+      if (filters?.decision && filters.decision !== "todos") {
+        const currentDecision = (!c.decision || c.decision === "Pendente") ? "Pendente Análise da Equipe" : c.decision;
+        if (filters.decision === "Parcialmente Acatada" || filters.decision === "Acatada Parcialmente") {
+          if (currentDecision !== "Parcialmente Acatada" && currentDecision !== "Acatada Parcialmente") return false;
+        } else if (currentDecision !== filters.decision) {
+          return false;
+        }
+      }
       if (filters?.participant && filters.participant !== "todos" && c.authorName !== filters.participant) return false;
       if (filters?.content && filters.content.trim()) {
         const search = filters.content.toLowerCase();
@@ -757,7 +830,8 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
       const todasNaoAcatadas = contributions.length > 0 && contributions.every(c => 
         c.decision === "Não Acatada" || 
         c.decision === "Prejudicada" || 
-        c.decision === "Retida para Estudos Adicionais"
+        c.decision === "Retida para Estudos Adicionais" ||
+        c.decision === "Devolvida para Justificativas Adicionais"
       );
 
       let newFinalText = finalText;
@@ -1174,7 +1248,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
     
   const [activeView, setActiveView] = useState<"list" | "create_step1" | "create_step2" | "public_view" | "public_contribute" | "public_contributions" | "technical_analysis">("list");
   const [publicTab, setPublicTab] = useState<"contribuir" | "ver">("contribuir");
-  const [analysisTab, setAnalysisTab] = useState<"contribuicoes" | "painel" | "minuta">("contribuicoes");
+  const [analysisTab, setAnalysisTab] = useState<"contribuicoes" | "painel" | "nota_tecnica" | "minuta">("contribuicoes");
   const [expandedRowArtId, setExpandedRowArtId] = useState<string | number | null>(null);
   const [selectedResolutionForModal, setSelectedResolutionForModal] = useState<any>(null);
   const [selectedTomada, setSelectedTomada] = useState<TomadaSubsidio | null>(null);
@@ -1204,6 +1278,34 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
   const [minutaAssinante, setMinutaAssinante] = useState<string>("RAIMUNDO RIBEIRO");
   const [minutaCopied, setMinutaCopied] = useState<boolean>(false);
   const [isExportingWord, setIsExportingWord] = useState<boolean>(false);
+
+  // Nota Técnica State (Parâmetros de Entrada)
+  const [ntSuperintendencia, setNtSuperintendencia] = useState<string>("Superintendência de Abastecimento de Água e Esgoto");
+  const [ntCoordenacao, setNtCoordenacao] = useState<string>("Coordenação de Regulação e Outorga da Superintendência de Abastecimento de Água e Esgoto");
+  const [ntNumero, setNtNumero] = useState<string>("14/2025");
+  const [ntSiglaUnidade, setNtSiglaUnidade] = useState<string>("ADASA/SAE/CORA");
+  const [ntLocalData, setNtLocalData] = useState<string>(() => {
+    const today = new Date();
+    const meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+    return `Brasília-DF, ${today.getDate()} de ${meses[today.getMonth()]} de ${today.getFullYear()}.`;
+  });
+  const [ntDestinatario, setNtDestinatario] = useState<string>("À DIR,");
+  const [ntProcessoSEI, setNtProcessoSEI] = useState<string>("00197-00001589/2025-61");
+  const [ntDocSEI, setNtDocSEI] = useState<string>("178590419");
+  const [ntAssunto, setNtAssunto] = useState<string>("");
+  const [ntObjeto, setNtObjeto] = useState<string>("");
+  const [ntFatos, setNtFatos] = useState<string>("");
+  const [ntFundamentacao, setNtFundamentacao] = useState<string>(
+    "Lei Distrital nº 4.285, de 26 de dezembro de 2008, que reestrutura a Agência Reguladora de Águas e Saneamento do Distrito Federal – ADASA/DF, dispõe sobre recursos hídricos e serviços públicos no Distrito Federal e dá outras providências;\nLei Federal nº 11.445, de 5 de janeiro de 2007, que estabelece as diretrizes nacionais para o saneamento básico; cria o Comitê Interministerial de Saneamento Básico; altera as Leis nos 6.766, de 19 de dezembro de 1979, 8.666, de 21 de junho de 1993, e 8.987, de 13 de fevereiro de 1995; e revoga a Lei nº 6.528, de 11 de maio de 1978; e\nDecreto nº 7.217, de 21 de junho de 2010, regulamenta a Lei nº 11.445, de 5 de janeiro de 2007, que estabelece diretrizes nacionais para o saneamento básico, e dá outras providências."
+  );
+  const [ntConclusao, setNtConclusao] = useState<string>("");
+  const [ntSignatarios, setNtSignatarios] = useState<string>(
+    "RAFAEL MACHADO MELLO | 0127459-7 | Superintendente de Abastecimento de Água e Esgoto da ADASA\nFABIO SOUZA DINIZ | 0193166-0 | Regulador(a) de Serviços Públicos\nLEANDRO ANTONIO DINIZ OLIVEIRA | 0265256-0 | Coordenador(a) de Regulação e Outorga"
+  );
+  const [ntAnaliseFiltro, setNtAnaliseFiltro] = useState<"todos" | "com_contribuicoes" | "analisados">("todos");
+  const [ntCopied, setNtCopied] = useState<boolean>(false);
+  const [isExportingNotaWord, setIsExportingNotaWord] = useState<boolean>(false);
+
   const [customTemplateFile, setCustomTemplateFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(() => {
     try {
       const savedName = localStorage.getItem("minuta_custom_template_name");
@@ -3674,9 +3776,9 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
           const isPropostaTable = art.contentType === 'table' || isTableJson((art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText));
           const isTableFinal = art.contentType === 'table' || isTableJson(art.finalText);
           const cArt = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
-          const a = cArt.filter(c => c.decision === "Acatada" || c.decision === "Acatada Parcialmente").length;
-          const na = cArt.filter(c => c.decision === "Não Acatada" || c.decision === "Prejudicada" || c.decision === "Retida para Estudos Adicionais").length;
-          const pend = cArt.filter(c => !c.decision).length;
+          const a = cArt.filter(c => c.decision === "Acatada" || c.decision === "Acatada Parcialmente" || c.decision === "Parcialmente Acatada").length;
+          const na = cArt.filter(c => c.decision === "Não Acatada" || c.decision === "Prejudicada" || c.decision === "Retida para Estudos Adicionais" || c.decision === "Devolvida para Justificativas Adicionais").length;
+          const pend = cArt.filter(c => !c.decision || c.decision === "Pendente" || c.decision === "Pendente Análise da Equipe").length;
           const origText = (art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "";
           const fText = art.finalText || origText;
           const isAlterada = fText.trim() !== origText.trim();
@@ -5664,10 +5766,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                     <span className={cn(
                                       "inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border whitespace-nowrap",
                                       c.decision === "Acatada" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                                      c.decision === "Acatada Parcialmente" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                                      (c.decision === "Acatada Parcialmente" || c.decision === "Parcialmente Acatada") ? "bg-amber-50 text-amber-700 border-amber-200" :
                                       c.decision === "Não Acatada" ? "bg-rose-50 text-rose-700 border-rose-200" :
                                       c.decision === "Prejudicada" ? "bg-slate-100 text-slate-700 border-slate-300" :
                                       c.decision === "Retida para Estudos Adicionais" ? "bg-indigo-50 text-indigo-700 border-indigo-200" :
+                                      c.decision === "Devolvida para Justificativas Adicionais" ? "bg-orange-50 text-orange-700 border-orange-200" :
                                       "bg-slate-100 text-slate-600 border-slate-200"
                                     )}>
                                       {c.decision === "Acatada" || c.decision === "Acatada Parcialmente" ? (
@@ -5775,6 +5878,15 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 {canViewMinuta && (
                   <>
                     <button 
+                      onClick={() => setAnalysisTab("nota_tecnica")}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 outline-none",
+                        analysisTab === "nota_tecnica" ? "bg-white text-indigo-700 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-700"
+                      )}
+                    >
+                      <FileText size={14} /> Nota Técnica
+                    </button>
+                    <button 
                       onClick={() => setAnalysisTab("minuta")}
                       className={cn(
                         "px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 outline-none",
@@ -5820,7 +5932,14 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 // Filtros avançados nas contribuições
                 const matchesAdvancedFilters = artsContribs.some(c => {
                   if (analysisComplexityFilter !== "todos" && (c.complexity || "Não Classificado") !== analysisComplexityFilter) return false;
-                  if (analysisDecisionFilter !== "todos" && (c.decision || "Pendente") !== analysisDecisionFilter) return false;
+                  if (analysisDecisionFilter !== "todos") {
+                    const currentDecision = (!c.decision || c.decision === "Pendente") ? "Pendente Análise da Equipe" : c.decision;
+                    if (analysisDecisionFilter === "Parcialmente Acatada" || analysisDecisionFilter === "Acatada Parcialmente") {
+                      if (currentDecision !== "Parcialmente Acatada" && currentDecision !== "Acatada Parcialmente") return false;
+                    } else if (currentDecision !== analysisDecisionFilter) {
+                      return false;
+                    }
+                  }
                   if (analysisParticipantFilter !== "todos" && c.authorName !== analysisParticipantFilter) return false;
                   if (analysisContentFilter.trim()) {
                     const search = analysisContentFilter.toLowerCase();
@@ -6024,7 +6143,8 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           <option value="Não Acatada">Não Acatada</option>
                           <option value="Prejudicada">Prejudicada</option>
                           <option value="Retida para Estudos Adicionais">Retida para Estudos Adicionais</option>
-                          <option value="Pendente">Pendente</option>
+                          <option value="Devolvida para Justificativas Adicionais">Devolvida para Justificativas Adicionais</option>
+                          <option value="Pendente Análise da Equipe">Pendente Análise da Equipe</option>
                         </select>
                       </div>
 
@@ -6099,9 +6219,9 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
             {analysisTab === "painel" && (() => {
               // Dashboard logic
               const totalContribs = tomadaContributions.length;
-              const acatadas = tomadaContributions.filter(c => c.decision === "Acatada" || c.decision === "Acatada Parcialmente").length;
-              const naoAcatadas = tomadaContributions.filter(c => c.decision === "Não Acatada" || c.decision === "Prejudicada" || c.decision === "Retida para Estudos Adicionais").length;
-              const aguardando = tomadaContributions.filter(c => !c.decision).length;
+              const acatadas = tomadaContributions.filter(c => c.decision === "Acatada" || c.decision === "Acatada Parcialmente" || c.decision === "Parcialmente Acatada").length;
+              const naoAcatadas = tomadaContributions.filter(c => c.decision === "Não Acatada" || c.decision === "Prejudicada" || c.decision === "Retida para Estudos Adicionais" || c.decision === "Devolvida para Justificativas Adicionais").length;
+              const aguardando = tomadaContributions.filter(c => !c.decision || c.decision === "Pendente" || c.decision === "Pendente Análise da Equipe").length;
 
               const pieData = [
                 { name: "Acatadas", value: acatadas, color: "#10b981" },
@@ -7125,6 +7245,905 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           )}
                         </tbody>
                       </table>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {analysisTab === "nota_tecnica" && (() => {
+              const meiodePart = selectedTomada.meioParticipacao || "Consulta Pública";
+              const consultNumber = selectedTomada.numero || "001/2026";
+              const defaultAssunto = selectedTomada.objeto || selectedTomada.title || "indicadores operacionais da prestação dos serviços públicos de abastecimento de água e esgotamento sanitário no Distrito Federal";
+              const effectiveAssunto = ntAssunto.trim() ? ntAssunto : defaultAssunto;
+
+              const defaultObjeto = `Apresentar, para deliberação da Diretoria Colegiada, o resultado da análise técnica das contribuições recebidas no âmbito da ${meiodePart} nº ${consultNumber} e a respectiva proposta consolidada de minuta de resolução que dispõe sobre ${defaultAssunto}.`;
+              const effectiveObjetoLines = (ntObjeto.trim() ? ntObjeto : defaultObjeto)
+                .split("\n")
+                .map(s => s.trim())
+                .filter(Boolean);
+
+              const defaultFatos = [
+                `A Agência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal (Adasa), no exercício de suas competências regulatórias, conforme disposto nos arts. 7º e 9º da Lei Distrital nº 4.285/2008, submeteu ao processo de ${meiodePart} nº ${consultNumber} a minuta de resolução referente a ${selectedTomada.title || defaultAssunto}.`,
+                `No período de recebimento de contribuições (${formatDateBr(selectedTomada.dataInicio)} a ${formatDateBr(selectedTomada.dataFim)}), foram registradas ${tomadaContributions.length} contribuição(ões) de ${uniqueParticipants} participante(s) nos dispositivos colocados em discussão.`,
+                `Concluído o período de participação social, a equipe técnica procedeu ao exame individualizado das sugestões e justificativas encaminhadas pelos participantes, consolidando os pareceres técnicos e a redação final de cada dispositivo.`
+              ].join("\n");
+              const effectiveFatosLines = (ntFatos.trim() ? ntFatos : defaultFatos)
+                .split("\n")
+                .map(s => s.trim())
+                .filter(Boolean);
+
+              const effectiveFundamentacaoLines = (ntFundamentacao.trim() ? ntFundamentacao : "Lei Distrital nº 4.285, de 26 de dezembro de 2008, que reestrutura a Agência Reguladora de Águas e Saneamento do Distrito Federal – ADASA/DF, dispõe sobre recursos hídricos e serviços públicos no Distrito Federal e dá outras providências;")
+                .split("\n")
+                .map(s => s.trim())
+                .filter(Boolean);
+
+              const defaultConclusao = `Diante do exposto, submetemos à deliberação da Diretoria Colegiada da Adasa a presente Nota Técnica contendo a análise detalhada das contribuições da ${meiodePart} nº ${consultNumber} e a minuta de Resolução consolidada após análise técnica.`;
+              const effectiveConclusaoLines = (ntConclusao.trim() ? ntConclusao : defaultConclusao)
+                .split("\n")
+                .map(s => s.trim())
+                .filter(Boolean);
+
+              const parsedSignatarios = ntSignatarios
+                .split("\n")
+                .map(line => line.trim())
+                .filter(Boolean)
+                .map(line => {
+                  const parts = line.split("|").map(p => p.trim());
+                  return {
+                    nome: parts[0] || "SERVIDOR(A) DA ADASA",
+                    matricula: parts[1] || "",
+                    cargo: parts[2] || "Regulador(a) de Serviços Públicos",
+                  };
+                });
+
+              // Filtrar dispositivos para a seção 3. DA ANÁLISE
+              const filteredDevicesForNT = currentArticles.filter(art => {
+                const cArt = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
+                if (ntAnaliseFiltro === "com_contribuicoes") return cArt.length > 0;
+                if (ntAnaliseFiltro === "analisados") return Boolean(art.finalText && art.finalText.trim().length > 0) || cArt.some(c => Boolean(c.decision));
+                return true;
+              });
+
+              const formatTextOrTableForNT = (rawContent?: string, fallbackText = "-"): string => {
+                if (!rawContent || !rawContent.trim()) return fallbackText;
+                if (isTableJson(rawContent)) {
+                  return formatContentForExport(rawContent, false, true);
+                }
+                return rawContent.trim();
+              };
+
+              // Construir lista estruturada automática para 3. DA ANÁLISE
+              const structuredDevices: NotaTecnicaDeviceItem[] = filteredDevicesForNT.map((art) => {
+                const actualIdx = currentArticles.findIndex(a => String(a.id) === String(art.id));
+                const displayIdx = actualIdx !== -1 ? actualIdx + 1 : 1;
+                const baseSource = (art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText) || "";
+                const dispInfo = getDispositivoInfo(baseSource, displayIdx);
+                const firstLine = baseSource.replace(/^["'“\s]+/, "").trim().split("\n")[0]?.trim() || "";
+                const shortHeader = art.contentType === "table"
+                  ? `Tabela #${displayIdx}`
+                  : art.contentType === "ementa"
+                  ? `Dispositivo #${displayIdx} (Ementa)`
+                  : art.contentType === "considerandos"
+                  ? `Dispositivo #${displayIdx} (Considerandos)`
+                  : `Dispositivo #${displayIdx}${firstLine ? ` (${firstLine.slice(0, 70)}${firstLine.length > 70 ? "..." : ""})` : ""}`;
+
+                const linkedSubjects = (art.subjectIds || [])
+                  .map(sid => (selectedTomada?.subjects || []).find(s => s.id === sid)?.name)
+                  .filter(Boolean)
+                  .join(", ");
+
+                const cArt = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
+
+                const textoAtualFormatted = selectedTomada?.tipoResolucao === "alteracao"
+                  ? formatTextOrTableForNT(art.originalText, "Sem texto atual vigente (Novo Dispositivo proposto)")
+                  : formatTextOrTableForNT(art.originalText, "Não aplicável (Proposta de Nova Norma)");
+
+                const textoPropostoFormatted = formatTextOrTableForNT(
+                  art.proposedText !== undefined && art.proposedText !== null ? art.proposedText : art.originalText,
+                  "Sem texto proposto cadastrado"
+                );
+
+                const justFinalFormatted = (art.finalJustification && art.finalJustification.trim())
+                  ? art.finalJustification.trim()
+                  : (cArt.length === 0
+                    ? "Sem contribuições recebidas para este dispositivo. Mantida a redação proposta."
+                    : "Pendente de consolidação da justificativa técnica final.");
+
+                const redacaoFinalFormatted = formatTextOrTableForNT(
+                  art.finalText,
+                  cArt.length === 0
+                    ? `${textoPropostoFormatted} (Redação original mantida)`
+                    : "Pendente de definição da redação final após análise."
+                );
+
+                return {
+                  index: displayIdx,
+                  label: shortHeader,
+                  subjectsText: linkedSubjects || undefined,
+                  textoAtual: textoAtualFormatted,
+                  textoProposto: textoPropostoFormatted,
+                  justificativaTecnicaFinal: justFinalFormatted,
+                  redacaoFinal: redacaoFinalFormatted,
+                  contributions: cArt.map(c => ({
+                    id: c.id,
+                    authorName: c.authorName || "Participante",
+                    authorInstitution: c.authorInstitution,
+                    originType: c.originType,
+                    protocolNumber: c.protocolNumber,
+                    decision: c.decision || "Pendente Análise da Equipe",
+                    complexity: c.complexity,
+                    proposedText: (c.isSuppressing || !c.proposedText?.trim())
+                      ? "[Sugestão de Supressão Integral do Dispositivo]"
+                      : formatTextOrTableForNT(c.proposedText, "-"),
+                    justification: c.justification || "Sem justificativa informada pelo participante.",
+                    technicalJustification: c.technicalJustification || "Pendente de resposta técnica.",
+                  })),
+                };
+              });
+
+              const stripLeadingNumber = (line: string) => line.replace(/^\d+(?:\.\d+)+\.?\s*/, "").trim();
+
+              const generatePlainTextNotaTecnica = (): string => {
+                let txt = `Governo do Distrito Federal\n`;
+                txt += `Agência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal\n`;
+                if (ntSuperintendencia.trim()) txt += `${ntSuperintendencia.trim()}\n`;
+                if (ntCoordenacao.trim()) txt += `${ntCoordenacao.trim()}\n`;
+                txt += `\nNota Técnica N.º ${ntNumero} - ${ntSiglaUnidade}\t\t${ntLocalData}\n\n`;
+                txt += `${ntDestinatario}\n\n`;
+                txt += `Assunto: ${effectiveAssunto}\n\n`;
+
+                txt += `1. DO OBJETO\n`;
+                effectiveObjetoLines.forEach((l, i) => {
+                  txt += `1.${i + 1}. ${stripLeadingNumber(l)}\n\n`;
+                });
+
+                txt += `2. DOS FATOS\n`;
+                effectiveFatosLines.forEach((l, i) => {
+                  txt += `2.${i + 1}. ${stripLeadingNumber(l)}\n\n`;
+                });
+
+                txt += `3. DA ANÁLISE\n\n`;
+                structuredDevices.forEach((dev, dIdx) => {
+                  txt += `3.${dIdx + 1}. ${dev.label}${dev.subjectsText ? ` — Assunto: ${dev.subjectsText}` : ""}\n`;
+                  txt += `  • DISPOSITIVO: ${dev.label}${dev.subjectsText ? ` (Assunto: ${dev.subjectsText})` : ""}\n`;
+                  txt += `  • TEXTO ATUAL:\n    ${dev.textoAtual.replace(/\n/g, "\n    ")}\n`;
+                  txt += `  • TEXTO PROPOSTO:\n    ${dev.textoProposto.replace(/\n/g, "\n    ")}\n`;
+                  if (dev.contributions.length === 0) {
+                    txt += `  • CONTRIBUIÇÕES: Nenhuma contribuição recebida para este dispositivo.\n`;
+                    txt += `  • TEXTO DA CONTRIBUIÇÃO SUGERIDA: Não houve contribuição sugerida.\n`;
+                    txt += `  • JUSTIFICATIVA DO PARTICIPANTE: Não aplicável.\n`;
+                    txt += `  • JUSTIFICATIVA TÉCNICA (RESPOSTA): Não aplicável.\n`;
+                  } else {
+                    txt += `  • CONTRIBUIÇÕES: ${dev.contributions.length} contribuição(ões) recebida(s)\n`;
+                    dev.contributions.forEach((c, cIdx) => {
+                      txt += `    [Contribuição #${cIdx + 1} — Participante: ${c.authorName}${c.authorInstitution ? ` (${c.authorInstitution})` : ""} | Parecer: ${c.decision}]\n`;
+                      txt += `    - TEXTO DA CONTRIBUIÇÃO SUGERIDA:\n      ${c.proposedText.replace(/\n/g, "\n      ")}\n`;
+                      txt += `    - JUSTIFICATIVA DO PARTICIPANTE:\n      ${c.justification.replace(/\n/g, "\n      ")}\n`;
+                      txt += `    - JUSTIFICATIVA TÉCNICA (RESPOSTA) [Parecer: ${c.decision}]:\n      ${c.technicalJustification.replace(/\n/g, "\n      ")}\n`;
+                    });
+                  }
+                  txt += `  • JUSTIFICATIVA TÉCNICA FINAL:\n    ${dev.justificativaTecnicaFinal.replace(/\n/g, "\n    ")}\n`;
+                  txt += `  • REDAÇÃO FINAL APÓS ANÁLISE:\n    ${dev.redacaoFinal.replace(/\n/g, "\n    ")}\n\n`;
+                });
+
+                txt += `4. DA FUNDAMENTAÇÃO LEGAL\n`;
+                effectiveFundamentacaoLines.forEach((l, i) => {
+                  txt += `4.${i + 1}. ${stripLeadingNumber(l)}\n\n`;
+                });
+
+                txt += `5. DA CONCLUSÃO\n`;
+                effectiveConclusaoLines.forEach((l, i) => {
+                  txt += `5.${i + 1}. ${stripLeadingNumber(l)}\n\n`;
+                });
+
+                txt += `Atenciosamente,\n\n`;
+                parsedSignatarios.forEach(sig => {
+                  txt += `Documento assinado eletronicamente por ${sig.nome}${sig.matricula ? ` - Matr.${sig.matricula}` : ""}, ${sig.cargo}.\n`;
+                });
+                txt += `\n"Brasília - Patrimônio Cultural da Humanidade"\n`;
+                txt += `Setor Ferroviário - Parque Ferroviário de Brasília - Estação Rodoferroviária - Sobreloja - Ala Norte - Bairro SAIN - CEP 70631-900 - DF\n`;
+                txt += `Telefone(s): 3961-4990 | Sítio - www.adasa.df.gov.br\n`;
+                txt += `Processo SEI ${ntProcessoSEI}${ntDocSEI ? ` | Doc. SEI/GDF ${ntDocSEI}` : ""}\n`;
+
+                return txt;
+              };
+
+              const handleCopyNotaTecnica = () => {
+                const text = generatePlainTextNotaTecnica();
+                navigator.clipboard.writeText(text);
+                setNtCopied(true);
+                showToast("Copiado com Sucesso", "A Nota Técnica foi copiada para a área de transferência.", "success");
+                setTimeout(() => setNtCopied(false), 2500);
+              };
+
+              const handlePrintNotaTecnica = () => {
+                const printContent = document.getElementById("nota-tecnica-print")?.innerHTML;
+                if (!printContent) return;
+
+                const printWindow = window.open("", "_blank");
+                if (!printWindow) {
+                  showToast("Erro", "O bloqueador de pop-ups impediu a impressão.", "error");
+                  return;
+                }
+
+                printWindow.document.write(`
+                  <!DOCTYPE html>
+                  <html>
+                  <head>
+                    <title>Nota Técnica Nº ${ntNumero} - ${ntSiglaUnidade}</title>
+                    <script src="https://cdn.tailwindcss.com"></script>
+                    <style>
+                      @media print {
+                        @page { margin: 18mm 15mm 18mm 20mm; }
+                        body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                        .print\\:hidden { display: none !important; }
+                        .print\\:shadow-none { box-shadow: none !important; }
+                        .print\\:border-none { border: none !important; }
+                        .print\\:p-0 { padding: 0 !important; }
+                      }
+                    </style>
+                  </head>
+                  <body class="bg-white text-black font-serif">
+                    <div class="max-w-4xl mx-auto leading-relaxed">
+                      ${printContent}
+                    </div>
+                    <script>
+                      setTimeout(() => {
+                        window.print();
+                      }, 800);
+                    </script>
+                  </body>
+                  </html>
+                `);
+                printWindow.document.close();
+              };
+
+              const handleExportNotaTecnicaWord = async () => {
+                try {
+                  setIsExportingNotaWord(true);
+                  const blob = await generateNotaTecnicaDocxBlob({
+                    superintendencia: ntSuperintendencia,
+                    coordenacao: ntCoordenacao,
+                    numeroNota: ntNumero,
+                    siglaUnidade: ntSiglaUnidade,
+                    localData: ntLocalData,
+                    destinatario: ntDestinatario,
+                    processoSEI: ntProcessoSEI,
+                    docSEI: ntDocSEI,
+                    assunto: effectiveAssunto,
+                    doObjeto: effectiveObjetoLines.map(stripLeadingNumber),
+                    dosFatos: effectiveFatosLines.map(stripLeadingNumber),
+                    daFundamentacao: effectiveFundamentacaoLines.map(stripLeadingNumber),
+                    daConclusao: effectiveConclusaoLines.map(stripLeadingNumber),
+                    signatarios: parsedSignatarios,
+                    devices: structuredDevices,
+                  });
+
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  const safeNum = (ntNumero || "14_2025").replace(/[^a-zA-Z0-9_-]/g, "_");
+                  const safePart = (selectedTomada.numero || "participacao").replace(/[^a-zA-Z0-9_-]/g, "_");
+                  a.download = `Nota_Tecnica_${safeNum}_${safePart}.docx`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  showToast("Download Concluído", "Nota Técnica exportada em formato Word (.docx) com sucesso.", "success");
+                } catch (err) {
+                  console.error("Erro ao exportar Nota Técnica para Word:", err);
+                  showToast("Erro na Exportação", "Não foi possível gerar o arquivo Word da Nota Técnica.", "error");
+                } finally {
+                  setIsExportingNotaWord(false);
+                }
+              };
+
+              return (
+                <div className="space-y-6">
+                  {/* Painel de Configuração e Parâmetros de Entrada da Nota Técnica */}
+                  <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-5">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-black uppercase tracking-wider text-indigo-600">GERADOR DE MINUTA DE NOTA TÉCNICA (PADRÃO SEI / ADASA)</span>
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Seção "3. DA ANÁLISE" Preenchida Automaticamente
+                          </span>
+                        </div>
+                        <h4 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2 mt-0.5">
+                          <FileText size={22} className="text-indigo-600" />
+                          Proposição de Minuta de Nota Técnica com Análise das Contribuições
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Preencha abaixo os parâmetros de cabeçalho, Objeto, Fatos, Fundamentação Legal, Conclusão e Signatários. A seção <strong>3. DA ANÁLISE</strong> é gerada automaticamente a partir das análises das contribuições de cada dispositivo.
+                        </p>
+                      </div>
+
+                      {/* Botões de Ação (Copiar, Word, PDF) */}
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <button
+                          onClick={handleCopyNotaTecnica}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all shadow-sm active:scale-95"
+                          title="Copiar texto integral da Nota Técnica para o SEI / Word"
+                        >
+                          {ntCopied ? <CheckCheck size={16} className="text-emerald-600" /> : <Copy size={16} />}
+                          <span>{ntCopied ? "Copiado!" : "Copiar Texto"}</span>
+                        </button>
+                        <button
+                          onClick={handleExportNotaTecnicaWord}
+                          disabled={isExportingNotaWord}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-all border border-blue-200 shadow-sm active:scale-95 disabled:opacity-50"
+                          title="Baixar Nota Técnica em formato Microsoft Word (.docx)"
+                        >
+                          <FileText size={16} className="text-blue-600" />
+                          <span>{isExportingNotaWord ? "Gerando Word..." : "Baixar Word (.docx)"}</span>
+                        </button>
+                        <button
+                          onClick={handlePrintNotaTecnica}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-adasa-mid hover:bg-adasa-hover text-white text-xs font-bold transition-all shadow-md shadow-adasa-dark/20 active:scale-95"
+                          title="Imprimir ou Salvar Nota Técnica em PDF"
+                        >
+                          <Printer size={16} />
+                          <span>Imprimir / PDF</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Formulário de Parâmetros de Entrada */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* Superintendência */}
+                      <div className="lg:col-span-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          Superintendência / Unidade Superior (Cabeçalho)
+                        </label>
+                        <input
+                          type="text"
+                          value={ntSuperintendencia}
+                          onChange={(e) => setNtSuperintendencia(e.target.value)}
+                          placeholder="Ex: Superintendência de Abastecimento de Água e Esgoto"
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                        />
+                      </div>
+
+                      {/* Coordenação */}
+                      <div className="lg:col-span-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          Coordenação / Unidade Técnica (Cabeçalho)
+                        </label>
+                        <input
+                          type="text"
+                          value={ntCoordenacao}
+                          onChange={(e) => setNtCoordenacao(e.target.value)}
+                          placeholder="Ex: Coordenação de Regulação e Outorga da Superintendência..."
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                        />
+                      </div>
+
+                      {/* Nº da Nota Técnica */}
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          Nº da Nota Técnica
+                        </label>
+                        <input
+                          type="text"
+                          value={ntNumero}
+                          onChange={(e) => setNtNumero(e.target.value)}
+                          placeholder="Ex: 14/2025"
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                        />
+                      </div>
+
+                      {/* Sigla da Unidade Emissora */}
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          Sigla da Unidade (SEI)
+                        </label>
+                        <input
+                          type="text"
+                          value={ntSiglaUnidade}
+                          onChange={(e) => setNtSiglaUnidade(e.target.value)}
+                          placeholder="Ex: ADASA/SAE/CORA"
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                        />
+                      </div>
+
+                      {/* Local e Data */}
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          Local e Data
+                        </label>
+                        <input
+                          type="text"
+                          value={ntLocalData}
+                          onChange={(e) => setNtLocalData(e.target.value)}
+                          placeholder="Ex: Brasília-DF, 12 de agosto de 2025."
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                        />
+                      </div>
+
+                      {/* Destinatário */}
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          Destinatário (Vocativo)
+                        </label>
+                        <input
+                          type="text"
+                          value={ntDestinatario}
+                          onChange={(e) => setNtDestinatario(e.target.value)}
+                          placeholder="Ex: À DIR,"
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                        />
+                      </div>
+
+                      {/* Processo SEI */}
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          Processo SEI-GDF
+                        </label>
+                        <input
+                          type="text"
+                          value={ntProcessoSEI}
+                          onChange={(e) => setNtProcessoSEI(e.target.value)}
+                          placeholder="Ex: 00197-00001589/2025-61"
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                        />
+                      </div>
+
+                      {/* Nº Documento SEI */}
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          Nº Doc. SEI (Rodapé)
+                        </label>
+                        <input
+                          type="text"
+                          value={ntDocSEI}
+                          onChange={(e) => setNtDocSEI(e.target.value)}
+                          placeholder="Ex: 178590419"
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                        />
+                      </div>
+
+                      {/* Filtro de Dispositivos na Seção 3. DA ANÁLISE */}
+                      <div className="lg:col-span-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          Escopo Automático da Seção "3. DA ANÁLISE"
+                        </label>
+                        <select
+                          value={ntAnaliseFiltro}
+                          onChange={(e) => setNtAnaliseFiltro(e.target.value as any)}
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3.5 py-2 outline-none focus:bg-white focus:border-indigo-500 transition-all cursor-pointer"
+                        >
+                          <option value="todos">Todos os Dispositivos da Norma ({currentArticles.length})</option>
+                          <option value="com_contribuicoes">Apenas Dispositivos com Contribuições Recebidas ({currentArticles.filter(a => tomadaContributions.some(c => String(c.articleId) === String(a.id))).length})</option>
+                          <option value="analisados">Apenas Dispositivos com Análise / Redação Final ({currentArticles.filter(a => Boolean(a.finalText && a.finalText.trim()) || tomadaContributions.some(c => String(c.articleId) === String(a.id) && Boolean(c.decision))).length})</option>
+                        </select>
+                      </div>
+
+                      {/* Assunto */}
+                      <div className="md:col-span-2 lg:col-span-4">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          Assunto da Nota Técnica
+                        </label>
+                        <input
+                          type="text"
+                          value={ntAssunto}
+                          onChange={(e) => setNtAssunto(e.target.value)}
+                          placeholder={defaultAssunto}
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium rounded-xl px-3.5 py-2.5 outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                        />
+                      </div>
+
+                      {/* 1. DO OBJETO */}
+                      <div className="md:col-span-2 lg:col-span-4">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          1. DO OBJETO (1 parágrafo por linha — numeração 1.1, 1.2 automática)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={ntObjeto}
+                          onChange={(e) => setNtObjeto(e.target.value)}
+                          placeholder={defaultObjeto}
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium rounded-xl p-3 outline-none focus:bg-white focus:border-indigo-500 transition-all leading-relaxed"
+                        />
+                      </div>
+
+                      {/* 2. DOS FATOS */}
+                      <div className="md:col-span-2 lg:col-span-4">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          2. DOS FATOS (1 parágrafo por linha — numeração 2.1, 2.2 automática)
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={ntFatos}
+                          onChange={(e) => setNtFatos(e.target.value)}
+                          placeholder={defaultFatos}
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium rounded-xl p-3 outline-none focus:bg-white focus:border-indigo-500 transition-all leading-relaxed"
+                        />
+                      </div>
+
+                      {/* Aviso de geração automática do item 3. DA ANÁLISE */}
+                      <div className="md:col-span-2 lg:col-span-4 bg-indigo-50/70 border border-indigo-200 rounded-xl p-3.5 flex items-center justify-between gap-4 flex-wrap">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-lg bg-adasa-mid text-white flex items-center justify-center font-black text-xs shrink-0">
+                            3.
+                          </div>
+                          <div>
+                            <div className="text-xs font-black uppercase tracking-wider text-indigo-950">
+                              3. DA ANÁLISE (Preenchimento 100% Automático)
+                            </div>
+                            <p className="text-[11px] text-indigo-900/80 font-medium mt-0.5">
+                              Consolidando automaticamente <strong>{structuredDevices.length}</strong> dispositivo(s) com a estrutura: Dispositivo; Texto Atual; Texto Proposto; Contribuições; Texto da Contribuição Sugerida; Justificativa do Participante; Justificativa Técnica (Resposta); Justificativa Técnica Final e Redação Final Após Análise.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 4. DA FUNDAMENTAÇÃO LEGAL */}
+                      <div className="md:col-span-2 lg:col-span-4">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          4. DA FUNDAMENTAÇÃO LEGAL (1 parágrafo por linha — numeração 4.1, 4.2 automática)
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={ntFundamentacao}
+                          onChange={(e) => setNtFundamentacao(e.target.value)}
+                          placeholder="Insira os dispositivos legais que fundamentam a Nota Técnica (1 por linha)..."
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium rounded-xl p-3 outline-none focus:bg-white focus:border-indigo-500 transition-all leading-relaxed"
+                        />
+                      </div>
+
+                      {/* 5. DA CONCLUSÃO */}
+                      <div className="md:col-span-2 lg:col-span-4">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          5. DA CONCLUSÃO (1 parágrafo por linha — numeração 5.1 automática)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={ntConclusao}
+                          onChange={(e) => setNtConclusao(e.target.value)}
+                          placeholder={defaultConclusao}
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium rounded-xl p-3 outline-none focus:bg-white focus:border-indigo-500 transition-all leading-relaxed"
+                        />
+                      </div>
+
+                      {/* Signatários */}
+                      <div className="md:col-span-2 lg:col-span-4">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          Signatários / Assinaturas Eletrônicas SEI (1 por linha no formato: NOME | MATRÍCULA | CARGO)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={ntSignatarios}
+                          onChange={(e) => setNtSignatarios(e.target.value)}
+                          placeholder="NOME COMPLETO | 0000000-0 | Cargo na ADASA"
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-mono rounded-xl p-3 outline-none focus:bg-white focus:border-indigo-500 transition-all leading-relaxed"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Visualização Final da Nota Técnica (Estética Papel A4 SEI / ADASA) */}
+                  <div className="bg-slate-200/70 p-4 sm:p-8 rounded-3xl border border-slate-300/80 shadow-inner flex justify-center">
+                    <div
+                      id="nota-tecnica-print"
+                      className="bg-white text-black shadow-2xl rounded-lg p-8 sm:p-14 max-w-4xl w-full font-serif leading-relaxed border border-slate-200 print:shadow-none print:border-none print:p-0 print:m-0 print:max-w-full"
+                      style={{ minHeight: "1120px" }}
+                    >
+                      {/* Cabeçalho Institucional ADASA */}
+                      <div className="pb-6 mb-6 border-b border-slate-200 text-center text-xs sm:text-sm leading-snug space-y-0.5 text-black">
+                        <div className="font-normal">Governo do Distrito Federal</div>
+                        <div className="font-normal">Agência Reguladora de Águas, Energia e Saneamento Básico do Distrito Federal</div>
+                        {ntSuperintendencia && <div className="font-normal">{ntSuperintendencia}</div>}
+                        {ntCoordenacao && <div className="font-normal">{ntCoordenacao}</div>}
+                      </div>
+
+                      {/* Linha de Identificação da Nota Técnica e Data */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs sm:text-sm mb-5">
+                        <div>
+                          Nota Técnica N.º {ntNumero} - {ntSiglaUnidade}
+                        </div>
+                        <div className="sm:text-right">
+                          {ntLocalData}
+                        </div>
+                      </div>
+
+                      {/* Vocativo / Destinatário */}
+                      <div className="text-xs sm:text-sm mb-4">
+                        {ntDestinatario}
+                      </div>
+
+                      {/* Assunto */}
+                      <div className="text-xs sm:text-sm text-justify mb-6 leading-snug">
+                        <span className="font-normal">Assunto: </span>
+                        <span>{effectiveAssunto}</span>
+                      </div>
+
+                      {/* 1. DO OBJETO */}
+                      <div className="mb-6">
+                        <div className="bg-[#e6e6e6] px-2.5 py-1 font-bold text-xs sm:text-sm uppercase tracking-normal flex items-center mb-3">
+                          <span className="w-12 shrink-0">1.</span>
+                          <span>DO OBJETO</span>
+                        </div>
+                        <div className="space-y-3 text-xs sm:text-sm text-justify">
+                          {effectiveObjetoLines.map((line, idx) => (
+                            <div key={idx} className="flex items-start">
+                              <span className="w-16 shrink-0">{`1.${idx + 1}.`}</span>
+                              <p className="flex-1 leading-relaxed">{stripLeadingNumber(line)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 2. DOS FATOS */}
+                      <div className="mb-6">
+                        <div className="bg-[#e6e6e6] px-2.5 py-1 font-bold text-xs sm:text-sm uppercase tracking-normal flex items-center mb-3">
+                          <span className="w-12 shrink-0">2.</span>
+                          <span>DOS FATOS</span>
+                        </div>
+                        <div className="space-y-3 text-xs sm:text-sm text-justify">
+                          {effectiveFatosLines.map((line, idx) => (
+                            <div key={idx} className="flex items-start">
+                              <span className="w-16 shrink-0">{`2.${idx + 1}.`}</span>
+                              <p className="flex-1 leading-relaxed">{stripLeadingNumber(line)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 3. DA ANÁLISE (Preenchido automaticamente) */}
+                      <div className="mb-6">
+                        <div className="bg-[#e6e6e6] px-2.5 py-1 font-bold text-xs sm:text-sm uppercase tracking-normal flex items-center mb-4">
+                          <span className="w-12 shrink-0">3.</span>
+                          <span>DA ANÁLISE</span>
+                        </div>
+
+                        {structuredDevices.length === 0 ? (
+                          <div className="p-4 bg-slate-50 border border-slate-200 rounded text-xs sm:text-sm text-black italic text-center font-serif">
+                            Nenhum dispositivo encontrado para o filtro selecionado.
+                          </div>
+                        ) : (
+                          <div className="space-y-6 font-serif text-xs sm:text-sm text-black">
+                            {structuredDevices.map((dev, dIdx) => (
+                              <div key={dev.index} className="border border-slate-300 rounded-md overflow-hidden break-inside-avoid shadow-2xs font-serif text-xs sm:text-sm text-black">
+                                {/* Cabeçalho do Dispositivo na Nota Técnica */}
+                                <div className="bg-slate-100 px-3.5 py-2 border-b border-slate-300 flex flex-wrap items-center justify-between gap-2">
+                                  <div className="text-xs sm:text-sm font-bold text-black">
+                                    <span className="mr-3">{`3.${dIdx + 1}.`}</span>
+                                    <span>{dev.label}</span>
+                                  </div>
+                                  {dev.subjectsText && (
+                                    <span className="text-xs sm:text-sm font-semibold bg-white px-2 py-0.5 rounded border border-slate-300 text-black">
+                                      Assunto: {dev.subjectsText}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="divide-y divide-slate-200 font-serif text-xs sm:text-sm text-black leading-relaxed">
+                                  {/* DISPOSITIVO */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-12">
+                                    <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                      DISPOSITIVO
+                                    </div>
+                                    <div className="sm:col-span-8 px-3 py-2 text-black font-semibold">
+                                      {dev.label}{dev.subjectsText ? ` — Assunto: ${dev.subjectsText}` : ""}
+                                    </div>
+                                  </div>
+
+                                  {/* TEXTO ATUAL */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-12">
+                                    <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                      TEXTO ATUAL
+                                    </div>
+                                    <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
+                                      {dev.textoAtual}
+                                    </div>
+                                  </div>
+
+                                  {/* TEXTO PROPOSTO */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-12">
+                                    <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                      TEXTO PROPOSTO
+                                    </div>
+                                    <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
+                                      {dev.textoProposto}
+                                    </div>
+                                  </div>
+
+                                  {/* CONTRIBUIÇÕES */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-12">
+                                    <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                      CONTRIBUIÇÕES
+                                    </div>
+                                    <div className="sm:col-span-8 px-3 py-2 text-black">
+                                      {dev.contributions.length === 0 ? (
+                                        <span className="italic text-black">Nenhuma contribuição recebida para este dispositivo.</span>
+                                      ) : (
+                                        <div className="space-y-1">
+                                          <div className="font-bold text-black">
+                                            {dev.contributions.length} {dev.contributions.length === 1 ? "contribuição recebida:" : "contribuições recebidas:"}
+                                          </div>
+                                          <ul className="list-disc pl-4 space-y-0.5">
+                                            {dev.contributions.map((c, cIdx) => (
+                                              <li key={c.id}>
+                                                <strong>#{cIdx + 1} {c.authorName}</strong>
+                                                {c.authorInstitution ? ` (${c.authorInstitution})` : ""}
+                                                {" — "}
+                                                <span className="font-semibold">Parecer: {c.decision}</span>
+                                                {c.complexity ? ` | Complexidade: ${c.complexity}` : ""}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* DETALHAMENTO DE CADA CONTRIBUIÇÃO */}
+                                  {dev.contributions.length === 0 ? (
+                                    <>
+                                      <div className="grid grid-cols-1 sm:grid-cols-12">
+                                        <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                          TEXTO DA CONTRIBUIÇÃO SUGERIDA
+                                        </div>
+                                        <div className="sm:col-span-8 px-3 py-2 text-black italic">
+                                          Não houve contribuição sugerida.
+                                        </div>
+                                      </div>
+                                      <div className="grid grid-cols-1 sm:grid-cols-12">
+                                        <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                          JUSTIFICATIVA DO PARTICIPANTE
+                                        </div>
+                                        <div className="sm:col-span-8 px-3 py-2 text-black italic">
+                                          Não aplicável.
+                                        </div>
+                                      </div>
+                                      <div className="grid grid-cols-1 sm:grid-cols-12">
+                                        <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                          JUSTIFICATIVA TÉCNICA (RESPOSTA)
+                                        </div>
+                                        <div className="sm:col-span-8 px-3 py-2 text-black italic">
+                                          Não aplicável.
+                                        </div>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    dev.contributions.map((c, cIdx) => (
+                                      <React.Fragment key={c.id}>
+                                        {dev.contributions.length > 1 && (
+                                          <div className="bg-slate-100/80 px-3 py-1.5 font-bold text-black uppercase text-[10px] sm:text-[11px]">
+                                            Contribuição #{cIdx + 1} — Participante: {c.authorName}{c.authorInstitution ? ` (${c.authorInstitution})` : ""}
+                                          </div>
+                                        )}
+                                        <div className="grid grid-cols-1 sm:grid-cols-12">
+                                          <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                            TEXTO DA CONTRIBUIÇÃO SUGERIDA{dev.contributions.length > 1 ? ` (#${cIdx + 1})` : ""}
+                                          </div>
+                                          <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
+                                            {dev.contributions.length === 1 && (
+                                              <div className="font-bold text-black mb-1">
+                                                Participante: {c.authorName}{c.authorInstitution ? ` (${c.authorInstitution})` : ""}
+                                              </div>
+                                            )}
+                                            {c.proposedText}
+                                          </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-12">
+                                          <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                            JUSTIFICATIVA DO PARTICIPANTE{dev.contributions.length > 1 ? ` (#${cIdx + 1})` : ""}
+                                          </div>
+                                          <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
+                                            {c.justification}
+                                          </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-12">
+                                          <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                            JUSTIFICATIVA TÉCNICA (RESPOSTA){dev.contributions.length > 1 ? ` (#${cIdx + 1})` : ""}
+                                          </div>
+                                          <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify space-y-1">
+                                            <div className="font-bold text-black">
+                                              Parecer Técnico: <span className="uppercase">{c.decision}</span>
+                                              {c.complexity ? ` | Complexidade: ${c.complexity}` : ""}
+                                            </div>
+                                            <div>{c.technicalJustification}</div>
+                                          </div>
+                                        </div>
+                                      </React.Fragment>
+                                    ))
+                                  )}
+
+                                  {/* JUSTIFICATIVA TÉCNICA FINAL */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-12 bg-indigo-50/30">
+                                    <div className="sm:col-span-4 bg-indigo-50/70 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                      JUSTIFICATIVA TÉCNICA FINAL
+                                    </div>
+                                    <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
+                                      {dev.justificativaTecnicaFinal}
+                                    </div>
+                                  </div>
+
+                                  {/* REDAÇÃO FINAL APÓS ANÁLISE */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-12 bg-emerald-50/30">
+                                    <div className="sm:col-span-4 bg-emerald-50/70 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                      REDAÇÃO FINAL APÓS ANÁLISE
+                                    </div>
+                                    <div className="sm:col-span-8 px-3 py-2 text-black font-medium whitespace-pre-line text-justify">
+                                      {dev.redacaoFinal}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 4. DA FUNDAMENTAÇÃO LEGAL */}
+                      <div className="mb-6">
+                        <div className="bg-[#e6e6e6] px-2.5 py-1 font-bold text-xs sm:text-sm uppercase tracking-normal flex items-center mb-3">
+                          <span className="w-12 shrink-0">4.</span>
+                          <span>DA FUNDAMENTAÇÃO LEGAL</span>
+                        </div>
+                        <div className="space-y-3 text-xs sm:text-sm text-justify">
+                          {effectiveFundamentacaoLines.map((line, idx) => (
+                            <div key={idx} className="flex items-start">
+                              <span className="w-16 shrink-0">{`4.${idx + 1}.`}</span>
+                              <p className="flex-1 leading-relaxed">{stripLeadingNumber(line)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 5. DA CONCLUSÃO */}
+                      <div className="mb-8">
+                        <div className="bg-[#e6e6e6] px-2.5 py-1 font-bold text-xs sm:text-sm uppercase tracking-normal flex items-center mb-3">
+                          <span className="w-12 shrink-0">5.</span>
+                          <span>DA CONCLUSÃO</span>
+                        </div>
+                        <div className="space-y-3 text-xs sm:text-sm text-justify">
+                          {effectiveConclusaoLines.map((line, idx) => (
+                            <div key={idx} className="flex items-start">
+                              <span className="w-16 shrink-0">{`5.${idx + 1}.`}</span>
+                              <p className="flex-1 leading-relaxed">{stripLeadingNumber(line)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Fecho */}
+                      <div className="text-center text-xs sm:text-sm my-8">
+                        Atenciosamente,
+                      </div>
+
+                      {/* Bloco de Assinaturas Eletrônicas SEI */}
+                      <div className="space-y-3 mb-10">
+                        {parsedSignatarios.map((sig, sIdx) => (
+                          <div key={sIdx} className="border border-slate-400 p-2.5 flex items-center gap-3 text-xs leading-snug">
+                            <div className="border-2 border-slate-500 px-2.5 py-1.5 text-center shrink-0 min-w-[92px] font-sans">
+                              <div className="font-black text-lg leading-none text-slate-700 tracking-tight">sei!</div>
+                              <div className="text-[9px] text-slate-600 leading-tight mt-0.5">assinatura<br />eletrônica</div>
+                            </div>
+                            <div className="text-justify text-[11px] sm:text-xs text-slate-900">
+                              Documento assinado eletronicamente por <strong>{sig.nome}{sig.matricula ? ` - Matr.${sig.matricula}` : ""}, {sig.cargo}</strong>, conforme art. 6º do Decreto n° 36.756, de 16 de setembro de 2015, publicado no Diário Oficial do Distrito Federal nº 180, quinta-feira, 17 de setembro de 2015.
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Rodapé Institucional ADASA / SEI */}
+                      <div className="pt-6 border-t border-slate-400 text-center text-[11px] leading-snug text-slate-800 space-y-0.5">
+                        <div>"Brasília - Patrimônio Cultural da Humanidade"</div>
+                        <div>Setor Ferroviário - Parque Ferroviário de Brasília - Estação Rodoferroviária - Sobreloja - Ala Norte - Bairro SAIN - CEP 70631-900 - DF</div>
+                        <div>Telefone(s): 3961-4990</div>
+                        <div>Sítio - www.adasa.df.gov.br</div>
+                        <div className="pt-3 mt-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-600 font-sans">
+                          <span>{ntProcessoSEI}</span>
+                          <span>Nota Técnica {ntNumero.split("/")[0]} ({ntDocSEI || "SEI"})</span>
+                          <span>Doc. SEI/GDF {ntDocSEI}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
