@@ -931,6 +931,23 @@ export interface NotaTecnicaDeviceItem {
   contributions: NotaTecnicaContributionItem[];
 }
 
+export interface NotaTecnicaStatRow {
+  label: string;
+  count: number;
+  percentage: string;
+  extra?: string;
+}
+
+export interface NotaTecnicaSyntheticDeviceItem {
+  index: number;
+  label: string;
+  subjectsText?: string;
+  sinteseContribuicoesParagraphs: string[];
+  parecerResumo: string;
+  parecerBadges?: Array<{ text: string; colorHex: string }>;
+  sinteseJustificativaTecnicaParagraphs: string[];
+}
+
 export interface ExportNotaTecnicaDocxOptions {
   superintendencia: string;
   coordenacao: string;
@@ -947,6 +964,15 @@ export interface ExportNotaTecnicaDocxOptions {
   daConclusao: string[];
   signatarios: Array<{ nome: string; matricula?: string; cargo: string; dataHora?: string }>;
   devices: NotaTecnicaDeviceItem[];
+  statsAnalysis?: {
+    pareceresIntroText: string;
+    pareceresRows: NotaTecnicaStatRow[];
+    complexidadeIntroText: string;
+    complexidadeRows: NotaTecnicaStatRow[];
+    participantesIntroText: string;
+    participantesRows: NotaTecnicaStatRow[];
+  };
+  syntheticDevices?: NotaTecnicaSyntheticDeviceItem[];
 }
 
 function createSeiSectionBar(num: string, title: string): Table {
@@ -981,6 +1007,22 @@ function createSeiSectionBar(num: string, title: string): Table {
             ],
           }),
         ],
+      }),
+    ],
+  });
+}
+
+function createSeiSubtopicHeader(num: string, title: string): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.LEFT,
+    spacing: { before: 220, after: 120, line: 276 },
+    children: [
+      new TextRun({
+        text: `${num}\t${title}`,
+        bold: true,
+        font: "Times New Roman",
+        size: 24,
+        color: "000000",
       }),
     ],
   });
@@ -1137,6 +1179,265 @@ export async function generateNotaTecnicaDocxBlob(options: ExportNotaTecnicaDocx
   const cellBorder = { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" };
   const cellBorders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder };
 
+  const makeStatsTable = (titleHeader: string, col1Label: string, rows: NotaTecnicaStatRow[], includeExtraCol = false): Table => {
+    const headerCells: TableCell[] = [
+      new TableCell({
+        width: { size: includeExtraCol ? 38 : 48, type: WidthType.PERCENTAGE },
+        shading: { fill: "E2E8F0" },
+        borders: cellBorders,
+        margins: { top: convertMillimetersToTwip(1.8), bottom: convertMillimetersToTwip(1.8), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
+        children: [new Paragraph({ children: [new TextRun({ text: col1Label, bold: true, font: FONT, size: SMALL_SIZE })] })],
+      }),
+      new TableCell({
+        width: { size: 16, type: WidthType.PERCENTAGE },
+        shading: { fill: "E2E8F0" },
+        borders: cellBorders,
+        margins: { top: convertMillimetersToTwip(1.8), bottom: convertMillimetersToTwip(1.8), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
+        children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "Quantidade", bold: true, font: FONT, size: SMALL_SIZE })] })],
+      }),
+      new TableCell({
+        width: { size: 16, type: WidthType.PERCENTAGE },
+        shading: { fill: "E2E8F0" },
+        borders: cellBorders,
+        margins: { top: convertMillimetersToTwip(1.8), bottom: convertMillimetersToTwip(1.8), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
+        children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "Percentual", bold: true, font: FONT, size: SMALL_SIZE })] })],
+      }),
+      new TableCell({
+        width: { size: includeExtraCol ? 30 : 20, type: WidthType.PERCENTAGE },
+        shading: { fill: "E2E8F0" },
+        borders: cellBorders,
+        margins: { top: convertMillimetersToTwip(1.8), bottom: convertMillimetersToTwip(1.8), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
+        children: [new Paragraph({ alignment: AlignmentType.LEFT, children: [new TextRun({ text: includeExtraCol ? "Gráfico / Detalhamento" : titleHeader, bold: true, font: FONT, size: SMALL_SIZE })] })],
+      }),
+    ];
+
+    const maxCount = Math.max(...rows.map(r => r.count), 1);
+
+    const dataRows = rows.map((r) => {
+      const barBlocks = r.count > 0 ? Math.max(1, Math.round((r.count / maxCount) * 14)) : 0;
+      const barVisual = "█".repeat(barBlocks) + (r.extra ? ` (${r.extra})` : "");
+      return new TableRow({
+        children: [
+          new TableCell({
+            borders: cellBorders,
+            margins: { top: convertMillimetersToTwip(1.5), bottom: convertMillimetersToTwip(1.5), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
+            children: [new Paragraph({ children: [new TextRun({ text: r.label, font: FONT, size: SMALL_SIZE })] })],
+          }),
+          new TableCell({
+            borders: cellBorders,
+            margins: { top: convertMillimetersToTwip(1.5), bottom: convertMillimetersToTwip(1.5), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
+            children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: String(r.count), bold: true, font: FONT, size: SMALL_SIZE })] })],
+          }),
+          new TableCell({
+            borders: cellBorders,
+            margins: { top: convertMillimetersToTwip(1.5), bottom: convertMillimetersToTwip(1.5), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
+            children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: r.percentage, font: FONT, size: SMALL_SIZE })] })],
+          }),
+          new TableCell({
+            borders: cellBorders,
+            margins: { top: convertMillimetersToTwip(1.5), bottom: convertMillimetersToTwip(1.5), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
+            children: [new Paragraph({ children: [new TextRun({ text: barVisual || "-", font: FONT, size: SMALL_SIZE, color: "1E3A8A" })] })],
+          }),
+        ],
+      });
+    });
+
+    return new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [new TableRow({ tableHeader: true, children: headerCells }), ...dataRows],
+    });
+  };
+
+  // SUBTÓPICO 3.1. Da Análise das Contribuições
+  if (options.statsAnalysis) {
+    children.push(createSeiSubtopicHeader("3.1.", "Da Análise das Contribuições"));
+    children.push(createNumberedSeiParagraph("3.1.1.", options.statsAnalysis.pareceresIntroText));
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 100, after: 60 },
+        children: [new TextRun({ text: "Gráfico e Distribuição dos Pareceres Técnicos:", bold: true, font: FONT, size: SMALL_SIZE })],
+      }),
+      makeStatsTable("Representação Gráfica", "Parecer Técnico", options.statsAnalysis.pareceresRows, false),
+      new Paragraph({ spacing: { before: 80, after: 60 }, children: [] })
+    );
+
+    children.push(createNumberedSeiParagraph("3.1.2.", options.statsAnalysis.complexidadeIntroText));
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 100, after: 60 },
+        children: [new TextRun({ text: "Gráfico e Complexidade das Contribuições:", bold: true, font: FONT, size: SMALL_SIZE })],
+      }),
+      makeStatsTable("Representação Gráfica", "Nível de Complexidade", options.statsAnalysis.complexidadeRows, false),
+      new Paragraph({ spacing: { before: 80, after: 60 }, children: [] })
+    );
+
+    children.push(createNumberedSeiParagraph("3.1.3.", options.statsAnalysis.participantesIntroText));
+    if (options.statsAnalysis.participantesRows.length > 0) {
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { before: 100, after: 60 },
+          children: [new TextRun({ text: "Gráfico Ranking de Participação Social (Barras Horizontais por Participantes):", bold: true, font: FONT, size: SMALL_SIZE })],
+        }),
+        makeStatsTable("Barras Horizontais", "Participante", options.statsAnalysis.participantesRows, true),
+        new Paragraph({ spacing: { before: 80, after: 60 }, children: [] })
+      );
+    }
+  }
+
+  // SUBTÓPICO 3.2. Da Análise Sintética das Contribuições
+  if (options.syntheticDevices && options.syntheticDevices.length > 0) {
+    children.push(createSeiSubtopicHeader("3.2.", "Da Análise Sintética das Contribuições"));
+    children.push(
+      createNumberedSeiParagraph(
+        "3.2.1.",
+        "Apresenta-se, a seguir, a síntese geral de conteúdo das contribuições recebidas por item, indicando o resumo do assunto tratado, a ideia central das contribuições e justificativas apresentadas, bem como a síntese da resposta técnica e respectivo parecer."
+      )
+    );
+
+    options.syntheticDevices.forEach((sDev, sIdx) => {
+      const headerText = sDev.subjectsText ? `${sDev.label} — ${sDev.subjectsText}` : sDev.label;
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { before: 160, after: 80, line: 260 },
+          children: [
+            new TextRun({
+              text: `3.2.${sIdx + 2}.\t${headerText}`,
+              bold: true,
+              font: FONT,
+              size: SIZE,
+            }),
+          ],
+        })
+      );
+
+      const synthRows: TableRow[] = [
+        new TableRow({
+          children: [
+            new TableCell({
+              width: { size: 28, type: WidthType.PERCENTAGE },
+              shading: { fill: "E2E8F0" },
+              borders: cellBorders,
+              margins: { top: convertMillimetersToTwip(2), bottom: convertMillimetersToTwip(2), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
+              children: [new Paragraph({ children: [new TextRun({ text: "DISPOSITIVO", bold: true, font: FONT, size: SMALL_SIZE, color: "000000" })] })],
+            }),
+            new TableCell({
+              width: { size: 72, type: WidthType.PERCENTAGE },
+              borders: cellBorders,
+              margins: { top: convertMillimetersToTwip(2), bottom: convertMillimetersToTwip(2), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.JUSTIFIED,
+                  children: [new TextRun({ text: sDev.subjectsText || sDev.label, bold: true, font: FONT, size: SIZE, color: "000000" })],
+                }),
+              ],
+            }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({
+              width: { size: 28, type: WidthType.PERCENTAGE },
+              shading: { fill: "F1F5F9" },
+              borders: cellBorders,
+              margins: { top: convertMillimetersToTwip(2), bottom: convertMillimetersToTwip(2), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
+              children: [new Paragraph({ children: [new TextRun({ text: "SÍNTESE DAS CONTRIBUIÇÕES RECEBIDAS", bold: true, font: FONT, size: SMALL_SIZE, color: "000000" })] })],
+            }),
+            new TableCell({
+              width: { size: 72, type: WidthType.PERCENTAGE },
+              borders: cellBorders,
+              margins: { top: convertMillimetersToTwip(2), bottom: convertMillimetersToTwip(2), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
+              children: sDev.sinteseContribuicoesParagraphs.map(
+                (pText) =>
+                  new Paragraph({
+                    alignment: AlignmentType.JUSTIFIED,
+                    spacing: { before: 40, after: 40, line: 260 },
+                    children: [new TextRun({ text: pText, font: FONT, size: SIZE, color: "000000" })],
+                  })
+              ),
+            }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({
+              width: { size: 28, type: WidthType.PERCENTAGE },
+              shading: { fill: "E0E7FF" },
+              borders: cellBorders,
+              margins: { top: convertMillimetersToTwip(2), bottom: convertMillimetersToTwip(2), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
+              children: [new Paragraph({ children: [new TextRun({ text: "SÍNTESE DA JUSTIFICATIVA TÉCNICA (RESPOSTA)", bold: true, font: FONT, size: SMALL_SIZE, color: "000000" })] })],
+            }),
+            new TableCell({
+              width: { size: 72, type: WidthType.PERCENTAGE },
+              shading: { fill: "F8FAFC" },
+              borders: cellBorders,
+              margins: { top: convertMillimetersToTwip(2), bottom: convertMillimetersToTwip(2), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.LEFT,
+                  spacing: { before: 30, after: 60, line: 260 },
+                  children: [
+                    new TextRun({ text: "PARECER:  ", bold: true, font: FONT, size: SMALL_SIZE, color: "000000" }),
+                    ...(sDev.parecerBadges && sDev.parecerBadges.length > 0
+                      ? sDev.parecerBadges.flatMap((b, bIdx) => [
+                          ...(bIdx > 0 ? [new TextRun({ text: "  ", font: FONT, size: SMALL_SIZE })] : []),
+                          new TextRun({
+                            text: ` ${b.text} `,
+                            bold: true,
+                            font: FONT,
+                            size: SMALL_SIZE,
+                            color: "FFFFFF",
+                            shading: { fill: b.colorHex.replace("#", "") },
+                          }),
+                        ])
+                      : [
+                          new TextRun({
+                            text: ` ${sDev.parecerResumo} `,
+                            bold: true,
+                            font: FONT,
+                            size: SMALL_SIZE,
+                            color: "FFFFFF",
+                            shading: { fill: "64748B" },
+                          }),
+                        ]),
+                  ],
+                }),
+                ...sDev.sinteseJustificativaTecnicaParagraphs.map(
+                  (pText) =>
+                    new Paragraph({
+                      alignment: AlignmentType.JUSTIFIED,
+                      spacing: { before: 40, after: 40, line: 260 },
+                      children: [new TextRun({ text: pText, font: FONT, size: SIZE, color: "000000" })],
+                    })
+                ),
+              ],
+            }),
+          ],
+        }),
+      ];
+
+      children.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: synthRows,
+        }),
+        new Paragraph({ spacing: { before: 80, after: 60 }, children: [] })
+      );
+    });
+  }
+
+  // SUBTÓPICO 3.3. Da Análise Completa das Contribuições
+  children.push(createSeiSubtopicHeader("3.3.", "Da Análise Completa das Contribuições"));
+  children.push(
+    createNumberedSeiParagraph(
+      "3.3.1.",
+      "Apresenta-se, a seguir, o quadro analítico completo contendo o exame individualizado de cada dispositivo da minuta, o texto atual, o texto proposto, a íntegra das contribuições e justificativas dos participantes, as respostas técnicas, a justificativa técnica final e a redação final consolidada após análise."
+    )
+  );
+
   const makeFieldRow = (label: string, value: string, shadeLabel = "F1F5F9", shadeValue?: string) =>
     new TableRow({
       children: [
@@ -1199,11 +1500,11 @@ export async function generateNotaTecnicaDocxBlob(options: ExportNotaTecnicaDocx
 
   if (options.devices.length === 0) {
     children.push(
-      createNumberedSeiParagraph("3.1.", "Nenhum dispositivo encontrado para compor a análise técnica.")
+      createNumberedSeiParagraph("3.3.2.", "Nenhum dispositivo encontrado para compor a análise técnica completa.")
     );
   } else {
     options.devices.forEach((dev, dIdx) => {
-      const itemNum = `3.${dIdx + 1}.`;
+      const itemNum = `3.3.${dIdx + 2}.`;
       const headerText = `${dev.label}${dev.subjectsText ? ` — Assunto: ${dev.subjectsText}` : ""}`;
       children.push(
         new Paragraph({

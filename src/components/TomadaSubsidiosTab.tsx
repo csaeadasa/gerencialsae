@@ -13,7 +13,7 @@ import { SubjectPickerModal } from "./SubjectPickerModal";
 import { RegulatoryTableView } from "./RegulatoryTableView";
 import { TableModalPreview } from "./TableModalPreview";
 import { RegulatoryTable, isTableJson, parseTableData, serializeTableData, DEFAULT_TABLE_TEMPLATES, formatContentForExport, formatContentForPdf } from "../lib/tableStructure";
-import { generateMinutaDocxBlob, generateNotaTecnicaDocxBlob, NotaTecnicaDeviceItem, isChapterOrSectionHeader, isChapterSubtitle, parseNormativePrefix } from "../lib/exportMinutaDocx";
+import { generateMinutaDocxBlob, generateNotaTecnicaDocxBlob, NotaTecnicaDeviceItem, NotaTecnicaSyntheticDeviceItem, isChapterOrSectionHeader, isChapterSubtitle, parseNormativePrefix } from "../lib/exportMinutaDocx";
 
 
 
@@ -280,6 +280,7 @@ export interface Contribution {
   registeredById?: string | number | null;
   registeredByName?: string;
   proposedText: string;
+  isSuppressing?: boolean;
   justification: string;
   decision?: string;
   complexity?: string;
@@ -7382,6 +7383,1044 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 };
               });
 
+              // Estatísticas para 3.1. Da Análise das Contribuições
+              const totalContribsNT = tomadaContributions.length;
+              const totalDevicesNT = currentArticles.length;
+              const devicesWithContribsNT = currentArticles.filter(a =>
+                tomadaContributions.some(c => String(c.articleId) === String(a.id))
+              ).length;
+
+              const fmtPctNT = (val: number, total: number): string => {
+                if (total <= 0) return "0,0%";
+                return `${((val / total) * 100).toLocaleString("pt-BR", {
+                  minimumFractionDigits: 1,
+                  maximumFractionDigits: 1,
+                })}%`;
+              };
+
+              const cntAcatada = tomadaContributions.filter(c => c.decision === "Acatada").length;
+              const cntParcial = tomadaContributions.filter(
+                c => c.decision === "Parcialmente Acatada" || c.decision === "Acatada Parcialmente"
+              ).length;
+              const cntNaoAcatada = tomadaContributions.filter(c => c.decision === "Não Acatada").length;
+              const cntPrejudicada = tomadaContributions.filter(c => c.decision === "Prejudicada").length;
+              const cntRetida = tomadaContributions.filter(c => c.decision === "Retida para Estudos Adicionais").length;
+              const cntDevolvida = tomadaContributions.filter(
+                c => c.decision === "Devolvida para Justificativas Adicionais"
+              ).length;
+              const cntPendente = tomadaContributions.filter(
+                c => !c.decision || c.decision === "Pendente" || c.decision === "Pendente Análise da Equipe"
+              ).length;
+
+              const pareceresStatsList = [
+                { label: "Acatada", count: cntAcatada, percentage: fmtPctNT(cntAcatada, totalContribsNT), color: "#059669" },
+                { label: "Parcialmente Acatada", count: cntParcial, percentage: fmtPctNT(cntParcial, totalContribsNT), color: "#10b981" },
+                { label: "Não Acatada", count: cntNaoAcatada, percentage: fmtPctNT(cntNaoAcatada, totalContribsNT), color: "#e11d48" },
+                { label: "Prejudicada", count: cntPrejudicada, percentage: fmtPctNT(cntPrejudicada, totalContribsNT), color: "#f97316" },
+                { label: "Retida para Estudos Adicionais", count: cntRetida, percentage: fmtPctNT(cntRetida, totalContribsNT), color: "#7c3aed" },
+                { label: "Devolvida para Justificativas Adicionais", count: cntDevolvida, percentage: fmtPctNT(cntDevolvida, totalContribsNT), color: "#d97706" },
+                { label: "Pendente Análise da Equipe", count: cntPendente, percentage: fmtPctNT(cntPendente, totalContribsNT), color: "#64748b" },
+              ];
+
+              const pareceresActiveSlices = pareceresStatsList.filter(s => s.count > 0);
+              const totalAnalisadasNT = totalContribsNT - cntPendente;
+              const totalFavoraveisNT = cntAcatada + cntParcial;
+              const totalNaoAcatadasOutrasNT = cntNaoAcatada + cntPrejudicada + cntRetida + cntDevolvida;
+
+              const pareceresIntroText =
+                totalContribsNT === 0
+                  ? `No âmbito da ${meiodePart} nº ${consultNumber}, foram disponibilizados ${totalDevicesNT} dispositivo(s) normativo(s) para participação social, não tendo sido registradas contribuições no período de consulta.`
+                  : `No âmbito da ${meiodePart} nº ${consultNumber}, foram recebidas ${totalContribsNT} contribuição(ões), distribuídas em ${devicesWithContribsNT} dos ${totalDevicesNT} dispositivos submetidos à participação social (${fmtPctNT(devicesWithContribsNT, totalDevicesNT)} dos dispositivos da norma), das quais ${totalAnalisadasNT} (${fmtPctNT(totalAnalisadasNT, totalContribsNT)}) já possuem parecer técnico emitido pela equipe. Quanto à distribuição geral dos pareceres técnicos: ${cntAcatada} (${fmtPctNT(cntAcatada, totalContribsNT)}) foram classificadas como "Acatada", ${cntParcial} (${fmtPctNT(cntParcial, totalContribsNT)}) como "Parcialmente Acatada" — perfazendo ${totalFavoraveisNT} (${fmtPctNT(totalFavoraveisNT, totalContribsNT)}) de contribuições total ou parcialmente acolhidas —, ${cntNaoAcatada} (${fmtPctNT(cntNaoAcatada, totalContribsNT)}) como "Não Acatada", ${cntPrejudicada} (${fmtPctNT(cntPrejudicada, totalContribsNT)}) como "Prejudicada", ${cntRetida} (${fmtPctNT(cntRetida, totalContribsNT)}) como "Retida para Estudos Adicionais", ${cntDevolvida} (${fmtPctNT(cntDevolvida, totalContribsNT)}) como "Devolvida para Justificativas Adicionais" e ${cntPendente} (${fmtPctNT(cntPendente, totalContribsNT)}) encontram-se como "Pendente Análise da Equipe".`;
+
+              // Estatísticas de Complexidade
+              const compAltaNT = tomadaContributions.filter(c => c.complexity === "Alta").length;
+              const compMediaNT = tomadaContributions.filter(c => c.complexity === "Média").length;
+              const compBaixaNT = tomadaContributions.filter(c => c.complexity === "Baixa").length;
+              const compNaoDefNT = tomadaContributions.filter(c => !c.complexity).length;
+
+              const complexidadeStatsList = [
+                { label: "Alta Complexidade", shortLabel: "Alta", count: compAltaNT, percentage: fmtPctNT(compAltaNT, totalContribsNT), color: "#e11d48" },
+                { label: "Média Complexidade", shortLabel: "Média", count: compMediaNT, percentage: fmtPctNT(compMediaNT, totalContribsNT), color: "#f59e0b" },
+                { label: "Baixa Complexidade", shortLabel: "Baixa", count: compBaixaNT, percentage: fmtPctNT(compBaixaNT, totalContribsNT), color: "#10b981" },
+                { label: "Não Classificada", shortLabel: "Não Classif.", count: compNaoDefNT, percentage: fmtPctNT(compNaoDefNT, totalContribsNT), color: "#94a3b8" },
+              ];
+              const complexidadeActiveSlices = complexidadeStatsList.filter(s => s.count > 0);
+
+              const complexidadeIntroText =
+                totalContribsNT === 0
+                  ? `Não houve registro de contribuições para classificação quanto ao grau de complexidade regulatória.`
+                  : `No tocante à avaliação do grau de complexidade técnica e impacto regulatório das ${totalContribsNT} contribuição(ões) recebidas, verificou-se a seguinte distribuição estatística: ${compAltaNT} contribuição(ões) (${fmtPctNT(compAltaNT, totalContribsNT)}) foram classificadas como de "Alta" complexidade, ${compMediaNT} (${fmtPctNT(compMediaNT, totalContribsNT)}) como de "Média" complexidade, ${compBaixaNT} (${fmtPctNT(compBaixaNT, totalContribsNT)}) como de "Baixa" complexidade e ${compNaoDefNT} (${fmtPctNT(compNaoDefNT, totalContribsNT)}) encontram-se sem classificação de complexidade definida.`;
+
+              // Estatísticas por Participantes (Ranking de Participação Social)
+              const participantMapNT = new Map<
+                string,
+                { name: string; institution: string; count: number; acatadas: number; articleIds: Set<string> }
+              >();
+              tomadaContributions.forEach(c => {
+                const name = (c.authorName || "Participante Anônimo").trim();
+                const cur = participantMapNT.get(name) || {
+                  name,
+                  institution: c.authorInstitution || "",
+                  count: 0,
+                  acatadas: 0,
+                  articleIds: new Set<string>(),
+                };
+                cur.count += 1;
+                if (c.decision === "Acatada" || c.decision === "Parcialmente Acatada" || c.decision === "Acatada Parcialmente") {
+                  cur.acatadas += 1;
+                }
+                if (!cur.institution && c.authorInstitution) {
+                  cur.institution = c.authorInstitution;
+                }
+                cur.articleIds.add(String(c.articleId));
+                participantMapNT.set(name, cur);
+              });
+
+              const participantStatsNT = Array.from(participantMapNT.values())
+                .map(p => ({
+                  name: p.name,
+                  institution: p.institution,
+                  displayLabel: p.institution ? `${p.name} (${p.institution})` : p.name,
+                  count: p.count,
+                  percentage: fmtPctNT(p.count, totalContribsNT),
+                  pctNumber: totalContribsNT > 0 ? (p.count / totalContribsNT) * 100 : 0,
+                  acatadas: p.acatadas,
+                  devicesCount: p.articleIds.size,
+                }))
+                .sort((a, b) => b.count - a.count);
+
+              const avgContribsPerParticipant =
+                participantStatsNT.length > 0
+                  ? (totalContribsNT / participantStatsNT.length).toLocaleString("pt-BR", {
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
+                    })
+                  : "0,0";
+
+              const topParticipantsSummary = participantStatsNT
+                .slice(0, 5)
+                .map(p => `${p.displayLabel} com ${p.count} contribuição(ões) (${p.percentage})`)
+                .join("; ");
+
+              const participantesIntroText =
+                participantStatsNT.length === 0
+                  ? `Não foram registrados participantes no período da consulta.`
+                  : `Quanto ao perfil de participação social, as ${totalContribsNT} contribuição(ões) recebidas foram encaminhadas por ${participantStatsNT.length} participante(s) distinto(s), resultando em uma média de ${avgContribsPerParticipant} contribuição(ões) por participante. No ranking de participação social, destacam-se: ${topParticipantsSummary}.`;
+
+              // Mapa de cores do Gráfico de Distribuição dos Pareceres
+              const getParecerChartColor = (decision?: string): string => {
+                const d = (decision || "").trim();
+                if (d === "Acatada") return "#059669";
+                if (d === "Parcialmente Acatada" || d === "Acatada Parcialmente") return "#10b981";
+                if (d === "Não Acatada") return "#e11d48";
+                if (d === "Prejudicada") return "#f97316";
+                if (d === "Retida para Estudos Adicionais") return "#7c3aed";
+                if (d === "Devolvida para Justificativas Adicionais") return "#d97706";
+                return "#64748b";
+              };
+
+              // Limpa citações diretas a leis, normas, artigos, parágrafos, incisos e alíneas SEM quebrar a gramática da frase
+              const cleanNormativeCitationsPreservingGrammar = (rawText: string): string => {
+                if (!rawText) return "";
+                let text = rawText
+                  .replace(/<[^>]+>/g, " ")
+                  .replace(/\r?\n+/g, " ")
+                  .replace(/\s+/g, " ")
+                  .trim();
+
+                // Remover marcadores estruturais no início do texto
+                text = text
+                  .replace(/^(?:Art(?:igo)?\.?\s*\d+[º°ª]?(?:-[A-Za-z])?[\s.\-–—:]*)+/gi, "")
+                  .replace(/^(?:(?:§+\s*\d+[º°ª]?|Parágrafo\s+único)[\s.\-–—:]*)+/gi, "")
+                  .replace(/^(?:[IVXLCDM]+\s*[-–—.)]\s*)+/g, "")
+                  .replace(/^(?:[a-z]\)\s*)+/gi, "");
+
+                // Remover palavras soltas de rótulos internos (ex.: "Anotações:", "Anotações internas:", "Não acatada. V.")
+                text = text
+                  .replace(/\b(?:anotações(?:\s+internas)?|observações\s+internas)\s*[:.\-–—]*/gi, "")
+                  .replace(
+                    /\b(?:não\s+acatad[ao]|acatad[ao]\s+parcialmente|parcialmente\s+acatad[ao]|acatad[ao]|prejudicad[ao]|retid[ao]\s+para\s+estudos\s+adicionais)\s*\.\s*(?:v\.?|veja|vide)?\s*\.?$/gi,
+                    ""
+                  );
+
+                // Substituir referências a normas técnicas (ABNT NBR) preservando a coesão gramatical
+                text = text
+                  .replace(
+                    /referência\s+normativa\s+d[ao]\s+(?:ABNT\s+)?NBR\s*(?:n[.º°]*\s*)?[\d.\-\/]+/gi,
+                    "norma técnica de referência"
+                  )
+                  .replace(/\b(?:d[ao]\s+|n[ao]\s+|pela\s+|conforme\s+a\s+)?(?:ABNT\s+)?NBR\s*(?:n[.º°]*\s*)?[\d.\-\/]+/gi, match => {
+                    const lower = match.toLowerCase();
+                    if (lower.startsWith("da ") || lower.startsWith("do ")) return "da norma técnica";
+                    if (lower.startsWith("na ")) return "na norma técnica";
+                    if (lower.startsWith("pela ")) return "pela norma técnica";
+                    if (lower.startsWith("conforme")) return "conforme a norma técnica";
+                    return "norma técnica";
+                  });
+
+                // Substituir citações a Leis, Decretos, Resoluções, Portarias, Títulos e Capítulos
+                text = text
+                  .replace(
+                    /\b(d[aeo]s?|n[aeo]s?|pel[ao]s?|a[ao]s?|desta|nesta|da\s+presente|na\s+presente|da\s+referida|na\s+referida)\s+(?:Resolução|Portaria|Instrução\s+Normativa)(?:\s+[A-ZÀ-Úa-zà-ú]+)?(?:\s*n[.º°]*\s*[\d.\-\/]+)?(?:\s*,?\s*de\s+\d{1,2}\s+de\s+[a-zç]+\s+de\s+\d{4}|\s*,?\s*de\s+\d{4})?/gi,
+                    (_m, prep) => {
+                      const p = prep.toLowerCase();
+                      if (p.startsWith("n") || p === "nesta") return "na regulamentação";
+                      if (p.startsWith("p")) return "pela regulamentação";
+                      if (p.startsWith("a")) return "à regulamentação";
+                      return "da regulamentação";
+                    }
+                  )
+                  .replace(
+                    /\b(d[aeo]s?|n[aeo]s?|pel[ao]s?|a[ao]s?)\s+(?:Lei(?:\s+Federal|\s+Distrital|\s+Complementar|\s+Nacional)?|Decreto(?:\s+Federal|\s+Distrital)?)(?:\s*n[.º°]*\s*[\d.\-\/]+)?(?:\s*,?\s*de\s+\d{1,2}\s+de\s+[a-zç]+\s+de\s+\d{4}|\s*,?\s*de\s+\d{4})?/gi,
+                    (_m, prep) => {
+                      const p = prep.toLowerCase();
+                      if (p.startsWith("n")) return "na legislação aplicável";
+                      if (p.startsWith("p")) return "pela legislação aplicável";
+                      if (p.startsWith("a")) return "à legislação aplicável";
+                      return "da legislação aplicável";
+                    }
+                  )
+                  .replace(
+                    /\b(?:Resolução|Portaria|Lei(?:\s+Federal|\s+Distrital|\s+Complementar)?|Decreto(?:\s+Federal|\s+Distrital)?)\s*(?:[A-Z]+\s*)?(?:n[.º°]*\s*)?[\d.\-\/]+(?:\s*,?\s*de\s+\d{1,2}\s+de\s+[a-zç]+\s+de\s+\d{4}|\s*,?\s*de\s+\d{4})?/gi,
+                    "regulamentação aplicável"
+                  )
+                  .replace(/\b(?:no|do)\s+(?:Título|Capítulo|Seção)\s+[IVXLCDM\d]+\b/gi, "na regulamentação");
+
+                // Remover parênteses que contenham apenas citações de artigos/parágrafos/incisos/alíneas
+                text = text.replace(
+                  /\(\s*(?:conforme\s+|vide\s+|v\.\s*)?(?:art(?:igo)?s?\.?|parágrafos?|§§?|incisos?|alíneas?)[^)]*\)/gi,
+                  ""
+                );
+
+                // Substituir citações de artigos, parágrafos, incisos e alíneas (usando \b após algarismos romanos para não capturar letras iniciais da palavra seguinte, ex.: "inciso I visa")
+                const romanOrNum = "(?:[IVXLCDM]+\\b|\\d+\\b)";
+                text = text
+                  .replace(
+                    new RegExp(
+                      `\\b(d[ao]s?|n[ao]s?|ao|pelo|deste|neste)\\s+(?:incisos?\\s+${romanOrNum}(?:\\s*d[ao]\\s+)?|alíneas?\\s+["'“”]?[a-z]["'“”]?(?:\\s*d[ao]\\s+)?)?(?:(?:parágrafo\\s+único|parágrafos?|§§?)\\s*\\d*[º°ª]*(?:\\s*d[ao]\\s+)?)?(?:artigos?|arts?\\.?)(?:\\s*\\d+[º°ª]?(?:-[A-Za-z])?)?(?:\\s*,\\s*(?:parágrafo\\s+único|§§?\\s*\\d+[º°ª]?|incisos?\\s+${romanOrNum}|alíneas?\\s+["'“”]?[a-z]["'“”]?))*`,
+                      "gi"
+                    ),
+                    (_m, prep) => {
+                      const p = prep.toLowerCase();
+                      if (p.startsWith("n")) return "na regra proposta";
+                      if (p.startsWith("p")) return "pela regra proposta";
+                      if (p === "ao") return "à regra proposta";
+                      return "da regra proposta";
+                    }
+                  )
+                  .replace(
+                    new RegExp(
+                      `\\b(d[ao]s?|n[ao]s?|ao|pelo|desse|nesse|deste|neste)\\s+(?:parágrafo\\s+único|parágrafos?|§§?)\\s*\\d*[º°ª]*(?:\\s*,\\s*incisos?\\s+${romanOrNum})?`,
+                      "gi"
+                    ),
+                    (_m, prep) => {
+                      const p = prep.toLowerCase();
+                      if (p.startsWith("n")) return "nesse ponto";
+                      if (p.startsWith("p")) return "por esse ponto";
+                      if (p === "ao") return "a esse ponto";
+                      return "desse ponto";
+                    }
+                  )
+                  .replace(
+                    new RegExp(
+                      `\\b(d[ao]s?|n[ao]s?|ao|pelo|desse|nesse|deste|neste)\\s+incisos?\\s+${romanOrNum}(?:\\s*(?:e|ou|,)\\s*${romanOrNum})*`,
+                      "gi"
+                    ),
+                    (_m, prep) => {
+                      const p = prep.toLowerCase();
+                      if (p.startsWith("n")) return "nesse item";
+                      if (p.startsWith("p")) return "por esse item";
+                      if (p === "ao") return "a esse item";
+                      return "desse item";
+                    }
+                  )
+                  .replace(
+                    /\b(d[aeo]s?|n[aeo]s?|à|pela|dessa|nessa)\s+alíneas?\s+["'“”]?[a-z]["'“”]?(?:\s*(?:e|ou|,)\s*["'“”]?[a-z]["'“”]?)*\b/gi,
+                    (_m, prep) => {
+                      const p = prep.toLowerCase();
+                      if (p.startsWith("n")) return "nessa condição";
+                      if (p.startsWith("p")) return "por essa condição";
+                      if (p === "à") return "a essa condição";
+                      return "dessa condição";
+                    }
+                  )
+                  .replace(/\b(?:artigos?|arts?\.?)\s*\d+[º°ª]?(?:-[A-Za-z])?/gi, "item normativo")
+                  .replace(/(?:§+\s*\d+[º°ª]*|\b(?:parágrafo\s+único|parágrafos?)\s*\d*[º°ª]*)/gi, "trecho")
+                  .replace(new RegExp(`\\bincisos?\\s+${romanOrNum}`, "gi"), "item")
+                  .replace(/\balíneas?\s+["'“”]?[a-z]["'“”]?/gi, "item")
+                  .replace(/\bcaput\b/gi, "texto principal");
+
+                // Remover orações remissivas vazias (ex.: "que se enquadre na regra proposta", "de que trata esse ponto", "referidos no item anterior")
+                text = text
+                  .replace(
+                    /\s*,?\s*\b(?:que\s+se\s+enquadre(?:m)?\s+na\s+regra\s+proposta|de\s+que\s+trata(?:m)?\s+(?:este\s+|esse\s+|o\s+)?(?:item\s+normativo|trecho|item|ponto|texto\s+principal|artigo)|referid[ao]s?\s+n[ao]\s+(?:item|trecho|ponto)\s+anterior|conforme\s+definido\s+na\s+regra\s+proposta)\s*,?/gi,
+                    " "
+                  )
+                  .replace(
+                    /\s*,?\s*\b(?:da\s+qual\s+conste(?:m)?|do\s+qual\s+conste(?:m)?|a\s+seguir\s+especificad[ao]s?|conforme\s+segue|na\s+forma\s+que\s+se\s+segue)\s*[.:;]*$/gi,
+                    ""
+                  );
+
+                // Limpar espaços e pontuações duplicadas
+                text = text
+                  .replace(/\(\s*\)/g, "")
+                  .replace(/\[\s*\]/g, "")
+                  .replace(/\s+([,.;:])/g, "$1")
+                  .replace(/([,.;:])\s*[,.;:]+/g, "$1")
+                  .replace(/^[,.;:\-–—\s]+/, "")
+                  .replace(
+                    /\s+\b(?:d[aeo]s?|n[aeo]s?|pel[ao]s?|a[ao]s?|para|com|por|em|que|quando|como|conforme\s+consta(?:\s+n[ao])?)\s*[.:;]*$/gi,
+                    "."
+                  )
+                  .replace(/\.{2,}/g, ".")
+                  .replace(/\s{2,}/g, " ")
+                  .trim();
+
+                if (!text) return "";
+                if (!/[.!?]$/.test(text)) {
+                  text += ".";
+                }
+                return text.charAt(0).toUpperCase() + text.slice(1);
+              };
+
+              // Quebra textos longos (com múltiplos parágrafos §, incisos I/II/III, alíneas ou períodos) em orações atômicas independentes
+              const splitIntoAtomicClauses = (rawText: string): string[] => {
+                if (!rawText) return [];
+
+                // Primeiro quebrar antes de marcadores estruturais (§, Parágrafo único, incisos romanos, alíneas, quebras de linha, ponto e vírgula, dois-pontos)
+                const preSplit = rawText
+                  .replace(/<[^>]+>/g, " ")
+                  .split(
+                    /\r?\n+|(?=(?:§+\s*\d+|Parágrafo\s+único)\b)|(?:[:;.]|\s+)\s*(?=[IVXLCDM]+\s*[-–—.)]\s+)|(?:[:;.]|\s+)\s*(?=[a-z]\)\s+)|;\s+|:\s+/i
+                  );
+
+                const clauses: string[] = [];
+                for (const chunk of preSplit) {
+                  if (!chunk || !chunk.trim()) continue;
+                  const cleaned = cleanNormativeCitationsPreservingGrammar(chunk);
+                  if (!cleaned) continue;
+
+                  // Dividir também por finais de frases dentro do bloco
+                  const subSentences = cleaned
+                    .split(/(?<=[.!?])\s+/)
+                    .map(s => s.trim())
+                    .filter(s => {
+                      if (!s) return false;
+                      const bare = s.replace(/[.!?,;:\s]+/g, "").toLowerCase();
+                      if (bare.length < 12) return false;
+                      if (
+                        /^(?:anotações|anotaçõesinternas|observações|nãoacatada|acatada|parcialmenteacatada|prejudicada|retida|idem|ídemaconsideração|conformeconsta|vide|veja|ok|trecho|item)$/i.test(
+                          bare
+                        )
+                      ) {
+                        return false;
+                      }
+                      if (/\b(?:d[aeo]s?|n[aeo]s?|pel[ao]s?|para|com|por|quando|que)\s*[.!?]*$/i.test(s)) {
+                        return false;
+                      }
+                      return true;
+                    });
+
+                  clauses.push(...subSentences);
+                }
+
+                return clauses;
+              };
+
+              // Condensa uma oração em uma sentença executiva enxuta (máx. ~120 caracteres), cortando APENAS em limites gramaticais seguros
+              const condenseClauseGrammatically = (sentence: string, maxChars = 115): string => {
+                let s = sentence
+                  .replace(
+                    /^(?:cabe\s+(?:destacar|ressaltar|esclarecer|salientar)\s+que\s+|cumpre\s+(?:esclarecer|destacar|informar|observar)\s+que\s+|ressalta-se\s+que\s+|salienta-se\s+que\s+|destaca-se\s+que\s+|importa\s+registrar\s+que\s+|verifica-se\s+que\s+|entende-se\s+que\s+|observa-se\s+que\s+|nesse\s+sentido,\s*|dessa\s+forma,\s*|diante\s+(?:disso|do\s+exposto),\s*|portanto,\s*|assim,\s*)/i,
+                    ""
+                  )
+                  .trim();
+
+                if (!s) return "";
+
+                // Se a primeira oração for apenas um descarte/aceite genérico ("A proposta não merece prosperar, pois X"), aproveitar diretamente o núcleo X
+                const genericPrefixMatch = s.match(
+                  /^(?:a\s+(?:proposta|sugestão|contribuição)\s+(?:do\s+contribuinte\s+|apresentada\s+)?(?:não\s+(?:merece|deve)\s+prosperar|não\s+pode\s+ser\s+acatada|mostra-se\s+desnecessária|é\s+redundante(?:\s+e\s+juridicamente\s+desnecessária)?)|o\s+texto\s+proposto\s+(?:pelo\s+contribuinte\s+)?é\s+redundante(?:\s+e\s+juridicamente\s+desnecessário)?|sugestão\s+(?:não\s+)?acatada|não\s+há\s+necessidade\s+de\s+alteração)\s*,\s*(?:uma\s+vez\s+que|visto\s+que|pois|já\s+que|haja\s+vista\s+que|porquanto)\s+(.+)$/i
+                );
+                if (genericPrefixMatch && genericPrefixMatch[1]) {
+                  s = genericPrefixMatch[1].trim();
+                }
+
+                // Remover parênteses explicativos
+                s = s.replace(/\s*\([^)]*\)/g, "").replace(/\s{2,}/g, " ").trim();
+
+                const isValidCut = (candidate: string): boolean => {
+                  const trimmed = candidate.replace(/[,;:\-–—\s]+$/, "").trim();
+                  if (trimmed.length < 28) return false;
+                  if (
+                    /\b(?:d[aeo]s?|n[aeo]s?|pel[ao]s?|a[ao]s?|para|com|por|em|que|quando|como|se|ou|e|o|a|os|as|um|uma|cujo|cuja)\s*$/i.test(
+                      trimmed
+                    )
+                  ) {
+                    return false;
+                  }
+                  return true;
+                };
+
+                // 1) Cortar em conectores de orações subordinadas/explicativas se a frase ultrapassar maxChars
+                if (s.length > maxChars) {
+                  const clauseConnectors = [
+                    "; ",
+                    ": ",
+                    ", uma vez que ",
+                    ", visto que ",
+                    ", haja vista ",
+                    ", já que ",
+                    ", considerando que ",
+                    ", tendo em vista ",
+                    ", pois ",
+                    ", devendo ",
+                    ", observadas ",
+                    ", observados ",
+                    ", ressalvado ",
+                    ", ressalvada ",
+                    ", exceto ",
+                    ", a não ser ",
+                    ", desde que ",
+                    ", sempre que ",
+                    ", enquanto ",
+                    ", caso ",
+                    ", quando ",
+                    ", onde ",
+                    ", com base ",
+                    ", projetad",
+                    ", sujeitando-se ",
+                    ", passando a ",
+                    ", distribuindo ",
+                    ", exigindo ",
+                    ", além de ",
+                    ", bem como ",
+                    ", de modo ",
+                    ", de forma ",
+                    ", razão pela qual ",
+                    ", motivo pelo qual ",
+                  ];
+
+                  let bestCut = "";
+                  for (const conn of clauseConnectors) {
+                    const idx = s.toLowerCase().indexOf(conn.toLowerCase());
+                    if (idx >= 28) {
+                      const candidate = s.slice(0, idx).trim();
+                      if (isValidCut(candidate)) {
+                        if (!bestCut || (candidate.length <= maxChars && candidate.length > bestCut.length) || (bestCut.length > maxChars && candidate.length < bestCut.length)) {
+                          bestCut = candidate;
+                        }
+                      }
+                    }
+                  }
+                  if (bestCut) {
+                    s = bestCut;
+                  }
+                }
+
+                // 2) Se ainda estiver maior que maxChars, cortar na última vírgula válida que mantenha a oração principal completa
+                if (s.length > maxChars) {
+                  const commaPositions: number[] = [];
+                  let pos = s.indexOf(", ");
+                  while (pos !== -1) {
+                    if (pos >= 32) commaPositions.push(pos);
+                    pos = s.indexOf(", ", pos + 2);
+                  }
+                  // Tentar da última vírgula dentro do limite até a primeira
+                  const withinLimit = commaPositions.filter(p => p <= maxChars + 15).reverse();
+                  const fallbackAfter = commaPositions.filter(p => p > maxChars + 15);
+                  for (const p of [...withinLimit, ...fallbackAfter]) {
+                    const candidate = s.slice(0, p).trim();
+                    if (isValidCut(candidate)) {
+                      s = candidate;
+                      break;
+                    }
+                  }
+                }
+
+                // 3) Se não houver vírgula e ainda ultrapassar maxChars + 20, cortar antes de adjunto preposicional secundário
+                if (s.length > maxChars + 20) {
+                  const prepBoundaries = [
+                    " mediante ",
+                    " com base ",
+                    " por meio ",
+                    " em razão ",
+                    " nos termos ",
+                    " na forma ",
+                    " a fim de ",
+                    " no âmbito ",
+                    " para fins de ",
+                    " previamente a",
+                    " às expensas ",
+                  ];
+                  for (const pb of prepBoundaries) {
+                    const idx = s.toLowerCase().indexOf(pb, 35);
+                    if (idx !== -1 && idx <= maxChars + 25) {
+                      const candidate = s.slice(0, idx).trim();
+                      if (isValidCut(candidate)) {
+                        s = candidate;
+                        break;
+                      }
+                    }
+                  }
+                }
+
+                s = s
+                  .replace(/[,;:\-–—\s]+$/, "")
+                  .replace(/\s+\b(?:d[aeo]s?|n[aeo]s?|pel[ao]s?|a[ao]s?|para|com|por|em|que|quando|como)\s*$/i, "")
+                  .replace(/\.{2,}/g, ".")
+                  .trim();
+
+                if (!s) return "";
+                if (!/[.!?]$/.test(s)) s += ".";
+                return s.charAt(0).toUpperCase() + s.slice(1);
+              };
+
+              // Sintetiza um texto em 1 frase curta e direta, sem cortar palavras no meio
+              const summarizeToConciseSentence = (
+                rawText: string,
+                mode: "proposal" | "justification" | "technical" = "justification"
+              ): string => {
+                const clauses = splitIntoAtomicClauses(rawText);
+                if (clauses.length === 0) return "";
+
+                let targetClause = clauses[0];
+
+                // Na justificativa técnica, se a 1ª oração apenas repetir o pedido do participante, usar a oração conclusiva seguinte
+                if (mode === "technical" && clauses.length > 1) {
+                  const isRestatement =
+                    /^(?:a\s+proposta\s+(?:d[eo]\s+contribuinte\s+)?visava|o\s+(?:participante|contribuinte)\s+(?:sugere|propõe|solicita|aponta|questiona)|trata-se\s+de\s+(?:proposta|sugestão|contribuição)|a\s+contribuição\s+(?:sugere|propõe|pretende|busca)|quanto\s+à\s+(?:sugestão|contribuição|proposta))/i.test(
+                      targetClause
+                    );
+                  if (isRestatement) {
+                    targetClause = clauses[1];
+                  }
+                }
+
+                const maxLen = mode === "proposal" ? 105 : mode === "justification" ? 115 : 120;
+                return condenseClauseGrammatically(targetClause, maxLen);
+              };
+
+              // Identifica o número do artigo que está sendo alterado (ex.: "Art. 13.")
+              const extractArticleIdentifier = (art: Article, actualIdx: number): string => {
+                const checkText = (txt?: string): string | null => {
+                  if (!txt) return null;
+                  const firstLine = txt.replace(/^["'“\s]+/, "").trim().split("\n")[0]?.trim() || "";
+                  const m = firstLine.match(/^Art(?:igo)?\.?\s*(\d+(?:[º°ª])?(?:-[A-Za-z])?)/i);
+                  if (m && m[1]) {
+                    return `Art. ${m[1].replace(/\.$/, "")}.`;
+                  }
+                  const anexoM = firstLine.match(/^Anexo\s+([IVXLCDM\d]+|ÚNICO|UNICO)/i);
+                  if (anexoM && anexoM[1]) {
+                    return `Anexo ${anexoM[1].toUpperCase()}.`;
+                  }
+                  return null;
+                };
+
+                const direct = checkText(art.proposedText) || checkText(art.originalText);
+                if (direct) return direct;
+
+                if (art.contentType === "ementa") return "Ementa.";
+                if (art.contentType === "considerandos") return "Preâmbulo.";
+                if (art.contentType === "table") return "Tabela.";
+
+                for (let i = actualIdx - 1; i >= 0; i--) {
+                  const prev = currentArticles[i];
+                  if (!prev) continue;
+                  const parentArt = checkText(prev.proposedText) || checkText(prev.originalText);
+                  if (parentArt) return parentArt;
+                }
+
+                return `Art. ${actualIdx + 1}.`;
+              };
+
+              // Resume o assunto do dispositivo de forma curta, nominal e gramaticalmente coesa
+              const summarizeItemSubject = (art: Article, actualIdx: number, displayIdx: number, linkedSubjects: string): string => {
+                const artPrefix = extractArticleIdentifier(art, actualIdx);
+                const baseSource =
+                  (art.proposedText !== undefined && art.proposedText !== null
+                    ? art.proposedText
+                    : art.originalText) || "";
+
+                // Converte orações verbais de caput em frases nominais curtas e coesas (evitando "Critérios para ... devem ter ...")
+                const nominalizeCaputClause = (rawClause: string, seedIdx: number): string => {
+                  let clean = rawClause.replace(/\.$/, "").trim();
+                  if (!clean) return `${artPrefix} Regramento técnico e operacional dos serviços.`;
+
+                  // Transformar estruturas verbais típicas de artigos regulatórios em expressões nominais diretas
+                  // 1. "<Sujeito> dependerá / depende de <Complemento>" -> "<Sujeito sem artigo> mediante <Complemento>"
+                  const dependMatch = clean.match(/^(?:o|a|os|as)?\s*(.+?)\s+dependerá(?:ão)?\s+de\s+(.+)$/i);
+                  if (dependMatch) {
+                    const subj = dependMatch[1].trim();
+                    const comp = dependMatch[2].trim();
+                    const nominal = condenseClauseGrammatically(`${subj} mediante ${comp}`, 95);
+                    return `${artPrefix} ${nominal}`;
+                  }
+
+                  // 2. "<Sujeito> deve(m) / deverá(ão) ter <Complemento>" -> "Exigência de <Complemento> para <Sujeito>"
+                  const deveTerMatch = clean.match(/^(?:o|a|os|as)?\s*(.+?)\s+deve(?:m|rá|rão)?\s+ter\s+(.+)$/i);
+                  if (deveTerMatch) {
+                    const subj = deveTerMatch[1].replace(/\s+a\s+serem\s+lançados/i, " lançados").trim();
+                    const comp = deveTerMatch[2].trim();
+                    const nominal = condenseClauseGrammatically(`Exigência de ${comp} para ${subj}`, 95);
+                    return `${artPrefix} ${nominal}`;
+                  }
+
+                  // 3. "<O prestador / O usuário> deve(m) / deverá(ão) <Verbo Infinitivo + Comp>"
+                  const deverActorMatch = clean.match(
+                    /^(?:o\s+prestador(?:\s+de\s+serviços)?|o\s+usuário|a\s+concessionária)\s+deve(?:m|rá|rão)?\s+(.+)$/i
+                  );
+                  if (deverActorMatch) {
+                    const isUsuario = /^o\s+usuário/i.test(clean);
+                    const rest = deverActorMatch[1].trim();
+                    const nominal = condenseClauseGrammatically(
+                      `Obrigação d${isUsuario ? "o usuário" : "o prestador de serviços"} de ${rest}`,
+                      95
+                    );
+                    return `${artPrefix} ${nominal}`;
+                  }
+
+                  // 4. "<Sujeito> deverá(ão)/deve(m)/será(ão) <Particípio>" -> converter ou usar abertura coesa
+                  const passiveMatch = clean.match(
+                    /^(?:o|a|os|as)?\s*(.+?)\s+(?:deve(?:m|rá|rão)?\s+ser|será|serão)\s+(.+)$/i
+                  );
+                  if (passiveMatch) {
+                    const subj = passiveMatch[1].trim();
+                    const nominal = condenseClauseGrammatically(`Regras aplicáveis a ${subj}`, 95);
+                    return `${artPrefix} ${nominal}`;
+                  }
+
+                  // 5. Se ainda contiver verbo finito conjugado ("fica", "é", "são", "cabe", "compete", "poderá", "responde"), manter a oração enxuta sem prefixo conflitante
+                  if (
+                    /\b(?:fica(?:m)?|é|são|cabe(?:m)?|compete(?:m)?|incumbe|pode(?:m|rá|rão)?|responde(?:m)?|arcará|passarão|constituem|autorizará)\b/i.test(
+                      clean
+                    )
+                  ) {
+                    const shortSentence = condenseClauseGrammatically(clean, 95);
+                    return `${artPrefix} ${shortSentence}`;
+                  }
+
+                  const lower = clean.toLowerCase();
+                  if (
+                    /^(?:critérios|regras|limites|definições|responsabilidade|condições|procedimentos|obrigações|prazos|medição|prestação|atendimento|fiscalização|penalidades|diretrizes|parâmetros|cálculo|cobrança|faturamento|instalação|manutenção|suspensão|ligação|hidrômetro|qualidade|controle|uso|acesso|deveres|direitos|vedações|disposições)\b/i.test(
+                      lower
+                    )
+                  ) {
+                    const shortNominal = condenseClauseGrammatically(clean, 95);
+                    return `${artPrefix} ${shortNominal}`;
+                  }
+
+                  const strippedArticle = lower.replace(/^(?:o|a|os|as)\s+/i, "").trim();
+                  const openings = [
+                    "Critérios para",
+                    "Diretrizes quanto a",
+                    "Regras relativas a",
+                    "Disciplina acerca de",
+                    "Condições aplicáveis a",
+                  ];
+                  const chosen = openings[seedIdx % openings.length];
+                  const combined = condenseClauseGrammatically(`${chosen} ${strippedArticle}`, 95);
+                  return `${artPrefix} ${combined}`;
+                };
+
+                if (art.contentType === "ementa") {
+                  return linkedSubjects
+                    ? `Ementa. Objeto normativo quanto a ${linkedSubjects.charAt(0).toLowerCase() + linkedSubjects.slice(1).replace(/\.$/, "")}.`
+                    : "Ementa. Objeto e finalidade geral da regulamentação.";
+                }
+                if (art.contentType === "considerandos") {
+                  return linkedSubjects
+                    ? `Preâmbulo. Fundamentos técnicos para ${linkedSubjects.charAt(0).toLowerCase() + linkedSubjects.slice(1).replace(/\.$/, "")}.`
+                    : "Preâmbulo. Motivação e fundamentos técnicos da regulamentação.";
+                }
+                if (art.contentType === "table" || isTableJson(baseSource)) {
+                  if (isTableJson(baseSource)) {
+                    const parsed = parseTableData(baseSource);
+                    if (parsed?.title) {
+                      const cleanTitle = parsed.title.replace(/\.$/, "").trim();
+                      if (cleanTitle) {
+                        return `${artPrefix} Parâmetros e limites relativos a ${cleanTitle.charAt(0).toLowerCase() + cleanTitle.slice(1)}.`;
+                      }
+                    }
+                  }
+                  return linkedSubjects
+                    ? nominalizeCaputClause(linkedSubjects, displayIdx)
+                    : `${artPrefix} Tabela de parâmetros, limites e indicadores operacionais.`;
+                }
+
+                if (linkedSubjects && linkedSubjects.trim()) {
+                  return nominalizeCaputClause(linkedSubjects.trim(), displayIdx);
+                }
+
+                // Extrair apenas a primeira oração atômica do caput
+                const firstAtomic = splitIntoAtomicClauses(baseSource)[0] || "";
+                const lowerCaput = firstAtomic.toLowerCase();
+
+                if (/^(?:esta\s+(?:resolução|portaria|norma)\s+entra\s+em\s+vigor|ficam?\s+revogad[ao]s|revogam-se)/i.test(lowerCaput)) {
+                  return `${artPrefix} Cláusula de vigência e disposições finais da norma.`;
+                }
+                if (/^(?:para\s+(?:os\s+)?fins\s+desta|para\s+os\s+efeitos\s+desta|adotam-se\s+as\s+seguintes\s+definições|considera-se)/i.test(lowerCaput)) {
+                  return `${artPrefix} Definições e conceitos técnicos aplicáveis aos serviços regulados.`;
+                }
+                if (/^o\s+usuário\s+responde\s+pelos\s+danos\s+causados\s+ao\s+prestador/i.test(lowerCaput)) {
+                  return `${artPrefix} Responsabilidade do usuário por danos causados ao prestador e a terceiros.`;
+                }
+
+                const themeBody = firstAtomic
+                  .replace(/^(?:estabelecer,?\s*(?:na\s+forma\s+que\s+se\s+segue,?\s*)?)/i, "")
+                  .replace(
+                    /^(?:fica\s+(?:estabelecido|instituído|definido|determinado|autorizado|vedado)\s+(?:que\s+)?|dispõe\s+sobre\s+|trata\s+d[eo]s?\s+)/i,
+                    ""
+                  )
+                  .replace(/\.$/, "")
+                  .trim();
+
+                return nominalizeCaputClause(themeBody, displayIdx);
+              };
+
+              // Gera síntese curta e executiva da ideia da contribuição e de sua justificativa (máx. 1 a 2 frases curtas)
+              const buildContributionSynthesisParagraphs = (baseText: string, cArt: Contribution[]): string[] => {
+                if (cArt.length === 0) {
+                  return [
+                    "Sem contribuições recebidas, mantendo-se a redação original.",
+                  ];
+                }
+
+                const normalizeForCompare = (str: string): string =>
+                  str
+                    .toLowerCase()
+                    .replace(/[^a-záéíóúâêôãõç0-9]/g, "")
+                    .trim();
+
+                const baseClausesNormalized = new Set(
+                  splitIntoAtomicClauses(baseText).map(normalizeForCompare).filter(Boolean)
+                );
+
+                const summarizeSingleProposalIdea = (c: Contribution): string => {
+                  if (c.isSuppressing || !c.proposedText || !c.proposedText.trim()) {
+                    return "Sugere-se a supressão deste dispositivo.";
+                  }
+                  if (isTableJson(c.proposedText) || isTableJson(baseText)) {
+                    return "Sugere-se a revisão de parâmetros e valores na tabela técnica.";
+                  }
+
+                  const propClauses = splitIntoAtomicClauses(c.proposedText);
+                  // Localizar especificamente a oração que foi adicionada ou alterada em relação ao texto-base original
+                  const diffClause = propClauses.find(cl => {
+                    const norm = normalizeForCompare(cl);
+                    return norm.length >= 15 && !baseClausesNormalized.has(norm);
+                  });
+
+                  if (!diffClause) {
+                    return "Sugere-se ajuste redacional para maior clareza e precisão da regra.";
+                  }
+
+                  const conciseDiff = condenseClauseGrammatically(diffClause, 95);
+                  if (!conciseDiff) {
+                    return "Sugere-se ajuste redacional para maior clareza e precisão da regra.";
+                  }
+
+                  const lowered = conciseDiff.charAt(0).toLowerCase() + conciseDiff.slice(1);
+                  if (/^(?:o\s+|a\s+|os\s+|as\s+|fica\s+|é\s+|são\s+|deve|cabe|compete|nos\s+|nas\s+|em\s+|para\s+|quando\s+)/i.test(conciseDiff)) {
+                    return `Sugere-se prever que ${lowered}`;
+                  }
+                  return `Sugere-se estabelecer: ${conciseDiff}`;
+                };
+
+                const summarizeSingleJustificationIdea = (c: Contribution): string => {
+                  const rawJ = (c.justification || "").trim();
+                  if (!rawJ) return "";
+                  if (/^(?:[ií]dem|mesma\s+justificativa|conforme\s+anterior|vide\s+anterior|idem\s+[àa]\s+considera[çc][ãa]o)/i.test(rawJ)) {
+                    return "Fundamenta-se em argumento de contribuição correlata para reforçar a segurança jurídica.";
+                  }
+                  return summarizeToConciseSentence(rawJ, "justification");
+                };
+
+                if (cArt.length === 1) {
+                  const propText = summarizeSingleProposalIdea(cArt[0]);
+                  const justText = summarizeSingleJustificationIdea(cArt[0]);
+                  if (justText && normalizeForCompare(propText) !== normalizeForCompare(justText)) {
+                    return [`${propText} ${justText}`];
+                  }
+                  return [propText];
+                }
+
+                // Múltiplas contribuições: resumo conciso em parágrafo curto
+                const proposalsList = Array.from(new Set(cArt.map(c => summarizeSingleProposalIdea(c)))).slice(0, 2);
+                const firstParagraph = `Recebidas ${cArt.length} contribuições. ${proposalsList.join(" ")}`;
+
+                const justList = Array.from(
+                  new Set(cArt.map(c => summarizeSingleJustificationIdea(c)).filter(Boolean))
+                ).slice(0, 1);
+
+                return justList.length > 0 ? [firstParagraph, justList[0]] : [firstParagraph];
+              };
+
+              const buildSyntheticDeviceItems = (): NotaTecnicaSyntheticDeviceItem[] => {
+                return filteredDevicesForNT.map(art => {
+                  const actualIdx = currentArticles.findIndex(a => String(a.id) === String(art.id));
+                  const displayIdx = actualIdx !== -1 ? actualIdx + 1 : 1;
+                  const artPrefix = extractArticleIdentifier(art, actualIdx);
+
+                  const linkedSubjects = (art.subjectIds || [])
+                    .map(sid => (selectedTomada?.subjects || []).find(s => s.id === sid)?.name)
+                    .filter(Boolean)
+                    .join(", ");
+
+                  const subjectSummary = summarizeItemSubject(art, actualIdx, displayIdx, linkedSubjects);
+                  const baseSource =
+                    (art.proposedText !== undefined && art.proposedText !== null
+                      ? art.proposedText
+                      : art.originalText) || "";
+
+                  const cArt = tomadaContributions.filter(c => String(c.articleId) === String(art.id));
+
+                  const sinteseContribuicoesParagraphs = buildContributionSynthesisParagraphs(baseSource, cArt);
+                  let parecerResumo = "";
+                  const parecerBadges: Array<{ text: string; colorHex: string }> = [];
+                  const sinteseJustificativaTecnicaParagraphs: string[] = [];
+
+                  if (cArt.length === 0) {
+                    parecerResumo = "Sem contribuições (Conteúdo mantido)";
+                    parecerBadges.push({ text: parecerResumo, colorHex: "#64748b" });
+                    const cleanFinalJust = summarizeToConciseSentence(art.finalJustification || "", "technical");
+                    sinteseJustificativaTecnicaParagraphs.push(
+                      cleanFinalJust ||
+                        "Mantida a proposta técnica original por ausência de manifestações."
+                    );
+                  } else if (cArt.length === 1) {
+                    const c = cArt[0];
+                    const dec = c.decision || "Pendente Análise da Equipe";
+                    parecerResumo = dec;
+                    parecerBadges.push({ text: dec, colorHex: getParecerChartColor(dec) });
+
+                    const cleanTechResp = summarizeToConciseSentence(c.technicalJustification || "", "technical");
+                    const cleanFinalJust = summarizeToConciseSentence(art.finalJustification || "", "technical");
+
+                    if (cleanTechResp) {
+                      sinteseJustificativaTecnicaParagraphs.push(cleanTechResp);
+                    } else if (cleanFinalJust) {
+                      sinteseJustificativaTecnicaParagraphs.push(cleanFinalJust);
+                    } else {
+                      sinteseJustificativaTecnicaParagraphs.push(
+                        "Análise técnica em consolidação pela equipe responsável."
+                      );
+                    }
+                  } else {
+                    const acat = cArt.filter(c => c.decision === "Acatada").length;
+                    const parc = cArt.filter(
+                      c => c.decision === "Parcialmente Acatada" || c.decision === "Acatada Parcialmente"
+                    ).length;
+                    const naoAcat = cArt.filter(c => c.decision === "Não Acatada").length;
+                    const prejud = cArt.filter(c => c.decision === "Prejudicada").length;
+                    const retida = cArt.filter(c => c.decision === "Retida para Estudos Adicionais").length;
+                    const devolv = cArt.filter(
+                      c => c.decision === "Devolvida para Justificativas Adicionais"
+                    ).length;
+                    const pend = cArt.filter(
+                      c => !c.decision || c.decision === "Pendente" || c.decision === "Pendente Análise da Equipe"
+                    ).length;
+
+                    if (acat > 0) {
+                      parecerBadges.push({ text: `${acat} Acatada(s)`, colorHex: getParecerChartColor("Acatada") });
+                    }
+                    if (parc > 0) {
+                      parecerBadges.push({
+                        text: `${parc} Parcialmente Acatada(s)`,
+                        colorHex: getParecerChartColor("Parcialmente Acatada"),
+                      });
+                    }
+                    if (naoAcat > 0) {
+                      parecerBadges.push({
+                        text: `${naoAcat} Não Acatada(s)`,
+                        colorHex: getParecerChartColor("Não Acatada"),
+                      });
+                    }
+                    if (prejud > 0) {
+                      parecerBadges.push({
+                        text: `${prejud} Prejudicada(s)`,
+                        colorHex: getParecerChartColor("Prejudicada"),
+                      });
+                    }
+                    if (retida > 0) {
+                      parecerBadges.push({
+                        text: `${retida} Retida(s) para Estudos Adicionais`,
+                        colorHex: getParecerChartColor("Retida para Estudos Adicionais"),
+                      });
+                    }
+                    if (devolv > 0) {
+                      parecerBadges.push({
+                        text: `${devolv} Devolvida(s) para Justificativas Adicionais`,
+                        colorHex: getParecerChartColor("Devolvida para Justificativas Adicionais"),
+                      });
+                    }
+                    if (pend > 0) {
+                      parecerBadges.push({
+                        text: `${pend} Pendente(s) Análise da Equipe`,
+                        colorHex: getParecerChartColor("Pendente Análise da Equipe"),
+                      });
+                    }
+
+                    parecerResumo = parecerBadges.map(b => b.text).join(", ");
+
+                    const techSyntheses: string[] = Array.from(
+                      new Set<string>(
+                        cArt
+                          .map(c => summarizeToConciseSentence(c.technicalJustification || "", "technical"))
+                          .filter((s): s is string => Boolean(s))
+                      )
+                    ).slice(0, 2);
+
+                    const cleanFinalJust = summarizeToConciseSentence(art.finalJustification || "", "technical");
+
+                    if (techSyntheses.length > 0) {
+                      techSyntheses.forEach(ts => sinteseJustificativaTecnicaParagraphs.push(ts));
+                    } else if (cleanFinalJust) {
+                      sinteseJustificativaTecnicaParagraphs.push(cleanFinalJust);
+                    } else {
+                      sinteseJustificativaTecnicaParagraphs.push(
+                        "Posicionamento técnico em consolidação para o dispositivo."
+                      );
+                    }
+                  }
+
+                  return {
+                    index: displayIdx,
+                    label: `${artPrefix.replace(/\.$/, "")} (Item #${displayIdx})`,
+                    subjectsText: subjectSummary,
+                    sinteseContribuicoesParagraphs,
+                    parecerResumo,
+                    parecerBadges,
+                    sinteseJustificativaTecnicaParagraphs,
+                  };
+                });
+              };
+
+              const syntheticDeviceItems = buildSyntheticDeviceItems();
+
+              // Helper SVG Donut Chart para impressão A4 e tela
+              const renderPrintableDonutChart = (
+                slices: Array<{ label: string; count: number; percentage: string; color: string }>,
+                totalCount: number,
+                centerTitle: string
+              ) => {
+                const active = slices.filter(s => s.count > 0);
+                if (totalCount === 0 || active.length === 0) {
+                  return (
+                    <div className="flex items-center justify-center h-36 text-xs italic text-slate-500 border border-dashed border-slate-300 rounded p-4">
+                      Sem dados registrados para exibição gráfica.
+                    </div>
+                  );
+                }
+
+                const cx = 80;
+                const cy = 80;
+                const rOuter = 66;
+                const rInner = 38;
+                let cumulativeAngle = -Math.PI / 2;
+
+                const paths = active.map((slice, idx) => {
+                  const fraction = slice.count / totalCount;
+                  if (fraction >= 0.9999) {
+                    return (
+                      <g key={idx}>
+                        <circle cx={cx} cy={cy} r={rOuter} fill={slice.color} />
+                        <circle cx={cx} cy={cy} r={rInner} fill="#ffffff" />
+                      </g>
+                    );
+                  }
+                  const angle = fraction * Math.PI * 2;
+                  const startAngle = cumulativeAngle;
+                  const endAngle = cumulativeAngle + angle;
+                  cumulativeAngle = endAngle;
+
+                  const x1Out = cx + rOuter * Math.cos(startAngle);
+                  const y1Out = cy + rOuter * Math.sin(startAngle);
+                  const x2Out = cx + rOuter * Math.cos(endAngle);
+                  const y2Out = cy + rOuter * Math.sin(endAngle);
+
+                  const x1In = cx + rInner * Math.cos(endAngle);
+                  const y1In = cy + rInner * Math.sin(endAngle);
+                  const x2In = cx + rInner * Math.cos(startAngle);
+                  const y2In = cy + rInner * Math.sin(startAngle);
+
+                  const largeArc = angle > Math.PI ? 1 : 0;
+
+                  const d = [
+                    `M ${x1Out.toFixed(2)} ${y1Out.toFixed(2)}`,
+                    `A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2Out.toFixed(2)} ${y2Out.toFixed(2)}`,
+                    `L ${x1In.toFixed(2)} ${y1In.toFixed(2)}`,
+                    `A ${rInner} ${rInner} 0 ${largeArc} 0 ${x2In.toFixed(2)} ${y2In.toFixed(2)}`,
+                    "Z",
+                  ].join(" ");
+
+                  return <path key={idx} d={d} fill={slice.color} stroke="#ffffff" strokeWidth="1.5" />;
+                });
+
+                return (
+                  <div className="flex flex-col sm:flex-row items-center gap-5">
+                    <div className="shrink-0">
+                      <svg width="160" height="160" viewBox="0 0 160 160" className="mx-auto">
+                        {paths}
+                        <text
+                          x={cx}
+                          y={cy - 4}
+                          textAnchor="middle"
+                          className="font-bold fill-black"
+                          style={{ fontSize: "16px", fontFamily: "serif" }}
+                        >
+                          {totalCount}
+                        </text>
+                        <text
+                          x={cx}
+                          y={cy + 12}
+                          textAnchor="middle"
+                          className="fill-slate-600"
+                          style={{ fontSize: "9px", fontFamily: "serif" }}
+                        >
+                          {centerTitle}
+                        </text>
+                      </svg>
+                    </div>
+                    <div className="flex-1 w-full">
+                      <table className="w-full text-[11px] border-collapse border border-slate-300 font-serif">
+                        <thead>
+                          <tr className="bg-slate-100">
+                            <th className="border border-slate-300 px-2 py-1 text-left font-bold">Categoria</th>
+                            <th className="border border-slate-300 px-2 py-1 text-center font-bold w-16"> Nº</th>
+                            <th className="border border-slate-300 px-2 py-1 text-center font-bold w-16">%</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {slices.map((s, i) => (
+                            <tr key={i} className={s.count === 0 ? "text-slate-400" : "text-black"}>
+                              <td className="border border-slate-300 px-2 py-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className="inline-block w-2.5 h-2.5 rounded-xs shrink-0"
+                                    style={{ backgroundColor: s.color }}
+                                  />
+                                  <span>{s.label}</span>
+                                </div>
+                              </td>
+                              <td className="border border-slate-300 px-2 py-1 text-center font-semibold">{s.count}</td>
+                              <td className="border border-slate-300 px-2 py-1 text-center">{s.percentage}</td>
+                            </tr>
+                          ))}
+                          <tr className="bg-slate-100 font-bold text-black">
+                            <td className="border border-slate-300 px-2 py-1">Total</td>
+                            <td className="border border-slate-300 px-2 py-1 text-center">{totalCount}</td>
+                            <td className="border border-slate-300 px-2 py-1 text-center">
+                              {totalCount > 0 ? "100,0%" : "0,0%"}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              };
+
               const stripLeadingNumber = (line: string) => line.replace(/^\d+(?:\.\d+)+\.?\s*/, "").trim();
 
               const generatePlainTextNotaTecnica = (): string => {
@@ -7404,8 +8443,54 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 });
 
                 txt += `3. DA ANÁLISE\n\n`;
+
+                // 3.1. Da Análise das Contribuições
+                txt += `3.1. Da Análise das Contribuições\n\n`;
+                txt += `3.1.1. ${pareceresIntroText}\n\n`;
+                txt += `  [Distribuição dos Pareceres]\n`;
+                pareceresStatsList.forEach(s => {
+                  txt += `  - ${s.label}: ${s.count} (${s.percentage})\n`;
+                });
+                txt += `  - Total de Contribuições: ${totalContribsNT} (${totalContribsNT > 0 ? "100,0%" : "0,0%"})\n\n`;
+
+                txt += `3.1.2. ${complexidadeIntroText}\n\n`;
+                txt += `  [Complexidade das Contribuições]\n`;
+                complexidadeStatsList.forEach(s => {
+                  txt += `  - ${s.label}: ${s.count} (${s.percentage})\n`;
+                });
+                txt += `\n`;
+
+                txt += `3.1.3. ${participantesIntroText}\n\n`;
+                if (participantStatsNT.length > 0) {
+                  txt += `  [Ranking de Participação Social por Participantes]\n`;
+                  participantStatsNT.forEach((p, idx) => {
+                    txt += `  ${idx + 1}º. ${p.displayLabel}: ${p.count} contribuição(ões) (${p.percentage}) | ${p.acatadas} acatada(s)/parcialmente acatada(s)\n`;
+                  });
+                  txt += `\n`;
+                }
+
+                // 3.2. Da Análise Sintética das Contribuições
+                txt += `3.2. Da Análise Sintética das Contribuições\n\n`;
+                txt += `3.2.1. Apresenta-se, a seguir, a síntese geral de conteúdo das contribuições recebidas por item, indicando o resumo do assunto tratado, a ideia central das contribuições e justificativas apresentadas, bem como a síntese da justificativa técnica (resposta) e respectivo parecer.\n\n`;
+                syntheticDeviceItems.forEach((item, sIdx) => {
+                  txt += `3.2.${sIdx + 2}. ${item.label} — ${item.subjectsText || ""}\n`;
+                  txt += `  • DISPOSITIVO: ${item.subjectsText || item.label}\n`;
+                  txt += `  • SÍNTESE DAS CONTRIBUIÇÕES RECEBIDAS:\n`;
+                  item.sinteseContribuicoesParagraphs.forEach(p => {
+                    txt += `    ${p}\n`;
+                  });
+                  txt += `  • SÍNTESE DA JUSTIFICATIVA TÉCNICA (RESPOSTA) [Parecer: ${item.parecerResumo}]:\n`;
+                  item.sinteseJustificativaTecnicaParagraphs.forEach(p => {
+                    txt += `    ${p}\n`;
+                  });
+                  txt += `\n`;
+                });
+
+                // 3.3. Da Análise Completa das Contribuições
+                txt += `3.3. Da Análise Completa das Contribuições\n\n`;
+                txt += `3.3.1. Apresenta-se, a seguir, o quadro analítico completo contendo o exame individualizado de cada dispositivo da minuta.\n\n`;
                 structuredDevices.forEach((dev, dIdx) => {
-                  txt += `3.${dIdx + 1}. ${dev.label}${dev.subjectsText ? ` — Assunto: ${dev.subjectsText}` : ""}\n`;
+                  txt += `3.3.${dIdx + 2}. ${dev.label}${dev.subjectsText ? ` — Assunto: ${dev.subjectsText}` : ""}\n`;
                   txt += `  • DISPOSITIVO: ${dev.label}${dev.subjectsText ? ` (Assunto: ${dev.subjectsText})` : ""}\n`;
                   txt += `  • TEXTO ATUAL:\n    ${dev.textoAtual.replace(/\n/g, "\n    ")}\n`;
                   txt += `  • TEXTO PROPOSTO:\n    ${dev.textoProposto.replace(/\n/g, "\n    ")}\n`;
@@ -7518,6 +8603,28 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                     daConclusao: effectiveConclusaoLines.map(stripLeadingNumber),
                     signatarios: parsedSignatarios,
                     devices: structuredDevices,
+                    statsAnalysis: {
+                      pareceresIntroText,
+                      pareceresRows: pareceresStatsList.map(s => ({
+                        label: s.label,
+                        count: s.count,
+                        percentage: s.percentage,
+                      })),
+                      complexidadeIntroText,
+                      complexidadeRows: complexidadeStatsList.map(s => ({
+                        label: s.label,
+                        count: s.count,
+                        percentage: s.percentage,
+                      })),
+                      participantesIntroText,
+                      participantesRows: participantStatsNT.map(p => ({
+                        label: p.displayLabel,
+                        count: p.count,
+                        percentage: p.percentage,
+                        extra: `${p.acatadas} acatada(s)`,
+                      })),
+                    },
+                    syntheticDevices: syntheticDeviceItems,
                   });
 
                   const url = URL.createObjectURL(blob);
@@ -7773,7 +8880,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                               3. DA ANÁLISE (Preenchimento 100% Automático)
                             </div>
                             <p className="text-[11px] text-indigo-900/80 font-medium mt-0.5">
-                              Consolidando automaticamente <strong>{structuredDevices.length}</strong> dispositivo(s) com a estrutura: Dispositivo; Texto Atual; Texto Proposto; Contribuições; Texto da Contribuição Sugerida; Justificativa do Participante; Justificativa Técnica (Resposta); Justificativa Técnica Final e Redação Final Após Análise.
+                              Inclui automaticamente os subtópicos <strong>3.1. Da Análise das Contribuições</strong> (estatísticas e gráficos), <strong>3.2. Da Análise Sintética das Contribuições</strong> (tabela sintética com Dispositivo, Síntese das Contribuições e Síntese da Justificativa Técnica com Parecer) e <strong>3.3. Da Análise Completa das Contribuições</strong> ({structuredDevices.length} dispositivo(s)).
                             </p>
                           </div>
                         </div>
@@ -7898,186 +9005,400 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           <span>DA ANÁLISE</span>
                         </div>
 
-                        {structuredDevices.length === 0 ? (
-                          <div className="p-4 bg-slate-50 border border-slate-200 rounded text-xs sm:text-sm text-black italic text-center font-serif">
-                            Nenhum dispositivo encontrado para o filtro selecionado.
+                        {/* SUBTÓPICO 3.1: Da Análise das Contribuições */}
+                        <div className="mb-8 space-y-5 font-serif text-xs sm:text-sm text-black">
+                          <div className="bg-slate-100 border-l-4 border-slate-700 px-3 py-1.5 font-bold text-xs sm:text-sm flex items-center">
+                            <span className="w-12 shrink-0">3.1.</span>
+                            <span>Da Análise das Contribuições</span>
                           </div>
-                        ) : (
-                          <div className="space-y-6 font-serif text-xs sm:text-sm text-black">
-                            {structuredDevices.map((dev, dIdx) => (
-                              <div key={dev.index} className="border border-slate-300 rounded-md overflow-hidden break-inside-avoid shadow-2xs font-serif text-xs sm:text-sm text-black">
-                                {/* Cabeçalho do Dispositivo na Nota Técnica */}
-                                <div className="bg-slate-100 px-3.5 py-2 border-b border-slate-300 flex flex-wrap items-center justify-between gap-2">
-                                  <div className="text-xs sm:text-sm font-bold text-black">
-                                    <span className="mr-3">{`3.${dIdx + 1}.`}</span>
-                                    <span>{dev.label}</span>
-                                  </div>
-                                  {dev.subjectsText && (
-                                    <span className="text-xs sm:text-sm font-semibold bg-white px-2 py-0.5 rounded border border-slate-300 text-black">
-                                      Assunto: {dev.subjectsText}
-                                    </span>
-                                  )}
+
+                          {/* 3.1.1 Estatística e Gráfico de Distribuição dos Pareceres */}
+                          <div className="space-y-3">
+                            <div className="flex items-start text-justify">
+                              <span className="w-16 shrink-0 font-semibold">3.1.1.</span>
+                              <p className="flex-1 leading-relaxed">{pareceresIntroText}</p>
+                            </div>
+
+                            <div className="border border-slate-300 rounded-md p-4 bg-white break-inside-avoid">
+                              <div className="text-xs font-bold uppercase tracking-wide text-black mb-3 pb-1.5 border-b border-slate-200 flex items-center justify-between">
+                                <span>Gráfico 1 — Distribuição dos Pareceres</span>
+                                <span className="text-[11px] font-normal text-slate-600">
+                                  Total: {totalContribsNT} contribuição(ões)
+                                </span>
+                              </div>
+                              {renderPrintableDonutChart(pareceresStatsList, totalContribsNT, "Pareceres")}
+                            </div>
+                          </div>
+
+                          {/* 3.1.2 Estatística e Gráfico de Complexidade das Contribuições */}
+                          <div className="space-y-3 pt-2">
+                            <div className="flex items-start text-justify">
+                              <span className="w-16 shrink-0 font-semibold">3.1.2.</span>
+                              <p className="flex-1 leading-relaxed">{complexidadeIntroText}</p>
+                            </div>
+
+                            <div className="border border-slate-300 rounded-md p-4 bg-white break-inside-avoid">
+                              <div className="text-xs font-bold uppercase tracking-wide text-black mb-3 pb-1.5 border-b border-slate-200 flex items-center justify-between">
+                                <span>Gráfico 2 — Complexidade das Contribuições</span>
+                                <span className="text-[11px] font-normal text-slate-600">
+                                  Impacto regulatório ({totalContribsNT} contribuição(ões))
+                                </span>
+                              </div>
+                              {renderPrintableDonutChart(complexidadeStatsList, totalContribsNT, "Complexidade")}
+                            </div>
+                          </div>
+
+                          {/* 3.1.3 Estatística por Participantes e Gráfico Ranking de Participação Social */}
+                          <div className="space-y-3 pt-2">
+                            <div className="flex items-start text-justify">
+                              <span className="w-16 shrink-0 font-semibold">3.1.3.</span>
+                              <p className="flex-1 leading-relaxed">{participantesIntroText}</p>
+                            </div>
+
+                            <div className="border border-slate-300 rounded-md p-4 bg-white break-inside-avoid">
+                              <div className="text-xs font-bold uppercase tracking-wide text-black mb-3 pb-1.5 border-b border-slate-200 flex items-center justify-between">
+                                <span>Gráfico 3 — Ranking de Participação Social (Por Participantes)</span>
+                                <span className="text-[11px] font-normal text-slate-600">
+                                  {participantStatsNT.length} participante(s) | {totalContribsNT} contribuição(ões)
+                                </span>
+                              </div>
+
+                              {participantStatsNT.length === 0 ? (
+                                <div className="flex items-center justify-center h-28 text-xs italic text-slate-500 border border-dashed border-slate-300 rounded p-4">
+                                  Nenhum participante registrado para exibição do ranking.
                                 </div>
-
-                                <div className="divide-y divide-slate-200 font-serif text-xs sm:text-sm text-black leading-relaxed">
-                                  {/* DISPOSITIVO */}
-                                  <div className="grid grid-cols-1 sm:grid-cols-12">
-                                    <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
-                                      DISPOSITIVO
-                                    </div>
-                                    <div className="sm:col-span-8 px-3 py-2 text-black font-semibold">
-                                      {dev.label}{dev.subjectsText ? ` — Assunto: ${dev.subjectsText}` : ""}
-                                    </div>
-                                  </div>
-
-                                  {/* TEXTO ATUAL */}
-                                  <div className="grid grid-cols-1 sm:grid-cols-12">
-                                    <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
-                                      TEXTO ATUAL
-                                    </div>
-                                    <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
-                                      {dev.textoAtual}
-                                    </div>
-                                  </div>
-
-                                  {/* TEXTO PROPOSTO */}
-                                  <div className="grid grid-cols-1 sm:grid-cols-12">
-                                    <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
-                                      TEXTO PROPOSTO
-                                    </div>
-                                    <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
-                                      {dev.textoProposto}
-                                    </div>
-                                  </div>
-
-                                  {/* CONTRIBUIÇÕES */}
-                                  <div className="grid grid-cols-1 sm:grid-cols-12">
-                                    <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
-                                      CONTRIBUIÇÕES
-                                    </div>
-                                    <div className="sm:col-span-8 px-3 py-2 text-black">
-                                      {dev.contributions.length === 0 ? (
-                                        <span className="italic text-black">Nenhuma contribuição recebida para este dispositivo.</span>
-                                      ) : (
-                                        <div className="space-y-1">
-                                          <div className="font-bold text-black">
-                                            {dev.contributions.length} {dev.contributions.length === 1 ? "contribuição recebida:" : "contribuições recebidas:"}
+                              ) : (
+                                <div className="space-y-2.5">
+                                  {(() => {
+                                    const maxParticipantCount = Math.max(...participantStatsNT.map(p => p.count), 1);
+                                    return participantStatsNT.map((part, pIdx) => {
+                                      const barWidthPct = Math.max(6, Math.round((part.count / maxParticipantCount) * 100));
+                                      return (
+                                        <div key={part.name} className="grid grid-cols-12 items-center gap-2 text-[11px]">
+                                          <div className="col-span-5 sm:col-span-4 pr-2 truncate text-right font-semibold text-black" title={part.displayLabel}>
+                                            <span className="text-slate-500 mr-1.5">{pIdx + 1}º</span>
+                                            <span>{part.displayLabel}</span>
                                           </div>
-                                          <ul className="list-disc pl-4 space-y-0.5">
-                                            {dev.contributions.map((c, cIdx) => (
-                                              <li key={c.id}>
-                                                <strong>#{cIdx + 1} {c.authorName}</strong>
-                                                {c.authorInstitution ? ` (${c.authorInstitution})` : ""}
-                                                {" — "}
-                                                <span className="font-semibold">Parecer: {c.decision}</span>
-                                                {c.complexity ? ` | Complexidade: ${c.complexity}` : ""}
-                                              </li>
-                                            ))}
-                                          </ul>
+                                          <div className="col-span-4 sm:col-span-5 bg-slate-100 rounded-xs h-5 overflow-hidden flex items-center border border-slate-200">
+                                            <div
+                                              className="h-full bg-[#0284c7] transition-all"
+                                              style={{ width: `${barWidthPct}%` }}
+                                            />
+                                          </div>
+                                          <div className="col-span-3 text-left pl-1 text-[10px] sm:text-[11px] text-black font-medium whitespace-nowrap">
+                                            <strong>{part.count}</strong> ({part.percentage})
+                                            {part.acatadas > 0 && (
+                                              <span className="ml-1 text-emerald-800 font-semibold">
+                                                • {part.acatadas} acat.
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
-                                      )}
+                                      );
+                                    });
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* SUBTÓPICO 3.2: Da Análise Sintética das Contribuições */}
+                        <div className="mb-8 space-y-4 font-serif text-xs sm:text-sm text-black">
+                          <div className="bg-slate-100 border-l-4 border-slate-700 px-3 py-1.5 font-bold text-xs sm:text-sm flex items-center">
+                            <span className="w-12 shrink-0">3.2.</span>
+                            <span>Da Análise Sintética das Contribuições</span>
+                          </div>
+
+                          <div className="flex items-start text-justify">
+                            <span className="w-16 shrink-0 font-semibold">3.2.1.</span>
+                            <p className="flex-1 leading-relaxed">
+                              Apresenta-se, nas tabelas a seguir, a síntese geral de conteúdo das contribuições por item, indicando o resumo do assunto tratado, a ideia central das contribuições e justificativas recebidas e a síntese da resposta técnica acompanhada do respectivo parecer.
+                            </p>
+                          </div>
+
+                          {syntheticDeviceItems.length === 0 ? (
+                            <div className="p-4 bg-slate-50 border border-slate-200 rounded text-xs sm:text-sm text-black italic text-center font-serif">
+                              Nenhum dispositivo disponível para o filtro selecionado.
+                            </div>
+                          ) : (
+                            <div className="space-y-5 font-serif text-xs sm:text-sm text-black">
+                              {syntheticDeviceItems.map((item, sIdx) => (
+                                <div
+                                  key={`synt-${item.index}`}
+                                  className="border border-slate-300 rounded-md overflow-hidden break-inside-avoid shadow-2xs font-serif text-xs sm:text-sm text-black"
+                                >
+                                  {/* Cabeçalho na Tabela Sintética */}
+                                  <div className="bg-slate-100 px-3.5 py-2 border-b border-slate-300 flex flex-wrap items-center justify-between gap-2">
+                                    <div className="text-xs sm:text-sm font-bold text-black">
+                                      <span className="mr-3">{`3.2.${sIdx + 2}.`}</span>
+                                      <span>{item.label}</span>
                                     </div>
                                   </div>
 
-                                  {/* DETALHAMENTO DE CADA CONTRIBUIÇÃO */}
-                                  {dev.contributions.length === 0 ? (
-                                    <>
-                                      <div className="grid grid-cols-1 sm:grid-cols-12">
-                                        <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
-                                          TEXTO DA CONTRIBUIÇÃO SUGERIDA
-                                        </div>
-                                        <div className="sm:col-span-8 px-3 py-2 text-black italic">
-                                          Não houve contribuição sugerida.
-                                        </div>
+                                  <div className="divide-y divide-slate-200 font-serif text-xs sm:text-sm text-black leading-relaxed">
+                                    {/* Campo 1: DISPOSITIVO (Resumo do assunto de que trata o item) */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-12">
+                                      <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                        DISPOSITIVO
                                       </div>
-                                      <div className="grid grid-cols-1 sm:grid-cols-12">
-                                        <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
-                                          JUSTIFICATIVA DO PARTICIPANTE
-                                        </div>
-                                        <div className="sm:col-span-8 px-3 py-2 text-black italic">
-                                          Não aplicável.
-                                        </div>
+                                      <div className="sm:col-span-8 px-3 py-2 text-black font-semibold text-justify">
+                                        {item.subjectsText || item.label}
                                       </div>
-                                      <div className="grid grid-cols-1 sm:grid-cols-12">
-                                        <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
-                                          JUSTIFICATIVA TÉCNICA (RESPOSTA)
-                                        </div>
-                                        <div className="sm:col-span-8 px-3 py-2 text-black italic">
-                                          Não aplicável.
-                                        </div>
+                                    </div>
+
+                                    {/* Campo 2: SÍNTESE DAS CONTRIBUIÇÕES RECEBIDAS */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-12">
+                                      <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                        SÍNTESE DAS CONTRIBUIÇÕES RECEBIDAS
                                       </div>
-                                    </>
-                                  ) : (
-                                    dev.contributions.map((c, cIdx) => (
-                                      <React.Fragment key={c.id}>
-                                        {dev.contributions.length > 1 && (
-                                          <div className="bg-slate-100/80 px-3 py-1.5 font-bold text-black uppercase text-[10px] sm:text-[11px]">
-                                            Contribuição #{cIdx + 1} — Participante: {c.authorName}{c.authorInstitution ? ` (${c.authorInstitution})` : ""}
+                                      <div className="sm:col-span-8 px-3 py-2 text-black space-y-2 text-justify">
+                                        {item.sinteseContribuicoesParagraphs.map((pText, pIdx) => (
+                                          <p key={pIdx} className="leading-relaxed">
+                                            {pText}
+                                          </p>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Campo 3: SÍNTESE DA JUSTIFICATIVA TÉCNICA (RESPOSTA) COM PARECER */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-12 bg-indigo-50/30">
+                                      <div className="sm:col-span-4 bg-indigo-50/70 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                        SÍNTESE DA JUSTIFICATIVA TÉCNICA (RESPOSTA)
+                                      </div>
+                                      <div className="sm:col-span-8 px-3 py-2 text-black space-y-2 text-justify">
+                                        <div className="flex flex-wrap items-center gap-2 pb-1.5 border-b border-indigo-200/60">
+                                          <span className="font-bold text-[11px] uppercase text-black">
+                                            Parecer:
+                                          </span>
+                                          {item.parecerBadges && item.parecerBadges.length > 0 ? (
+                                            item.parecerBadges.map((b, bIdx) => (
+                                              <span
+                                                key={bIdx}
+                                                className="px-2.5 py-0.5 rounded text-[11px] font-bold text-white shadow-2xs"
+                                                style={{ backgroundColor: b.colorHex }}
+                                              >
+                                                {b.text}
+                                              </span>
+                                            ))
+                                          ) : (
+                                            <span
+                                              className="px-2.5 py-0.5 rounded text-[11px] font-bold text-white shadow-2xs"
+                                              style={{ backgroundColor: "#64748b" }}
+                                            >
+                                              {item.parecerResumo}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {item.sinteseJustificativaTecnicaParagraphs.map((pText, pIdx) => (
+                                          <p key={pIdx} className="leading-relaxed">
+                                            {pText}
+                                          </p>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* SUBTÓPICO 3.3: Da Análise Completa das Contribuições */}
+                        <div className="space-y-4 font-serif text-xs sm:text-sm text-black">
+                          <div className="bg-slate-100 border-l-4 border-slate-700 px-3 py-1.5 font-bold text-xs sm:text-sm flex items-center">
+                            <span className="w-12 shrink-0">3.3.</span>
+                            <span>Da Análise Completa das Contribuições</span>
+                          </div>
+
+                          <div className="flex items-start text-justify">
+                            <span className="w-16 shrink-0 font-semibold">3.3.1.</span>
+                            <p className="flex-1 leading-relaxed">
+                              Apresenta-se, nas tabelas a seguir, a análise técnica completa e individualizada por dispositivo da minuta submetida à participação social, contemplando o texto atual, o texto proposto, a íntegra das contribuições e justificativas encaminhadas pelos participantes, as respostas técnicas individuais, a justificativa técnica final e a redação final após análise.
+                            </p>
+                          </div>
+
+                          {structuredDevices.length === 0 ? (
+                            <div className="p-4 bg-slate-50 border border-slate-200 rounded text-xs sm:text-sm text-black italic text-center font-serif">
+                              Nenhum dispositivo encontrado para o filtro selecionado.
+                            </div>
+                          ) : (
+                            <div className="space-y-6 font-serif text-xs sm:text-sm text-black">
+                              {structuredDevices.map((dev, dIdx) => (
+                                <div key={dev.index} className="border border-slate-300 rounded-md overflow-hidden break-inside-avoid shadow-2xs font-serif text-xs sm:text-sm text-black">
+                                  {/* Cabeçalho do Dispositivo na Nota Técnica */}
+                                  <div className="bg-slate-100 px-3.5 py-2 border-b border-slate-300 flex flex-wrap items-center justify-between gap-2">
+                                    <div className="text-xs sm:text-sm font-bold text-black">
+                                      <span className="mr-3">{`3.3.${dIdx + 2}.`}</span>
+                                      <span>{dev.label}</span>
+                                    </div>
+                                    {dev.subjectsText && (
+                                      <span className="text-xs sm:text-sm font-semibold bg-white px-2 py-0.5 rounded border border-slate-300 text-black">
+                                        Assunto: {dev.subjectsText}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="divide-y divide-slate-200 font-serif text-xs sm:text-sm text-black leading-relaxed">
+                                    {/* DISPOSITIVO */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-12">
+                                      <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                        DISPOSITIVO
+                                      </div>
+                                      <div className="sm:col-span-8 px-3 py-2 text-black font-semibold">
+                                        {dev.label}{dev.subjectsText ? ` — Assunto: ${dev.subjectsText}` : ""}
+                                      </div>
+                                    </div>
+
+                                    {/* TEXTO ATUAL */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-12">
+                                      <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                        TEXTO ATUAL
+                                      </div>
+                                      <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
+                                        {dev.textoAtual}
+                                      </div>
+                                    </div>
+
+                                    {/* TEXTO PROPOSTO */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-12">
+                                      <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                        TEXTO PROPOSTO
+                                      </div>
+                                      <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
+                                        {dev.textoProposto}
+                                      </div>
+                                    </div>
+
+                                    {/* CONTRIBUIÇÕES */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-12">
+                                      <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                        CONTRIBUIÇÕES
+                                      </div>
+                                      <div className="sm:col-span-8 px-3 py-2 text-black">
+                                        {dev.contributions.length === 0 ? (
+                                          <span className="italic text-black">Nenhuma contribuição recebida para este dispositivo.</span>
+                                        ) : (
+                                          <div className="space-y-1">
+                                            <div className="font-bold text-black">
+                                              {dev.contributions.length} {dev.contributions.length === 1 ? "contribuição recebida:" : "contribuições recebidas:"}
+                                            </div>
+                                            <ul className="list-disc pl-4 space-y-0.5">
+                                              {dev.contributions.map((c, cIdx) => (
+                                                <li key={c.id}>
+                                                  <strong>#{cIdx + 1} {c.authorName}</strong>
+                                                  {c.authorInstitution ? ` (${c.authorInstitution})` : ""}
+                                                  {" — "}
+                                                  <span className="font-semibold">Parecer: {c.decision}</span>
+                                                  {c.complexity ? ` | Complexidade: ${c.complexity}` : ""}
+                                                </li>
+                                              ))}
+                                            </ul>
                                           </div>
                                         )}
+                                      </div>
+                                    </div>
+
+                                    {/* DETALHAMENTO DE CADA CONTRIBUIÇÃO */}
+                                    {dev.contributions.length === 0 ? (
+                                      <>
                                         <div className="grid grid-cols-1 sm:grid-cols-12">
                                           <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
-                                            TEXTO DA CONTRIBUIÇÃO SUGERIDA{dev.contributions.length > 1 ? ` (#${cIdx + 1})` : ""}
+                                            TEXTO DA CONTRIBUIÇÃO SUGERIDA
                                           </div>
-                                          <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
-                                            {dev.contributions.length === 1 && (
-                                              <div className="font-bold text-black mb-1">
-                                                Participante: {c.authorName}{c.authorInstitution ? ` (${c.authorInstitution})` : ""}
-                                              </div>
-                                            )}
-                                            {c.proposedText}
+                                          <div className="sm:col-span-8 px-3 py-2 text-black italic">
+                                            Não houve contribuição sugerida.
                                           </div>
                                         </div>
-
                                         <div className="grid grid-cols-1 sm:grid-cols-12">
                                           <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
-                                            JUSTIFICATIVA DO PARTICIPANTE{dev.contributions.length > 1 ? ` (#${cIdx + 1})` : ""}
+                                            JUSTIFICATIVA DO PARTICIPANTE
                                           </div>
-                                          <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
-                                            {c.justification}
+                                          <div className="sm:col-span-8 px-3 py-2 text-black italic">
+                                            Não aplicável.
                                           </div>
                                         </div>
-
                                         <div className="grid grid-cols-1 sm:grid-cols-12">
                                           <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
-                                            JUSTIFICATIVA TÉCNICA (RESPOSTA){dev.contributions.length > 1 ? ` (#${cIdx + 1})` : ""}
+                                            JUSTIFICATIVA TÉCNICA (RESPOSTA)
                                           </div>
-                                          <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify space-y-1">
-                                            <div className="font-bold text-black">
-                                              Parecer Técnico: <span className="uppercase">{c.decision}</span>
-                                              {c.complexity ? ` | Complexidade: ${c.complexity}` : ""}
+                                          <div className="sm:col-span-8 px-3 py-2 text-black italic">
+                                            Não aplicável.
+                                          </div>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      dev.contributions.map((c, cIdx) => (
+                                        <React.Fragment key={c.id}>
+                                          {dev.contributions.length > 1 && (
+                                            <div className="bg-slate-100/80 px-3 py-1.5 font-bold text-black uppercase text-[10px] sm:text-[11px]">
+                                              Contribuição #{cIdx + 1} — Participante: {c.authorName}{c.authorInstitution ? ` (${c.authorInstitution})` : ""}
                                             </div>
-                                            <div>{c.technicalJustification}</div>
+                                          )}
+                                          <div className="grid grid-cols-1 sm:grid-cols-12">
+                                            <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                              TEXTO DA CONTRIBUIÇÃO SUGERIDA{dev.contributions.length > 1 ? ` (#${cIdx + 1})` : ""}
+                                            </div>
+                                            <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
+                                              {dev.contributions.length === 1 && (
+                                                <div className="font-bold text-black mb-1">
+                                                  Participante: {c.authorName}{c.authorInstitution ? ` (${c.authorInstitution})` : ""}
+                                                </div>
+                                              )}
+                                              {c.proposedText}
+                                            </div>
                                           </div>
-                                        </div>
-                                      </React.Fragment>
-                                    ))
-                                  )}
 
-                                  {/* JUSTIFICATIVA TÉCNICA FINAL */}
-                                  <div className="grid grid-cols-1 sm:grid-cols-12 bg-indigo-50/30">
-                                    <div className="sm:col-span-4 bg-indigo-50/70 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
-                                      JUSTIFICATIVA TÉCNICA FINAL
-                                    </div>
-                                    <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
-                                      {dev.justificativaTecnicaFinal}
-                                    </div>
-                                  </div>
+                                          <div className="grid grid-cols-1 sm:grid-cols-12">
+                                            <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                              JUSTIFICATIVA DO PARTICIPANTE{dev.contributions.length > 1 ? ` (#${cIdx + 1})` : ""}
+                                            </div>
+                                            <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
+                                              {c.justification}
+                                            </div>
+                                          </div>
 
-                                  {/* REDAÇÃO FINAL APÓS ANÁLISE */}
-                                  <div className="grid grid-cols-1 sm:grid-cols-12 bg-emerald-50/30">
-                                    <div className="sm:col-span-4 bg-emerald-50/70 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
-                                      REDAÇÃO FINAL APÓS ANÁLISE
+                                          <div className="grid grid-cols-1 sm:grid-cols-12">
+                                            <div className="sm:col-span-4 bg-slate-50 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                              JUSTIFICATIVA TÉCNICA (RESPOSTA){dev.contributions.length > 1 ? ` (#${cIdx + 1})` : ""}
+                                            </div>
+                                            <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify space-y-1">
+                                              <div className="font-bold text-black">
+                                                Parecer Técnico: <span className="uppercase">{c.decision}</span>
+                                                {c.complexity ? ` | Complexidade: ${c.complexity}` : ""}
+                                              </div>
+                                              <div>{c.technicalJustification}</div>
+                                            </div>
+                                          </div>
+                                        </React.Fragment>
+                                      ))
+                                    )}
+
+                                    {/* JUSTIFICATIVA TÉCNICA FINAL */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-12 bg-indigo-50/30">
+                                      <div className="sm:col-span-4 bg-indigo-50/70 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                        JUSTIFICATIVA TÉCNICA FINAL
+                                      </div>
+                                      <div className="sm:col-span-8 px-3 py-2 text-black whitespace-pre-line text-justify">
+                                        {dev.justificativaTecnicaFinal}
+                                      </div>
                                     </div>
-                                    <div className="sm:col-span-8 px-3 py-2 text-black font-medium whitespace-pre-line text-justify">
-                                      {dev.redacaoFinal}
+
+                                    {/* REDAÇÃO FINAL APÓS ANÁLISE */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-12 bg-emerald-50/30">
+                                      <div className="sm:col-span-4 bg-emerald-50/70 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
+                                        REDAÇÃO FINAL APÓS ANÁLISE
+                                      </div>
+                                      <div className="sm:col-span-8 px-3 py-2 text-black font-medium whitespace-pre-line text-justify">
+                                        {dev.redacaoFinal}
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* 4. DA FUNDAMENTAÇÃO LEGAL */}
