@@ -1293,19 +1293,18 @@ export async function generateNotaTecnicaDocxBlob(options: ExportNotaTecnicaDocx
     children.push(
       createNumberedSeiParagraph(
         "3.2.1.",
-        "Apresenta-se, a seguir, a síntese geral de conteúdo das contribuições recebidas por item, indicando o resumo do assunto tratado, a ideia central das contribuições e justificativas apresentadas, bem como a síntese da resposta técnica e respectivo parecer."
+        "Apresenta-se, nas tabelas a seguir, a síntese geral de conteúdo das contribuições por dispositivo, indicando o resumo do assunto tratado no dispositivo, a síntese das contribuições recebidas e o respectivo parecer."
       )
     );
 
     options.syntheticDevices.forEach((sDev, sIdx) => {
-      const headerText = sDev.subjectsText ? `${sDev.label} — ${sDev.subjectsText}` : sDev.label;
       children.push(
         new Paragraph({
           alignment: AlignmentType.LEFT,
           spacing: { before: 160, after: 80, line: 260 },
           children: [
             new TextRun({
-              text: `3.2.${sIdx + 2}.\t${headerText}`,
+              text: `3.2.${sIdx + 2}.\t${sDev.label}`,
               bold: true,
               font: FONT,
               size: SIZE,
@@ -1368,7 +1367,7 @@ export async function generateNotaTecnicaDocxBlob(options: ExportNotaTecnicaDocx
               shading: { fill: "E0E7FF" },
               borders: cellBorders,
               margins: { top: convertMillimetersToTwip(2), bottom: convertMillimetersToTwip(2), left: convertMillimetersToTwip(2.5), right: convertMillimetersToTwip(2.5) },
-              children: [new Paragraph({ children: [new TextRun({ text: "SÍNTESE DA JUSTIFICATIVA TÉCNICA (RESPOSTA)", bold: true, font: FONT, size: SMALL_SIZE, color: "000000" })] })],
+              children: [new Paragraph({ children: [new TextRun({ text: "PARECER", bold: true, font: FONT, size: SMALL_SIZE, color: "000000" })] })],
             }),
             new TableCell({
               width: { size: 72, type: WidthType.PERCENTAGE },
@@ -1378,9 +1377,8 @@ export async function generateNotaTecnicaDocxBlob(options: ExportNotaTecnicaDocx
               children: [
                 new Paragraph({
                   alignment: AlignmentType.LEFT,
-                  spacing: { before: 30, after: 60, line: 260 },
+                  spacing: { before: 30, after: 30, line: 260 },
                   children: [
-                    new TextRun({ text: "PARECER:  ", bold: true, font: FONT, size: SMALL_SIZE, color: "000000" }),
                     ...(sDev.parecerBadges && sDev.parecerBadges.length > 0
                       ? sDev.parecerBadges.flatMap((b, bIdx) => [
                           ...(bIdx > 0 ? [new TextRun({ text: "  ", font: FONT, size: SMALL_SIZE })] : []),
@@ -1405,14 +1403,6 @@ export async function generateNotaTecnicaDocxBlob(options: ExportNotaTecnicaDocx
                         ]),
                   ],
                 }),
-                ...sDev.sinteseJustificativaTecnicaParagraphs.map(
-                  (pText) =>
-                    new Paragraph({
-                      alignment: AlignmentType.JUSTIFIED,
-                      spacing: { before: 40, after: 40, line: 260 },
-                      children: [new TextRun({ text: pText, font: FONT, size: SIZE, color: "000000" })],
-                    })
-                ),
               ],
             }),
           ],

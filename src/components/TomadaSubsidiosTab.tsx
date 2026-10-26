@@ -797,6 +797,16 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [repeatProposed, setRepeatProposed] = useState(false);
 
+  const singleContribution = contributions.length === 1 ? contributions[0] : null;
+  const singleTechJustification = (singleContribution?.technicalJustification || "").trim();
+
+  const [repeatSingleJustification, setRepeatSingleJustification] = useState<boolean>(() => {
+    if (contributions.length !== 1) return false;
+    const sJust = (contributions[0]?.technicalJustification || "").trim();
+    const fJust = (article.finalJustification || "").trim();
+    return Boolean(sJust && fJust === sJust);
+  });
+
   const displayIndex = articleIndex !== undefined ? articleIndex : (article.order !== undefined ? article.order + 1 : 1);
   const dispInfo = getDispositivoInfo((article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText) || "", displayIndex);
 
@@ -821,12 +831,34 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
   }, [contributions, filters]);
 
   const prevContributionsRef = React.useRef<string>("");
+  const prevSingleTechJustRef = React.useRef<string>(singleTechJustification);
+
+  const computeAutoFinalText = React.useCallback(() => {
+    const acatadas = contributions.filter(c => c.decision === "Acatada");
+    const todasNaoAcatadas = contributions.length > 0 && contributions.every(c => 
+      c.decision === "Não Acatada" || 
+      c.decision === "Prejudicada" || 
+      c.decision === "Retida para Estudos Adicionais" ||
+      c.decision === "Devolvida para Justificativas Adicionais"
+    );
+
+    if (acatadas.length === 1) {
+      return acatadas[0].proposedText || "";
+    }
+    if (acatadas.length > 1) {
+      return acatadas.map(c => c.proposedText).filter(Boolean).join("\n\n");
+    }
+    if (todasNaoAcatadas) {
+      return (article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText) || "";
+    }
+    return finalText;
+  }, [contributions, article.proposedText, article.originalText, finalText]);
 
   useEffect(() => {
-    // Check if decisions changed to auto-fill text
-    const currentDecisions = contributions.map(c => `${c.id}:${c.decision}`).join('|');
+    // Check if decisions or single contribution technical justification changed to auto-fill final fields
+    const currentSnapshot = contributions.map(c => `${c.id}:${c.decision || ""}:${(c.technicalJustification || "").trim()}`).join('|');
     
-    if (prevContributionsRef.current !== "" && prevContributionsRef.current !== currentDecisions) {
+    if (prevContributionsRef.current !== "" && prevContributionsRef.current !== currentSnapshot) {
       const acatadas = contributions.filter(c => c.decision === "Acatada");
       const todasNaoAcatadas = contributions.length > 0 && contributions.every(c => 
         c.decision === "Não Acatada" || 
@@ -836,36 +868,80 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
       );
 
       let newFinalText = finalText;
-      let shouldUpdate = false;
+      let shouldUpdateText = false;
 
       if (acatadas.length === 1) {
         newFinalText = acatadas[0].proposedText || "";
-        shouldUpdate = true;
+        shouldUpdateText = true;
       } else if (acatadas.length > 1) {
         newFinalText = acatadas.map(c => c.proposedText).filter(Boolean).join("\n\n");
-        shouldUpdate = true;
+        shouldUpdateText = true;
       } else if (todasNaoAcatadas) {
         newFinalText = (article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText) || "";
-        shouldUpdate = true;
-      } else {
-        newFinalText = "";
-        shouldUpdate = true;
+        shouldUpdateText = true;
       }
 
-      if (shouldUpdate && newFinalText !== finalText) {
-        setFinalText(newFinalText);
-        handleUpdateFinalAnalysis(article.id, newFinalText, finalJustification);
+      // Sincroniza a Justificativa Técnica Final apenas se a opção (Checkbox) estiver marcada pelo analista
+      let newFinalJustification = finalJustification;
+      let shouldUpdateJust = false;
+
+      if (contributions.length === 1) {
+        const latestSingleJust = (contributions[0]?.technicalJustification || "").trim();
+        if (repeatSingleJustification && latestSingleJust) {
+          newFinalJustification = contributions[0].technicalJustification || "";
+          shouldUpdateJust = newFinalJustification !== finalJustification;
+        }
+        prevSingleTechJustRef.current = latestSingleJust;
+      }
+
+      if ((shouldUpdateText && newFinalText !== finalText) || shouldUpdateJust) {
+        const textToSave = shouldUpdateText ? newFinalText : finalText;
+        const justToSave = shouldUpdateJust ? newFinalJustification : finalJustification;
+        setFinalText(textToSave);
+        setFinalJustification(justToSave);
+        handleUpdateFinalAnalysis(article.id, textToSave, justToSave);
       }
     }
     
-    prevContributionsRef.current = currentDecisions;
-  }, [contributions, article.id, article.proposedText, article.originalText, finalJustification, handleUpdateFinalAnalysis, finalText]);
+    prevContributionsRef.current = currentSnapshot;
+  }, [contributions, article.id, article.proposedText, article.originalText, finalJustification, handleUpdateFinalAnalysis, finalText, repeatSingleJustification]);
 
   useEffect(() => {
-    setFinalText(article.finalText || "");
-    setFinalJustification(article.finalJustification || "");
+    const fText = article.finalText || "";
+    const fJust = article.finalJustification || "";
+    setFinalText(fText);
+    setFinalJustification(fJust);
     setRepeatProposed(false);
-  }, [article.finalText, article.finalJustification]);
+    if (contributions.length === 1) {
+      const sJust = (contributions[0]?.technicalJustification || "").trim();
+      setRepeatSingleJustification(Boolean(sJust && fJust.trim() === sJust));
+    } else {
+      setRepeatSingleJustification(false);
+    }
+  }, [article.finalText, article.finalJustification, contributions]);
+
+  const handleToggleRepeatSingleJustification = (checked: boolean, saveImmediately: boolean) => {
+    if (checked && !singleTechJustification) {
+      showToast("Aviso", "Preencha e salve primeiro a Justificativa Técnica (Resposta) da contribuição acima.", "warning");
+      setRepeatSingleJustification(false);
+      return;
+    }
+    setRepeatSingleJustification(checked);
+    if (checked) {
+      const copiedJust = singleContribution?.technicalJustification || "";
+      setFinalJustification(copiedJust);
+      if (saveImmediately) {
+        const textToSave = (article.finalText && article.finalText.trim()) ? article.finalText : computeAutoFinalText();
+        setFinalText(textToSave);
+        handleUpdateFinalAnalysis(article.id, textToSave, copiedJust);
+      }
+    } else {
+      setFinalJustification("");
+      if (saveImmediately) {
+        handleUpdateFinalAnalysis(article.id, article.finalText || finalText, "");
+      }
+    }
+  };
 
   const handleSuggestAI = async () => {
     setIsGeneratingAI(true);
@@ -1068,7 +1144,16 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
               <button onClick={handleSuggestAI} disabled={isGeneratingAI} className="p-1 text-[10px] font-bold uppercase tracking-wider text-indigo-50 hover:text-white bg-indigo-500 rounded hover:bg-adasa-mid transition-colors flex items-center gap-1 disabled:opacity-50">
                 <Sparkles size={12} className={isGeneratingAI ? "animate-pulse" : ""} /> {isGeneratingAI ? "Gerando..." : "IA"}
               </button>
-              <button onClick={() => setIsEditing(true)} className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded hover:bg-indigo-100 transition-colors">
+              <button
+                onClick={() => {
+                  if (!finalText.trim()) {
+                    const suggestedText = computeAutoFinalText();
+                    if (suggestedText) setFinalText(suggestedText);
+                  }
+                  setIsEditing(true);
+                }}
+                className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded hover:bg-indigo-100 transition-colors"
+              >
                 {article.finalText || article.finalJustification ? "Editar Parecer" : "Adicionar Parecer"}
               </button>
             </div>
@@ -1077,33 +1162,39 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
 
         {isEditing ? (
           <div className="space-y-3 bg-white p-4 rounded-xl border border-indigo-200 shadow-2xs">
-            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-indigo-100/60">
-              <input
-                type="checkbox"
-                id={`repeat-${article.id}`}
-                checked={repeatProposed}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  setRepeatProposed(checked);
-                  if (checked) {
-                    setFinalText(article.proposedText !== undefined ? article.proposedText : (article.originalText || ""));
-                    setFinalJustification(
-                      article.contentType === 'table' || isTableJson((article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText))
-                        ? "Tabela Final do Dispositivo mantida conforme Proposta em Consulta. Sem alterações acatadas."
-                        : "Texto Final do Dispositivo igual ao Texto Proposto em Consulta. Sem contribuições recebidas"
-                    )
-                  } else {
-                    setFinalText(article.finalText || "");
-                    setFinalJustification(article.finalJustification || "");
-                  }
-                }}
-                className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-600 cursor-pointer"
-              />
-              <label htmlFor={`repeat-${article.id}`} className="text-[11px] font-bold text-slate-700 cursor-pointer select-none">
-                {article.contentType === 'table' || isTableJson((article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText))
-                  ? "Repetir Tabela Proposta como Tabela Final?"
-                  : "Repetir Texto Proposto como Texto Final?"}
-              </label>
+            <div className="flex flex-wrap items-center gap-6 mb-2 pb-2 border-b border-indigo-100/60">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id={`repeat-${article.id}`}
+                  checked={repeatProposed}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setRepeatProposed(checked);
+                    if (checked) {
+                      setFinalText(article.proposedText !== undefined ? article.proposedText : (article.originalText || ""));
+                      if (contributions.length === 0) {
+                        setFinalJustification(
+                          article.contentType === 'table' || isTableJson((article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText))
+                            ? "Tabela Final do Dispositivo mantida conforme Proposta em Consulta. Sem alterações acatadas."
+                            : "Texto Final do Dispositivo igual ao Texto Proposto em Consulta. Sem contribuições recebidas"
+                        );
+                      }
+                    } else {
+                      setFinalText(article.finalText || "");
+                      if (contributions.length === 0) {
+                        setFinalJustification(article.finalJustification || "");
+                      }
+                    }
+                  }}
+                  className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-600 cursor-pointer"
+                />
+                <label htmlFor={`repeat-${article.id}`} className="text-[11px] font-bold text-slate-700 cursor-pointer select-none">
+                  {article.contentType === 'table' || isTableJson((article.proposedText !== undefined && article.proposedText !== null ? article.proposedText : article.originalText))
+                    ? "Repetir Tabela Proposta como Tabela Final?"
+                    : "Repetir Texto Proposto como Texto Final?"}
+                </label>
+              </div>
             </div>
             <div>
               <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
@@ -1147,10 +1238,33 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
               )}
             </div>
             <div>
-              <label className="block text-xs font-black text-slate-800 uppercase tracking-widest mb-2">Justificativa Técnica Final</label>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <label className="block text-xs font-black text-slate-800 uppercase tracking-widest">Justificativa Técnica Final</label>
+                {contributions.length === 1 && (
+                  <label
+                    htmlFor={`repeat-single-just-edit-${article.id}`}
+                    className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-[11px] font-bold text-indigo-800 cursor-pointer select-none hover:bg-indigo-100 transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      id={`repeat-single-just-edit-${article.id}`}
+                      checked={repeatSingleJustification}
+                      onChange={(e) => handleToggleRepeatSingleJustification(e.target.checked, false)}
+                      className="w-3.5 h-3.5 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-600 cursor-pointer"
+                    />
+                    <span>Repetir Justificativa Técnica (Resposta) da única contribuição?</span>
+                  </label>
+                )}
+              </div>
               <textarea
                 value={finalJustification}
-                onChange={(e) => setFinalJustification(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFinalJustification(val);
+                  if (contributions.length === 1) {
+                    setRepeatSingleJustification(Boolean(singleTechJustification && val.trim() === singleTechJustification));
+                  }
+                }}
                 rows={6}
                 className="w-full bg-white px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800"
                 placeholder="Insira as considerações técnicas da ADASA sobre o aceite ou não das contribuições..."
@@ -1197,7 +1311,25 @@ const TechnicalAnalysisArticle: React.FC<TechnicalAnalysisArticleProps> = ({
               )}
             </div>
             <div>
-              <span className="block text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">Justificativa Técnica Final</span>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <span className="block text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Justificativa Técnica Final</span>
+                {contributions.length === 1 && (
+                  <label
+                    htmlFor={`repeat-single-just-view-${article.id}`}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 cursor-pointer select-none hover:bg-indigo-50 transition-colors shadow-2xs"
+                    title="Marque para repetir a Justificativa Técnica (Resposta) da única contribuição como Justificativa Técnica Final"
+                  >
+                    <input
+                      type="checkbox"
+                      id={`repeat-single-just-view-${article.id}`}
+                      checked={Boolean(singleTechJustification && article.finalJustification && article.finalJustification.trim() === singleTechJustification)}
+                      onChange={(e) => handleToggleRepeatSingleJustification(e.target.checked, true)}
+                      className="w-3.5 h-3.5 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-600 cursor-pointer"
+                    />
+                    <span>Repetir Justificativa Técnica (Resposta) da única contribuição?</span>
+                  </label>
+                )}
+              </div>
               {article.finalJustification ? (
                 <div className="bg-white p-3 rounded-xl border border-indigo-100 text-xs text-slate-700 whitespace-pre-line shadow-2xs">
                   {article.finalJustification}
@@ -8078,11 +8210,11 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                 return nominalizeCaputClause(themeBody, displayIdx);
               };
 
-              // Gera síntese curta e executiva da ideia da contribuição e de sua justificativa (máx. 1 a 2 frases curtas)
+              // Gera síntese das contribuições em 1 parágrafo de tamanho médio, explicando com clareza o que está sendo sugerido
               const buildContributionSynthesisParagraphs = (baseText: string, cArt: Contribution[]): string[] => {
                 if (cArt.length === 0) {
                   return [
-                    "Sem contribuições recebidas, mantendo-se a redação original.",
+                    "Não foram recebidas contribuições para este dispositivo durante a consulta pública, mantendo-se a redação originalmente proposta na minuta.",
                   ];
                 }
 
@@ -8096,64 +8228,157 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                   splitIntoAtomicClauses(baseText).map(normalizeForCompare).filter(Boolean)
                 );
 
-                const summarizeSingleProposalIdea = (c: Contribution): string => {
-                  if (c.isSuppressing || !c.proposedText || !c.proposedText.trim()) {
-                    return "Sugere-se a supressão deste dispositivo.";
+                // Transforma uma oração normativa alterada/incluída em redação explicativa natural
+                const formatClauseAsSuggestion = (rawClause: string, maxLen: number, isSecondary = false): string => {
+                  const condensed = condenseClauseGrammatically(rawClause, maxLen).replace(/\.$/, "").trim();
+                  if (!condensed) return "";
+
+                  // Caso de preâmbulo / considerandos
+                  const considerandoMatch = condensed.match(/^considerando\s+(?:o\s+que\s+(?:estabelece|dispõe)\s+|que\s+)?(.+)$/i);
+                  if (considerandoMatch && considerandoMatch[1]) {
+                    const body = considerandoMatch[1].charAt(0).toLowerCase() + considerandoMatch[1].slice(1);
+                    return isSecondary
+                      ? `bem como contemplar nos fundamentos técnicos ${body}.`
+                      : `Sugere-se atualizar os fundamentos do preâmbulo para contemplar ${body}.`;
                   }
+
+                  const lowered = condensed.charAt(0).toLowerCase() + condensed.slice(1);
+
+                  if (isSecondary) {
+                    if (/^(?:o\s+|a\s+|os\s+|as\s+|fica\s+|é\s+|são\s+|deve|cabe|compete|nos\s+|nas\s+|em\s+|para\s+|quando\s+|caso\s+)/i.test(condensed)) {
+                      return `Propõe-se, ainda, prever que ${lowered}.`;
+                    }
+                    return `Adicionalmente, sugere-se dispor sobre ${lowered}.`;
+                  }
+
+                  if (/^(?:sugere-se|propõe-se|solicita-se|recomenda-se)/i.test(condensed)) {
+                    return `${condensed}.`;
+                  }
+                  if (/^(?:o\s+|a\s+|os\s+|as\s+|fica\s+|é\s+|são\s+|deve|cabe|compete|nos\s+|nas\s+|em\s+|para\s+|quando\s+|caso\s+|sempre\s+que\s+)/i.test(condensed)) {
+                    return `Sugere-se prever que ${lowered}.`;
+                  }
+                  return `Sugere-se estabelecer ${lowered}.`;
+                };
+
+                // Extrai o complemento explicativo (objetivo/motivação da sugestão) para enriquecer o parágrafo
+                const extractExplanatoryIntent = (c: Contribution, existingNorm: string): string => {
+                  const rawJ = (c.justification || "")
+                    .replace(/\bitemsa\b/gi, "item visa")
+                    .replace(/\bvisa\s+a?\s*esclarecer/gi, "visa esclarecer")
+                    .trim();
+
+                  if (!rawJ) return "";
+
+                  if (/^(?:[ií]dem|mesma\s+justificativa|conforme\s+anterior|vide\s+anterior|idem\s+[àa]\s+considera[çc][ãa]o)/i.test(rawJ)) {
+                    return "A proposta busca alinhar o dispositivo às demais alterações correlatas sugeridas para a norma.";
+                  }
+
+                  // Se a justificativa for muito curta (ex.: "Atualização do texto", "Ajuste redacional"), transformar em frase explicativa completa
+                  const cleanShort = cleanNormativeCitationsPreservingGrammar(rawJ).replace(/\.$/, "").trim();
+                  if (!cleanShort) return "";
+
+                  if (cleanShort.length < 35) {
+                    const lowShort = cleanShort.charAt(0).toLowerCase() + cleanShort.slice(1);
+                    return `A alteração tem por objetivo promover ${lowShort} e aprimorar a clareza normativa do dispositivo.`;
+                  }
+
+                  const jClauses = splitIntoAtomicClauses(rawJ);
+                  if (jClauses.length === 0) return "";
+
+                  const chosenJ = jClauses.find(cl => normalizeForCompare(cl) !== existingNorm) || jClauses[0];
+                  const condensedJ = condenseClauseGrammatically(chosenJ, 185);
+                  if (!condensedJ || normalizeForCompare(condensedJ) === existingNorm) return "";
+
+                  const bodyJ = condensedJ.replace(/\.$/, "").trim();
+                  const lowerJ = bodyJ.charAt(0).toLowerCase() + bodyJ.slice(1);
+
+                  if (
+                    /^(?:a\s+(?:inclusão|alteração|proposta|sugestão|exclusão|supressão|medida|redação)|o\s+(?:objetivo|intuito|propósito|participante|contribuinte)|busca-se|objetiva-se|pretende-se|visa-se|trata-se|argumenta-se|justifica-se|tal\s+)/i.test(
+                      bodyJ
+                    )
+                  ) {
+                    return `${bodyJ}.`;
+                  }
+                  if (/^(?:para\s+|visando\s+|com\s+o\s+objetivo\s+de\s+|a\s+fim\s+de\s+)/i.test(bodyJ)) {
+                    return `A medida é proposta ${lowerJ}.`;
+                  }
+                  return `Na justificativa da proposta, aponta-se que ${lowerJ}.`;
+                };
+
+                const summarizeSingleContributionDetailed = (c: Contribution): { mainProposal: string; extraClause: string; intent: string } => {
+                  if (c.isSuppressing || !c.proposedText || !c.proposedText.trim() || /\((?:suprimido|revogado)\)/i.test(c.proposedText)) {
+                    const mainProposal = "Sugere-se a supressão deste dispositivo da minuta.";
+                    const intent = extractExplanatoryIntent(c, normalizeForCompare(mainProposal));
+                    return { mainProposal, extraClause: "", intent };
+                  }
+
                   if (isTableJson(c.proposedText) || isTableJson(baseText)) {
-                    return "Sugere-se a revisão de parâmetros e valores na tabela técnica.";
+                    const mainProposal = "Sugere-se a revisão e atualização dos parâmetros, limites e valores constantes na tabela técnica do dispositivo.";
+                    const intent = extractExplanatoryIntent(c, normalizeForCompare(mainProposal));
+                    return { mainProposal, extraClause: "", intent };
                   }
 
                   const propClauses = splitIntoAtomicClauses(c.proposedText);
-                  // Localizar especificamente a oração que foi adicionada ou alterada em relação ao texto-base original
-                  const diffClause = propClauses.find(cl => {
+                  const diffClauses = propClauses.filter(cl => {
                     const norm = normalizeForCompare(cl);
                     return norm.length >= 15 && !baseClausesNormalized.has(norm);
                   });
 
-                  if (!diffClause) {
-                    return "Sugere-se ajuste redacional para maior clareza e precisão da regra.";
+                  if (diffClauses.length === 0) {
+                    const fallback = propClauses[0]
+                      ? formatClauseAsSuggestion(propClauses[0], 170, false)
+                      : "Sugere-se ajuste redacional no dispositivo para aprimorar a clareza e a precisão técnica da regra.";
+                    const intent = extractExplanatoryIntent(c, normalizeForCompare(fallback));
+                    return { mainProposal: fallback, extraClause: "", intent };
                   }
 
-                  const conciseDiff = condenseClauseGrammatically(diffClause, 95);
-                  if (!conciseDiff) {
-                    return "Sugere-se ajuste redacional para maior clareza e precisão da regra.";
-                  }
+                  const mainProposal = formatClauseAsSuggestion(diffClauses[0], 175, false);
+                  const extraClause =
+                    diffClauses.length > 1 && mainProposal.length < 165
+                      ? formatClauseAsSuggestion(diffClauses[1], 145, true)
+                      : "";
+                  const intent = extractExplanatoryIntent(c, normalizeForCompare(mainProposal));
 
-                  const lowered = conciseDiff.charAt(0).toLowerCase() + conciseDiff.slice(1);
-                  if (/^(?:o\s+|a\s+|os\s+|as\s+|fica\s+|é\s+|são\s+|deve|cabe|compete|nos\s+|nas\s+|em\s+|para\s+|quando\s+)/i.test(conciseDiff)) {
-                    return `Sugere-se prever que ${lowered}`;
-                  }
-                  return `Sugere-se estabelecer: ${conciseDiff}`;
-                };
-
-                const summarizeSingleJustificationIdea = (c: Contribution): string => {
-                  const rawJ = (c.justification || "").trim();
-                  if (!rawJ) return "";
-                  if (/^(?:[ií]dem|mesma\s+justificativa|conforme\s+anterior|vide\s+anterior|idem\s+[àa]\s+considera[çc][ãa]o)/i.test(rawJ)) {
-                    return "Fundamenta-se em argumento de contribuição correlata para reforçar a segurança jurídica.";
-                  }
-                  return summarizeToConciseSentence(rawJ, "justification");
+                  return { mainProposal, extraClause, intent };
                 };
 
                 if (cArt.length === 1) {
-                  const propText = summarizeSingleProposalIdea(cArt[0]);
-                  const justText = summarizeSingleJustificationIdea(cArt[0]);
-                  if (justText && normalizeForCompare(propText) !== normalizeForCompare(justText)) {
-                    return [`${propText} ${justText}`];
+                  const { mainProposal, extraClause, intent } = summarizeSingleContributionDetailed(cArt[0]);
+                  const parts = [mainProposal];
+                  if (extraClause) parts.push(extraClause);
+                  if (intent) {
+                    parts.push(intent);
+                  } else if (!extraClause) {
+                    parts.push("A contribuição visa conferir maior clareza, segurança jurídica e adequação operacional à aplicação da regra.");
                   }
-                  return [propText];
+                  return [parts.join(" ")];
                 }
 
-                // Múltiplas contribuições: resumo conciso em parágrafo curto
-                const proposalsList = Array.from(new Set(cArt.map(c => summarizeSingleProposalIdea(c)))).slice(0, 2);
-                const firstParagraph = `Recebidas ${cArt.length} contribuições. ${proposalsList.join(" ")}`;
+                // Múltiplas contribuições: construir 1 único parágrafo médio e coeso explicando as sugestões recebidas
+                const detailedList = cArt.map(c => summarizeSingleContributionDetailed(c));
+                const uniqueMainProposals = Array.from(new Set(detailedList.map(d => d.mainProposal).filter(Boolean)));
+                const uniqueIntents = Array.from(new Set(detailedList.map(d => d.intent).filter(Boolean)));
 
-                const justList = Array.from(
-                  new Set(cArt.map(c => summarizeSingleJustificationIdea(c)).filter(Boolean))
-                ).slice(0, 1);
+                const sentences: string[] = [];
+                if (uniqueMainProposals.length === 1) {
+                  sentences.push(`Foram recebidas ${cArt.length} contribuições convergentes para este dispositivo. ${uniqueMainProposals[0]}`);
+                  const extra = detailedList.find(d => d.extraClause)?.extraClause;
+                  if (extra) sentences.push(extra);
+                } else {
+                  const firstProp = uniqueMainProposals[0];
+                  const secondPropRaw = uniqueMainProposals[1]
+                    .replace(/^Sugere-se\s+/i, "Também se propõe ")
+                    .replace(/^Propõe-se\s+/i, "Adicionalmente, sugere-se ");
+                  sentences.push(`Foram recebidas ${cArt.length} contribuições para este dispositivo. ${firstProp} ${secondPropRaw}`);
+                }
 
-                return justList.length > 0 ? [firstParagraph, justList[0]] : [firstParagraph];
+                if (uniqueIntents.length > 0) {
+                  sentences.push(uniqueIntents[0]);
+                } else {
+                  sentences.push("As sugestões buscam aprimorar a redação normativa e adequar os critérios técnicos e operacionais previstos na minuta.");
+                }
+
+                return [sentences.join(" ")];
               };
 
               const buildSyntheticDeviceItems = (): NotaTecnicaSyntheticDeviceItem[] => {
@@ -8286,7 +8511,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
                   return {
                     index: displayIdx,
-                    label: `${artPrefix.replace(/\.$/, "")} (Item #${displayIdx})`,
+                    label: `${artPrefix.replace(/\.$/, "")} (Dispositivo #${displayIdx})`,
                     subjectsText: subjectSummary,
                     sinteseContribuicoesParagraphs,
                     parecerResumo,
@@ -8471,19 +8696,15 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
 
                 // 3.2. Da Análise Sintética das Contribuições
                 txt += `3.2. Da Análise Sintética das Contribuições\n\n`;
-                txt += `3.2.1. Apresenta-se, a seguir, a síntese geral de conteúdo das contribuições recebidas por item, indicando o resumo do assunto tratado, a ideia central das contribuições e justificativas apresentadas, bem como a síntese da justificativa técnica (resposta) e respectivo parecer.\n\n`;
+                txt += `3.2.1. Apresenta-se, a seguir, a síntese geral das contribuições recebidas por dispositivo, indicando o resumo do assunto tratado, a síntese das contribuições recebidas e o respectivo parecer.\n\n`;
                 syntheticDeviceItems.forEach((item, sIdx) => {
-                  txt += `3.2.${sIdx + 2}. ${item.label} — ${item.subjectsText || ""}\n`;
+                  txt += `3.2.${sIdx + 2}. ${item.label}\n`;
                   txt += `  • DISPOSITIVO: ${item.subjectsText || item.label}\n`;
                   txt += `  • SÍNTESE DAS CONTRIBUIÇÕES RECEBIDAS:\n`;
                   item.sinteseContribuicoesParagraphs.forEach(p => {
                     txt += `    ${p}\n`;
                   });
-                  txt += `  • SÍNTESE DA JUSTIFICATIVA TÉCNICA (RESPOSTA) [Parecer: ${item.parecerResumo}]:\n`;
-                  item.sinteseJustificativaTecnicaParagraphs.forEach(p => {
-                    txt += `    ${p}\n`;
-                  });
-                  txt += `\n`;
+                  txt += `  • PARECER: ${item.parecerResumo}\n\n`;
                 });
 
                 // 3.3. Da Análise Completa das Contribuições
@@ -8880,7 +9101,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                               3. DA ANÁLISE (Preenchimento 100% Automático)
                             </div>
                             <p className="text-[11px] text-indigo-900/80 font-medium mt-0.5">
-                              Inclui automaticamente os subtópicos <strong>3.1. Da Análise das Contribuições</strong> (estatísticas e gráficos), <strong>3.2. Da Análise Sintética das Contribuições</strong> (tabela sintética com Dispositivo, Síntese das Contribuições e Síntese da Justificativa Técnica com Parecer) e <strong>3.3. Da Análise Completa das Contribuições</strong> ({structuredDevices.length} dispositivo(s)).
+                              Inclui automaticamente os subtópicos <strong>3.1. Da Análise das Contribuições</strong> (estatísticas e gráficos), <strong>3.2. Da Análise Sintética das Contribuições</strong> (tabela sintética com Dispositivo, Síntese das Contribuições Recebidas e Parecer) e <strong>3.3. Da Análise Completa das Contribuições</strong> ({structuredDevices.length} dispositivo(s)).
                             </p>
                           </div>
                         </div>
@@ -9113,7 +9334,7 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                           <div className="flex items-start text-justify">
                             <span className="w-16 shrink-0 font-semibold">3.2.1.</span>
                             <p className="flex-1 leading-relaxed">
-                              Apresenta-se, nas tabelas a seguir, a síntese geral de conteúdo das contribuições por item, indicando o resumo do assunto tratado, a ideia central das contribuições e justificativas recebidas e a síntese da resposta técnica acompanhada do respectivo parecer.
+                              Apresenta-se, nas tabelas a seguir, a síntese geral de conteúdo das contribuições por dispositivo, indicando o resumo do assunto tratado no dispositivo, a síntese das contribuições recebidas e o respectivo parecer.
                             </p>
                           </div>
 
@@ -9161,40 +9382,30 @@ export const TomadaSubsidiosTab: React.FC<TomadaSubsidiosTabProps> = ({ showToas
                                       </div>
                                     </div>
 
-                                    {/* Campo 3: SÍNTESE DA JUSTIFICATIVA TÉCNICA (RESPOSTA) COM PARECER */}
+                                    {/* Campo 3: PARECER */}
                                     <div className="grid grid-cols-1 sm:grid-cols-12 bg-indigo-50/30">
-                                      <div className="sm:col-span-4 bg-indigo-50/70 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200">
-                                        SÍNTESE DA JUSTIFICATIVA TÉCNICA (RESPOSTA)
+                                      <div className="sm:col-span-4 bg-indigo-50/70 px-3 py-2 font-bold text-black uppercase text-[10px] sm:text-[11px] leading-snug sm:border-r border-slate-200 flex items-center">
+                                        PARECER
                                       </div>
-                                      <div className="sm:col-span-8 px-3 py-2 text-black space-y-2 text-justify">
-                                        <div className="flex flex-wrap items-center gap-2 pb-1.5 border-b border-indigo-200/60">
-                                          <span className="font-bold text-[11px] uppercase text-black">
-                                            Parecer:
-                                          </span>
-                                          {item.parecerBadges && item.parecerBadges.length > 0 ? (
-                                            item.parecerBadges.map((b, bIdx) => (
-                                              <span
-                                                key={bIdx}
-                                                className="px-2.5 py-0.5 rounded text-[11px] font-bold text-white shadow-2xs"
-                                                style={{ backgroundColor: b.colorHex }}
-                                              >
-                                                {b.text}
-                                              </span>
-                                            ))
-                                          ) : (
+                                      <div className="sm:col-span-8 px-3 py-2 text-black flex flex-wrap items-center gap-2">
+                                        {item.parecerBadges && item.parecerBadges.length > 0 ? (
+                                          item.parecerBadges.map((b, bIdx) => (
                                             <span
+                                              key={bIdx}
                                               className="px-2.5 py-0.5 rounded text-[11px] font-bold text-white shadow-2xs"
-                                              style={{ backgroundColor: "#64748b" }}
+                                              style={{ backgroundColor: b.colorHex }}
                                             >
-                                              {item.parecerResumo}
+                                              {b.text}
                                             </span>
-                                          )}
-                                        </div>
-                                        {item.sinteseJustificativaTecnicaParagraphs.map((pText, pIdx) => (
-                                          <p key={pIdx} className="leading-relaxed">
-                                            {pText}
-                                          </p>
-                                        ))}
+                                          ))
+                                        ) : (
+                                          <span
+                                            className="px-2.5 py-0.5 rounded text-[11px] font-bold text-white shadow-2xs"
+                                            style={{ backgroundColor: "#64748b" }}
+                                          >
+                                            {item.parecerResumo}
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
