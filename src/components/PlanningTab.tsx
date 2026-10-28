@@ -82,7 +82,8 @@ import {
   Check,
   BarChart3,
   BookmarkCheck,
-  AlertOctagon
+  AlertOctagon,
+  Presentation
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { FiscalizacaoEditor } from './FiscalizacaoEditor';
@@ -98,6 +99,7 @@ import { PlanningSkeleton } from "../modules/planning/PlanningSkeleton";
 import { TaskModelManager } from "./TaskModelManager";
 import { RadarAtividadesTab } from "./RadarAtividadesTab";
 import { TaskTimelineModal } from "./TaskTimelineModal";
+import { BoletimTrimestralModal } from "./BoletimTrimestralModal";
 import { calculateDurationInDays } from "../utils/durationUtils";
  
 interface PlanningTabProps {
@@ -1297,6 +1299,9 @@ export function PlanningTab({
   const [newLinkUrl, setNewLinkUrl] = useState("");
   const [newLinkTitle, setNewLinkTitle] = useState("");
   const [isRegModalOpen, setIsRegModalOpen] = useState(false);
+
+  // Boletim Trimestral Modal State
+  const [boletimModalOpen, setBoletimModalOpen] = useState(false);
 
   // Duplicate Task State & Handlers
   const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
@@ -8823,15 +8828,26 @@ export function PlanningTab({
     return (
       <div className="space-y-6 w-full pb-16 text-left">
         {/* Info Header */}
-        <div className="bg-adasa-dark rounded-3xl p-6 md:p-8 text-white relative overflow-hidden shadow-lg border border-slate-800">
-          <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl"></div>
+        <div className="bg-adasa-dark rounded-3xl p-6 md:p-8 text-white relative overflow-hidden shadow-lg border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
           <div className="relative z-10 font-bold">
-            <span className="text-[10px] bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 px-3 py-1 rounded-full font-black uppercase tracking-widest leading-none mb-6 inline-block">
+            <span className="text-[10px] bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 px-3 py-1 rounded-full font-black uppercase tracking-widest leading-none mb-3 inline-block">
               Mapeamento & Monitoramento Estratégico
             </span>
             <h2 className="text-2xl md:text-3xl font-black tracking-tight leading-none">
               Painel de Acompanhamento de Atividades
             </h2>
+          </div>
+          <div className="relative z-10 shrink-0">
+            <button
+              type="button"
+              onClick={() => setBoletimModalOpen(true)}
+              className="px-4 py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:shadow-indigo-500/25 cursor-pointer border border-white/20"
+              title="Gerar Boletim Trimestral de Atividades em formato de Slides 16:9 / Exportar para PDF"
+            >
+              <Presentation size={17} />
+              <span>Gerar Boletim Trimestral</span>
+            </button>
           </div>
         </div>
 
@@ -10881,6 +10897,15 @@ export function PlanningTab({
                       <FileSpreadsheet size={14} className="text-emerald-600" />
                       <span>Exportar Excel</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setBoletimModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 hover:bg-sky-100/80 text-xs font-bold transition-colors shadow-2xs hover:shadow-xs uppercase tracking-wider cursor-pointer"
+                      title="Gerar Boletim Trimestral em Slides 16:9 / Exportar para PDF"
+                    >
+                      <Presentation size={14} className="text-sky-600" />
+                      <span>Boletim Trimestral</span>
+                    </button>
                   </div>
 
                   {/* Selector: Tabela vs Gantt */}
@@ -12525,6 +12550,17 @@ export function PlanningTab({
         {/* Complete Duplicate Task Modal */}
         {renderDuplicateTaskModal()}
 
+        {/* Boletim Trimestral Modal */}
+        <BoletimTrimestralModal
+          isOpen={boletimModalOpen}
+          onClose={() => setBoletimModalOpen(false)}
+          tasks={tasks}
+          areas={areas}
+          categories={categories}
+          plans={plans}
+          showToast={showToast}
+        />
+
       </div>
     );
   }
@@ -12559,9 +12595,18 @@ export function PlanningTab({
 
               <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
                 <button
+                  type="button"
+                  onClick={() => setBoletimModalOpen(true)}
+                  className="px-3.5 py-2 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm hover:shadow cursor-pointer"
+                  title="Gerar Boletim Trimestral de Atividades em formato de Slides 16:9 / Exportar para PDF"
+                >
+                  <Presentation size={15} />
+                  <span>Boletim Trimestral</span>
+                </button>
+                <button
                   onClick={reloadTasks}
                   disabled={isSyncing}
-                  className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all flex items-center justify-center animate-none shadow-sm"
+                  className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all flex items-center justify-center animate-none shadow-sm cursor-pointer"
                   title="Sincronizar atividades"
                 >
                   <RefreshCw size={14} className={isSyncing ? "animate-spin" : ""} />
@@ -13329,16 +13374,16 @@ export function PlanningTab({
                       <LayoutGrid size={16} /> Quadro
                     </button>
                     <button
-                      onClick={() => { setViewMode("tree"); setTimelineTaskId(null); }}
-                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "tree" && timelineTaskId === null ? "bg-adasa-mid text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
-                    >
-                      <FolderKanban size={16} /> Recentes
-                    </button>
-                    <button
                       onClick={() => { setViewMode("category"); setTimelineTaskId(null); }}
                       className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "category" && timelineTaskId === null ? "bg-adasa-mid text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
                     >
                       <Tag size={16} /> Categorias
+                    </button>
+                    <button
+                      onClick={() => { setViewMode("tree"); setTimelineTaskId(null); }}
+                      className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shadow-sm ${viewMode === "tree" && timelineTaskId === null ? "bg-adasa-mid text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}
+                    >
+                      <FolderKanban size={16} /> Recentes
                     </button>
                     <button
                       onClick={() => { setViewMode("status"); setTimelineTaskId(null); }}
@@ -17590,6 +17635,17 @@ export function PlanningTab({
 
       {/* Complete Duplicate Task Modal */}
       {renderDuplicateTaskModal()}
+
+      {/* Boletim Trimestral Modal */}
+      <BoletimTrimestralModal
+        isOpen={boletimModalOpen}
+        onClose={() => setBoletimModalOpen(false)}
+        tasks={tasks}
+        areas={areas}
+        categories={categories}
+        plans={plans}
+        showToast={showToast}
+      />
 
     </div>
   );

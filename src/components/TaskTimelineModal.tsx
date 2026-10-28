@@ -67,7 +67,7 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
   renderProgressCalc,
 }) => {
   const [modalTab, setModalTab] = useState<"timeline" | "probability" | "calc">("timeline");
-  const [timelineView, setTimelineView] = useState<"horizonte" | "gantt">("horizonte");
+  const [timelineView, setTimelineView] = useState<"gantt" | "horizonte">("gantt");
   const [ganttScale, setGanttScale] = useState<"mes" | "trimestre" | "semestre">("mes");
   const [copiedSeiId, setCopiedSeiId] = useState<number | null>(null);
 
@@ -552,7 +552,7 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
                   </button>
                 </div>
 
-                {/* Alternador de Visualização: Horizonte Temporal vs Gráfico de Gantt */}
+                {/* Alternador de Visualização: Gráfico de Gantt vs Horizonte Temporal */}
                 <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5">
                     <span className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
@@ -560,19 +560,6 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
                       Visualização:
                     </span>
                     <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200/80 shadow-inner">
-                      <button
-                        type="button"
-                        onClick={() => setTimelineView("horizonte")}
-                        className={cn(
-                          "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
-                          timelineView === "horizonte"
-                            ? "bg-white text-adasa-dark shadow-xs font-black border border-slate-200/60"
-                            : "text-slate-600 hover:text-slate-900"
-                        )}
-                      >
-                        <CalendarRange size={14} />
-                        Horizonte Temporal
-                      </button>
                       <button
                         type="button"
                         onClick={() => setTimelineView("gantt")}
@@ -585,6 +572,19 @@ export const TaskTimelineModal: React.FC<TaskTimelineModalProps> = ({
                       >
                         <Activity size={14} />
                         Gráfico de Gantt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTimelineView("horizonte")}
+                        className={cn(
+                          "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+                          timelineView === "horizonte"
+                            ? "bg-white text-adasa-dark shadow-xs font-black border border-slate-200/60"
+                            : "text-slate-600 hover:text-slate-900"
+                        )}
+                      >
+                        <CalendarRange size={14} />
+                        Horizonte Temporal
                       </button>
                     </div>
                   </div>

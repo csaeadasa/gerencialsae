@@ -75,7 +75,8 @@ import {
   Eye,
   EyeOff,
   Sun,
-  Moon
+  Moon,
+  Presentation
 } from "lucide-react";
 import {
   LineChart,
@@ -5811,6 +5812,29 @@ const renderSupplyTable = () => {
                       {!isSidebarCollapsed && <span className="hidden md:inline">Radar de Atividades</span>}
                     </button>
                   )}
+
+                  <button
+                    title={isSidebarCollapsed ? "Boletim Trimestral" : undefined}
+                    onClick={() => {
+                      setIsMyTasksSelected(false);
+                      setActivePlanningSubTab("tasks");
+                      handleTabChange("planning");
+                      setTimeout(() => {
+                        const btn = document.querySelector('[title*="Boletim Trimestral"]') as HTMLButtonElement;
+                        btn?.click();
+                      }, 150);
+                    }}
+                    className={cn(
+                      "w-full text-left justify-start px-4 py-2 rounded-xl flex items-center gap-3 transition-all duration-200 group text-xs font-semibold cursor-pointer",
+                      "text-sky-300 hover:text-white hover:bg-white/10 hover:translate-x-0.5",
+                    )}
+                  >
+                    <Presentation
+                      size={16}
+                      className="flex-shrink-0 transition-colors text-sky-400 group-hover:text-white"
+                    />
+                    {!isSidebarCollapsed && <span className="hidden md:inline font-bold">Boletim Trimestral</span>}
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
